@@ -1,0 +1,164 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronLeft, ChevronRight, Download, Search, UserPlus, Workflow, X } from 'lucide-react'
+import { Select } from '../components/filters'
+import { Avatar, CompanyBadge, Page, PageHeader } from '../components/ui'
+import { useApp } from '../context/AppContext'
+import { TOTAL_CLIENTS, companiesServing, relativeDay } from '../data/clients'
+import { CLIENTS, COMPANIES, fullName, type CompanyId } from '../data/mock'
+import { toast } from '../lib/toast'
+import { cn, normalize, num } from '../lib/utils'
+
+export default function Clients() {
+  const navigate = useNavigate()
+  const { scope } = useApp()
+  const [query, setQuery] = useState('')
+  const [type, setType] = useState('Tous')
+  const [company, setCompany] = useState('Toutes')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    setCompany('Toutes')
+    setSelected(new Set())
+  }, [scope])
+
+  const rows = CLIENTS.map((c) => ({ c, served: companiesServing(c) })).filter((r) => {
+    if ((scope !== 'all' && !r.served.includes(scope)) || (company !== 'Toutes' && !r.served.includes(company as CompanyId)) || (type !== 'Tous' && r.c.type !== type)) return false
+    if (query.trim()) {
+      const q = normalize(query.trim())
+      const digits = query.replace(/\D/g, '')
+      const hay = normalize(`${fullName(r.c)} ${r.c.company ?? ''} ${r.c.email} ${r.c.no} ${r.c.street} ${r.c.city} ${r.c.postal}`)
+      const phones = (r.c.phone + (r.c.mobile ?? '')).replace(/\D/g, '')
+      if (!hay.includes(q) && !(digits.length >= 3 && phones.includes(digits))) return false
+    }
+    return true
+  })
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.c.id))
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  return (
+    <Page>
+      <PageHeader
+        title="Clients"
+        actions={
+          <>
+            <button onClick={() => toast('Export CSV lancé')} className="btn btn-sm btn-secondary">
+              <Download className="w-4 h-4" />
+              Exporter
+            </button>
+            <button onClick={() => toast('Nouvelle fiche client')} className="btn btn-sm btn-primary">
+              <UserPlus className="w-4 h-4" />
+              Nouveau client
+            </button>
+          </>
+        }
+      />
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-mute" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, téléphone, adresse, courriel…" className="form-input pl-9 bg-white" aria-label="Rechercher un client" />
+        </div>
+        <Select value={type} onChange={setType} options={[{ value: 'Tous', label: 'Tous les types' }, ...['Résidentiel', 'Commercial', 'Entrepreneur'].map((t) => ({ value: t, label: t }))]} className="sm:w-44 [&>button]:h-10 [&>button]:bg-white" />
+        {scope === 'all' && <Select value={company} onChange={setCompany} options={[{ value: 'Toutes', label: 'Toutes les compagnies' }, ...COMPANIES.map((c) => ({ value: c.id as string, label: c.name }))]} className="sm:w-52 [&>button]:h-10 [&>button]:bg-white" />}
+      </div>
+      {selected.size > 0 && (
+        <div className="sticky top-20 z-20 bg-ink text-white rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3 shadow-float menu-in">
+          <span className="text-sm font-semibold tnum">
+            {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+          </span>
+          <div className="flex flex-wrap gap-2 ml-auto">
+            <button
+              onClick={() => {
+                toast('Relance démarrée')
+                setSelected(new Set())
+              }}
+              className="btn btn-xs bg-white text-ink hover:bg-sand"
+            >
+              <Workflow className="w-3.5 h-3.5" />
+              Relancer
+            </button>
+            <button onClick={() => toast('Export de la sélection')} className="btn btn-xs bg-white/15 text-white hover:bg-white/25">
+              <Download className="w-3.5 h-3.5" />
+              Exporter
+            </button>
+            <button onClick={() => setSelected(new Set())} className="p-1.5 rounded-md hover:bg-white/15" aria-label="Annuler la sélection">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="bg-white rounded-xl shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] [&_td]:px-3 [&_th]:px-3">
+            <thead className="border-b border-hairline">
+              <tr>
+                <th className="th w-10">
+                  <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.c.id)))} className="accent-[var(--color-primary)]" aria-label="Tout sélectionner" />
+                </th>
+                <th className="th">Client</th>
+                <th className="th">Téléphone</th>
+                <th className="th">Ville</th>
+                {scope === 'all' && <th className="th">Compagnies</th>}
+                <th className="th">Activité</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline">
+              {rows.slice(0, 25).map(({ c, served }) => (
+                <tr key={c.id} onClick={() => navigate(`/clients/${c.id}`)} className={cn('cursor-pointer hover:bg-sand/60 transition-colors', selected.has(c.id) && 'bg-primary-wash')}>
+                  <td className="td" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-primary)]" aria-label={`Sélectionner ${fullName(c)}`} />
+                  </td>
+                  <td className="td">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar name={fullName(c)} size="sm" />
+                      <span className="text-sm font-semibold text-ink truncate">{fullName(c)}</span>
+                    </div>
+                  </td>
+                  <td className="td tnum">{c.mobile ?? c.phone}</td>
+                  <td className="td">{c.city}</td>
+                  {scope === 'all' && (
+                    <td className="td">
+                      <div className="flex flex-wrap gap-1">{served.length ? served.map((id) => <CompanyBadge key={id} id={id} />) : <span className="text-ink-faint">—</span>}</div>
+                    </td>
+                  )}
+                  <td className="td text-xs whitespace-nowrap text-ink-mute">{relativeDay(c.lastActivity)}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="td text-center py-12 text-ink-mute">
+                    Aucun client trouvé.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-5 py-3 border-t border-hairline flex items-center justify-between text-xs text-ink-mute">
+          <span className="tnum">
+            1 – {Math.min(25, rows.length)} de {num(TOTAL_CLIENTS[scope])}
+          </span>
+          <div className="flex items-center gap-1">
+            <button className="p-1.5 rounded-md hover:bg-sand" aria-label="Page précédente" disabled>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {[1, 2, 3].map((p) => (
+              <button key={p} className={cn('w-7 h-7 rounded-md text-xs font-semibold tnum', p === 1 ? 'bg-ink text-white' : 'hover:bg-sand')}>
+                {p}
+              </button>
+            ))}
+            <button className="p-1.5 rounded-md hover:bg-sand" aria-label="Page suivante">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </Page>
+  )
+}

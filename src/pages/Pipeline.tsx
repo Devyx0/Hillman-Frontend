@@ -1,0 +1,202 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Ellipsis, MessageSquare, Phone } from 'lucide-react'
+import { FilterBar, FilterField, Select, type SelectOption } from '../components/filters'
+import { ComposeDrawer, type MessageCtx, type MessageKind } from '../components/messaging'
+import { Page, PageHeader, RepAvatar } from '../components/ui'
+import { inScope, useApp } from '../context/AppContext'
+import { REPS, companyById } from '../data/mock'
+import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type Deal, type PipelineColumnId as ColumnId } from '../data/pipeline'
+import { toast } from '../lib/toast'
+import { cn, money, moneyShort } from '../lib/utils'
+
+/** Pipeline kanban (mockup: `V3`). */
+export default function Pipeline() {
+  const { scope } = useApp()
+  const navigate = useNavigate()
+  const [deals, setDeals] = useState<Deal[]>(buildDeals)
+  const [rep, setRep] = useState('all')
+  const [amountRange, setAmountRange] = useState<AmountRange>('all')
+  useEffect(() => {
+    setRep('all')
+  }, [scope])
+  const [showRefused, setShowRefused] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overCol, setOverCol] = useState<ColumnId | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [compose, setCompose] = useState<{ kind: MessageKind; ctx: MessageCtx } | null>(null)
+
+  const visible = useMemo(() => deals.filter((d) => inScope(scope, d.company) && (rep === 'all' || d.repId === rep) && matchesAmount(d.amount, amountRange)), [deals, scope, rep, amountRange])
+  const inColumn = (col: ColumnId) => visible.filter((d) => d.col === col).sort((a, b) => a.days - b.days || b.amount - a.amount)
+
+  const move = (id: string, col: ColumnId) => {
+    setDeals((all) => all.map((d) => (d.id === id ? { ...d, col, days: 0, statusLabel: COLUMN_STATUS[col], prob: col === 'signe' ? 100 : col === 'refuse' ? 0 : d.prob } : d)))
+    const deal = deals.find((d) => d.id === id)
+    if (deal && deal.col !== col) {
+      toast(
+        col === 'signe'
+          ? `${deal.name} → Signé · chantier créé dans « À planifier »`
+          : col === 'refuse'
+            ? `${deal.name} → Refusé · demande de raison envoyée`
+            : `${deal.name} → ${COLUMNS.find((c) => c.id === col)!.label}`,
+      )
+    }
+    setMenuId(null)
+  }
+
+  const open = visible.filter((d) => !['signe', 'refuse'].includes(d.col))
+  const reps = REPS.filter((r) => r.company !== 'all' && (scope === 'all' || r.company === scope))
+  const repOptions: SelectOption[] = [{ value: 'all', label: 'Tous les représentants' }, ...reps.map((r) => ({ value: r.id, label: r.name }))]
+  const columns = COLUMNS.filter((c) => c.id !== 'refuse' || showRefused)
+
+  return (
+    <Page wide>
+      <PageHeader title="Pipeline" />
+      <FilterBar>
+        {reps.length > 1 && (
+          <FilterField label="Représentant">
+            <Select value={rep} onChange={setRep} options={repOptions} className="w-52" />
+          </FilterField>
+        )}
+        <FilterField label="Montant">
+          <Select value={amountRange} onChange={setAmountRange} options={AMOUNT_RANGES} className="w-48" />
+        </FilterField>
+        <div className="col-span-2 md:ml-auto flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div>
+            <p className="label-caps">Pipeline ouvert</p>
+            <p className="text-lg font-semibold tnum">{moneyShort(open.reduce((n, d) => n + d.amount, 0))}</p>
+          </div>
+          <div>
+            <p className="label-caps">Signé</p>
+            <p className="text-lg font-semibold tnum text-tone-good-ink">{moneyShort(visible.filter((d) => d.col === 'signe').reduce((n, d) => n + d.amount, 0))}</p>
+          </div>
+        </div>
+      </FilterBar>
+      <div className="overflow-x-auto -mx-4 px-4 md:-mx-8 md:px-8 pb-2">
+        <div className="flex gap-3 min-w-max items-start">
+          {columns.map((col) => {
+            const items = inColumn(col.id)
+            const total = items.reduce((n, d) => n + d.amount, 0)
+            return (
+              <div
+                key={col.id}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setOverCol(col.id)
+                }}
+                onDragLeave={() => setOverCol((c) => (c === col.id ? null : c))}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  if (dragId) move(dragId, col.id)
+                  setDragId(null)
+                  setOverCol(null)
+                }}
+                className={cn('w-[17.5rem] shrink-0 rounded-xl bg-stone/60 flex flex-col max-h-[calc(100vh-17rem)] transition-shadow', overCol === col.id && 'ring-2 ring-primary bg-primary-wash')}
+              >
+                <div className="px-3 pt-3 pb-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-ink flex items-center gap-2">
+                      {col.label}
+                      <span className="text-2xs font-bold bg-white text-ink-mute px-1.5 rounded-full tnum">{items.length}</span>
+                    </p>
+                    <p className="text-xs font-semibold tnum text-ink-secondary">{moneyShort(total)}</p>
+                  </div>
+                </div>
+                <div className="px-2 pb-2 space-y-2 overflow-y-auto nav-scroll">
+                  {items.map((d) => (
+                    <article
+                      key={d.id}
+                      draggable
+                      onDragStart={() => setDragId(d.id)}
+                      onDragEnd={() => {
+                        setDragId(null)
+                        setOverCol(null)
+                      }}
+                      onClick={() => (d.quoteId ? navigate(`/soumissions/${d.quoteId}`) : navigate(`/leads/${d.id}`))}
+                      className={cn('group relative bg-white rounded-lg shadow-card p-3 cursor-grab active:cursor-grabbing hover:shadow-elevated transition-shadow', dragId === d.id && 'opacity-40')}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink truncate">{d.name}</p>
+                          <p className="text-2xs text-ink-mute tnum">{d.no}</p>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMenuId(menuId === d.id ? null : d.id)
+                          }}
+                          className="p-1 -mr-1 rounded text-ink-faint hover:text-ink hover:bg-sand"
+                          aria-label="Déplacer vers"
+                        >
+                          <Ellipsis className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between mt-2.5">
+                        <div className="flex items-center gap-2">
+                          <RepAvatar id={d.repId} size="xs" />
+                          <span className={cn('text-2xs font-semibold px-1.5 py-0.5 rounded-full tnum', ageTone(d.days))} title="Jours dans l'étape">
+                            {d.days} j
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold tnum text-ink">
+                          {d.no === 'Lead' ? '≈ ' : ''}
+                          {money(d.amount, false)}
+                        </p>
+                      </div>
+                      <div className="absolute right-2 top-9 hidden group-hover:flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCompose({ kind: 'sms', ctx: { name: d.name, first: d.name.split(' ')[0], quoteNo: d.no === 'Lead' ? undefined : d.no, company: companyById(d.company).name } })
+                          }}
+                          className="w-7 h-7 rounded-md bg-white shadow-card flex items-center justify-center text-ink-mute hover:text-primary-press"
+                          aria-label="Texto"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toast(`Appel vers ${d.name}…`)
+                          }}
+                          className="w-7 h-7 rounded-md bg-white shadow-card flex items-center justify-center text-ink-mute hover:text-primary-press"
+                          aria-label="Appeler"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {menuId === d.id && (
+                        <div onClick={(e) => e.stopPropagation()} className="absolute right-2 top-8 z-20 w-52 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in cursor-default">
+                          <p className="label-caps px-3 py-1.5">Déplacer vers</p>
+                          {COLUMNS.filter((c) => c.id !== d.col).map((c) => (
+                            <button key={c.id} onClick={() => move(d.id, c.id)} className="w-full text-left px-3 py-1.5 text-sm text-ink-secondary hover:bg-sand">
+                              {c.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                  {items.length === 0 && <p className="text-xs text-ink-faint text-center py-6 border-2 border-dashed border-hairline-strong rounded-lg">Vide</p>}
+                </div>
+              </div>
+            )
+          })}
+          {!showRefused && (
+            <button onClick={() => setShowRefused(true)} className="w-12 shrink-0 self-stretch rounded-xl bg-stone/60 hover:bg-stone flex flex-col items-center py-3 gap-2 text-ink-mute" aria-label="Afficher Refusé">
+              <ChevronRight className="w-4 h-4" />
+              <span className="text-xs font-semibold [writing-mode:vertical-rl]">Refusé · {inColumn('refuse').length}</span>
+            </button>
+          )}
+          {showRefused && (
+            <button onClick={() => setShowRefused(false)} className="btn btn-xs btn-ghost self-start mt-3">
+              <ChevronDown className="w-3.5 h-3.5 rotate-90" />
+              Masquer
+            </button>
+          )}
+        </div>
+      </div>
+      <ComposeDrawer kind={compose?.kind ?? null} ctx={compose?.ctx ?? {}} onClose={() => setCompose(null)} />
+    </Page>
+  )
+}
