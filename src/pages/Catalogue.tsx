@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { Building2, LayoutTemplate, ListChecks, Lock, Package, SearchCheck, ShieldCheck, Upload, UserCog, Workflow } from 'lucide-react'
 import { Page, PageHeader, Tabs } from '../components/ui'
 import { toast } from '../lib/toast'
+import { t } from '../i18n'
 import { CostItemsTab, ExpertisesTab, TemplatesTab, WarrantiesTab, WorkLinesTab } from './catalogue/CatalogueTabs'
 import { CompaniesTab, FollowUpsTab, SecurityTab, UsersTab } from './catalogue/SettingsTabs'
 
@@ -15,11 +16,11 @@ function CatalogueView() {
   return (
     <Page>
       <PageHeader
-        title="Catalogue"
+        title={t('Catalogue')}
         actions={
-          <button className="btn btn-sm btn-secondary" onClick={() => toast('Catalogue exporté (Excel)')}>
+          <button className="btn btn-sm btn-secondary" onClick={() => toast(t('Catalogue exporté (Excel)'))}>
             <Upload className="w-4 h-4 rotate-180" />
-            Exporter
+            {t('Exporter')}
           </button>
         }
       />
@@ -27,11 +28,11 @@ function CatalogueView() {
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: 'travaux', label: 'Travaux', icon: ListChecks },
-          { value: 'expertises', label: 'Expertises', icon: SearchCheck },
-          { value: 'items', label: 'Items coûtants', icon: Package },
-          { value: 'modeles', label: 'Modèles', icon: LayoutTemplate },
-          { value: 'garanties', label: 'Garanties', icon: ShieldCheck },
+          { value: 'travaux', label: t('Travaux'), icon: ListChecks },
+          { value: 'expertises', label: t('Expertises'), icon: SearchCheck },
+          { value: 'items', label: t('Items coûtants'), icon: Package },
+          { value: 'modeles', label: t('Modèles'), icon: LayoutTemplate },
+          { value: 'garanties', label: t('Garanties'), icon: ShieldCheck },
         ]}
       />
       {tab === 'travaux' && <WorkLinesTab />}
@@ -48,15 +49,15 @@ function SettingsView() {
   const [tab, setTab] = useState<SettingsTab>('compagnies')
   return (
     <Page>
-      <PageHeader title="Paramètres" />
+      <PageHeader title={t('Paramètres')} />
       <Tabs<SettingsTab>
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: 'compagnies', label: 'Compagnies', icon: Building2 },
-          { value: 'utilisateurs', label: 'Utilisateurs', icon: UserCog },
-          { value: 'suivis', label: 'Suivis automatiques', icon: Workflow },
-          { value: 'securite', label: 'Sécurité', icon: Lock },
+          { value: 'compagnies', label: t('Compagnies'), icon: Building2 },
+          { value: 'utilisateurs', label: t('Utilisateurs'), icon: UserCog },
+          { value: 'suivis', label: t('Suivis automatiques'), icon: Workflow },
+          { value: 'securite', label: t('Sécurité'), icon: Lock },
         ]}
       />
       {tab === 'compagnies' && <CompaniesTab />}

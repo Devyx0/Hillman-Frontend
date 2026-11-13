@@ -4,6 +4,8 @@ import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, Chevron
 import { CompanyLogo, RepAvatar, StatusBadge, Wordmark, type Icon } from '../components/ui'
 import { useApp, type Scope } from '../context/AppContext'
 import { CLIENTS, COMPANIES, LEADS, ME, QUOTES, THREADS, clientById, fullName, type CompanyId } from '../data/mock'
+import { t } from '../i18n'
+import { LanguageSwitch } from '../i18n/LanguageProvider'
 import { onToast, toast } from '../lib/toast'
 import { cn, money, normalize } from '../lib/utils'
 
@@ -57,7 +59,7 @@ function NavItem({ item }: { item: NavEntry }) {
         return (
           <>
             <item.icon className={cn('w-4 h-4 shrink-0', active ? 'text-white' : 'text-ink-mute group-hover:text-ink')} />
-            <span className="flex-1 truncate">{item.name}</span>
+            <span className="flex-1 truncate">{t(item.name)}</span>
             {count ? <span className={cn('tnum text-2xs font-bold min-w-5 h-5 px-1.5 rounded-full flex items-center justify-center', active ? 'bg-white text-primary-press' : 'bg-primary text-white')}>{count}</span> : null}
           </>
         )
@@ -75,7 +77,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
     setScope(s)
     setOpen(false)
     onPick?.()
-    toast(s === 'all' ? 'Vue Groupe Hillman — les 3 compagnies' : `Compte : ${COMPANIES.find((c) => c.id === s)!.name}`)
+    toast(s === 'all' ? t('Vue Groupe Hillman — les 3 compagnies') : t('Compte : {name}', { name: COMPANIES.find((c) => c.id === s)!.name }))
   }
   const openQuotes = (id: CompanyId) => QUOTES.filter((q) => q.company === id && ['En soumission', 'À rappeler', 'Rappel courriel envoyé'].includes(q.status)).length
   return (
@@ -84,7 +86,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Changer de compagnie"
+        aria-label={t('Changer de compagnie')}
         className={cn('w-full h-12 pl-3 pr-2 rounded-lg border flex items-center gap-2 text-left transition-colors', open ? 'border-primary ring-2 ring-ring bg-white' : 'border-hairline hover:border-hairline-strong hover:bg-sand')}
       >
         <span className="flex-1 min-w-0 flex items-center h-full">{current ? <CompanyLogo id={current.id} className="h-8 max-w-[150px]" /> : <Wordmark sub={false} />}</span>
@@ -94,7 +96,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-2 z-50 w-[19rem] bg-white rounded-xl border border-hairline shadow-float overflow-hidden menu-in" role="listbox">
-            <p className="label-caps px-4 pt-3 pb-2">Compagnies</p>
+            <p className="label-caps px-4 pt-3 pb-2">{t('Compagnies')}</p>
             <div className="px-2 pb-2 space-y-1">
               {COMPANIES.map((c) => (
                 <button key={c.id} role="option" aria-selected={scope === c.id} onClick={() => choose(c.id)} className={cn('w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors', scope === c.id ? 'bg-primary-wash ring-1 ring-primary/30' : 'hover:bg-sand')}>
@@ -104,7 +106,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-ink truncate">{c.name}</span>
                     <span className="block text-2xs text-ink-mute tnum">
-                      {openQuotes(c.id)} soumissions ouvertes · {c.phone}
+                      {t('{n} soumissions ouvertes', { n: openQuotes(c.id) })} · {c.phone}
                     </span>
                   </span>
                   {scope === c.id && <Check className="w-4 h-4 text-primary-press shrink-0" />}
@@ -118,7 +120,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-ink">Groupe Hillman</span>
-                  <span className="block text-2xs text-ink-mute">Vue d'ensemble des 3 compagnies · admin</span>
+                  <span className="block text-2xs text-ink-mute">{t("Vue d'ensemble des 3 compagnies · admin")}</span>
                 </span>
                 {scope === 'all' && <Check className="w-4 h-4 text-primary-press shrink-0" />}
               </button>
@@ -131,7 +133,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
                 className="w-full flex items-center gap-2 px-3 py-2 mt-1 rounded-md text-xs font-semibold text-ink-mute hover:text-ink hover:bg-sand"
               >
                 <Settings className="w-3.5 h-3.5" />
-                Gérer les compagnies
+                {t('Gérer les compagnies')}
               </button>
             </div>
           </div>
@@ -145,15 +147,15 @@ function NewMenu() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const items: { label: string; icon: Icon; go: () => void }[] = [
-    { label: 'Soumission', icon: FileText, go: () => navigate('/soumissions/q64320') },
-    { label: 'Client', icon: UserPlus, go: () => toast('Fiche client créée (démo)') },
-    { label: 'Rendez-vous', icon: CalendarPlus, go: () => navigate('/agenda') },
+    { label: t('Soumission'), icon: FileText, go: () => navigate('/soumissions/q64320') },
+    { label: t('Client'), icon: UserPlus, go: () => toast(t('Fiche client créée (démo)')) },
+    { label: t('Rendez-vous'), icon: CalendarPlus, go: () => navigate('/agenda') },
   ]
   return (
     <div className="relative">
       <button onClick={() => setOpen((o) => !o)} className="btn btn-sm btn-primary">
         <Plus className="w-4 h-4" />
-        <span className="hidden sm:inline">Nouveau</span>
+        <span className="hidden sm:inline">{t('Nouveau')}</span>
         <ChevronDown className="w-3.5 h-3.5 opacity-80" />
       </button>
       {open && (
@@ -204,11 +206,11 @@ function CommandPalette() {
       <div className="relative w-full max-w-2xl bg-white rounded-xl shadow-float overflow-hidden menu-in">
         <div className="flex items-center gap-3 px-4 h-14 border-b border-hairline">
           <Search className="w-4 h-4 text-ink-mute" />
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, téléphone, adresse, no de soumission…" className="flex-1 text-md outline-none placeholder:text-ink-faint" aria-label="Recherche globale" />
-          <kbd className="text-2xs text-ink-mute bg-sand px-1.5 py-0.5 rounded">Échap</kbd>
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Nom, téléphone, adresse, no de soumission…')} className="flex-1 text-md outline-none placeholder:text-ink-faint" aria-label={t('Recherche globale')} />
+          <kbd className="text-2xs text-ink-mute bg-sand px-1.5 py-0.5 rounded">{t('Échap')}</kbd>
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-2">
-          <p className="label-caps px-3 pt-2 pb-1">Soumissions</p>
+          <p className="label-caps px-3 pt-2 pb-1">{t('Soumissions')}</p>
           {results.quotes.map((q) => (
             <button key={q.id} onClick={() => go(`/soumissions/${q.id}`)} className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-sand text-left">
               <FilePenLine className="w-4 h-4 text-ink-mute shrink-0" />
@@ -220,7 +222,7 @@ function CommandPalette() {
               <span className="text-sm font-semibold tnum w-24 text-right">{money(q.amount, false)}</span>
             </button>
           ))}
-          <p className="label-caps px-3 pt-3 pb-1">Clients</p>
+          <p className="label-caps px-3 pt-3 pb-1">{t('Clients')}</p>
           {results.clients.map((c) => (
             <button key={c.id} onClick={() => go(`/clients/${c.id}`)} className="w-full flex items-center gap-3 px-3 py-2 rounded-md hover:bg-sand text-left">
               <Users className="w-4 h-4 text-ink-mute shrink-0" />
@@ -281,14 +283,14 @@ export default function AppLayout() {
     <div className="flex flex-col h-full bg-white">
       <div className="h-16 px-3 flex items-center gap-1 shrink-0 border-b border-hairline">
         <CompanySwitcher onPick={() => setMenuOpen(false)} />
-        <button className="md:hidden p-1.5 rounded-md text-ink-mute hover:bg-sand" onClick={() => setMenuOpen(false)} aria-label="Fermer le menu">
+        <button className="md:hidden p-1.5 rounded-md text-ink-mute hover:bg-sand" onClick={() => setMenuOpen(false)} aria-label={t('Fermer le menu')}>
           <X className="w-4 h-4" />
         </button>
       </div>
       <nav className="flex-1 px-3 py-4 overflow-y-auto nav-scroll space-y-5">
         {NAV_GROUPS.map((g) => (
           <div key={g.label} className="space-y-0.5">
-            <p className="label-caps px-3 pb-1.5">{g.label}</p>
+            <p className="label-caps px-3 pb-1.5">{t(g.label)}</p>
             {g.items.map((it) => (
               <NavItem key={it.href} item={it} />
             ))}
@@ -296,7 +298,7 @@ export default function AppLayout() {
         ))}
       </nav>
       <div className="shrink-0 border-t border-hairline px-3 py-3 space-y-0.5">
-        <p className="label-caps px-3 pb-1.5">Administration</p>
+        <p className="label-caps px-3 pb-1.5">{t('Administration')}</p>
         {ADMIN_NAV.map((it) => (
           <NavItem key={it.name} item={it} />
         ))}
@@ -304,7 +306,7 @@ export default function AppLayout() {
           <RepAvatar id={ME.id} size="md" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-ink-secondary truncate">{ME.name}</p>
-            <p className="text-2xs text-ink-mute truncate">Administrateur · accès aux 3 comptes</p>
+            <p className="text-2xs text-ink-mute truncate">{t('Administrateur · accès aux 3 comptes')}</p>
           </div>
           <LogOut className="w-3.5 h-3.5 text-ink-faint" />
         </div>
@@ -318,20 +320,21 @@ export default function AppLayout() {
       {menuOpen && <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={() => setMenuOpen(false)} />}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-hairline flex items-center gap-3 px-4 md:px-6 sticky top-0 z-30">
-          <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2 text-ink-mute hover:bg-sand rounded-md" aria-label="Menu">
+          <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2 text-ink-mute hover:bg-sand rounded-md" aria-label={t('Menu')}>
             <Menu className="w-5 h-5" />
           </button>
-          <button onClick={() => setMenuOpen(true)} className="md:hidden shrink-0 h-9 flex items-center" aria-label="Changer de compagnie">
+          <button onClick={() => setMenuOpen(true)} className="md:hidden shrink-0 h-9 flex items-center" aria-label={t('Changer de compagnie')}>
             {scope === 'all' ? <Wordmark sub={false} /> : <CompanyLogo id={scope} className="h-6 max-w-[96px]" />}
           </button>
           <button onClick={() => setPaletteOpen(true)} className="flex-1 min-w-0 max-w-xl h-9 px-3 rounded-md bg-sand hover:bg-stone transition-colors flex items-center gap-2 text-sm text-ink-faint text-left">
             <Search className="w-4 h-4 text-ink-mute" />
-            <span className="flex-1 truncate hidden sm:block">Rechercher un client, une adresse, un no…</span>
-            <span className="flex-1 truncate sm:hidden">Rechercher…</span>
+            <span className="flex-1 truncate hidden sm:block">{t('Rechercher un client, une adresse, un no…')}</span>
+            <span className="flex-1 truncate sm:hidden">{t('Rechercher…')}</span>
             <kbd className="hidden sm:inline text-2xs text-ink-mute bg-white px-1.5 py-0.5 rounded border border-hairline">⌘ K</kbd>
           </button>
           <div className="flex items-center gap-2 ml-auto">
-            <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label="Notifications" onClick={() => toast("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)")}>
+            <LanguageSwitch />
+            <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
               <Bell className="w-5 h-5" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />
             </button>
@@ -342,7 +345,7 @@ export default function AppLayout() {
           <Outlet />
         </main>
         <footer className="px-6 py-4 text-2xs text-ink-faint flex items-center justify-between border-t border-hairline bg-white/40">
-          <span>Maquette interactive · données fictives</span>
+          <span>{t('Maquette interactive · données fictives')}</span>
         </footer>
       </div>
       <CommandPalette />

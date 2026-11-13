@@ -5,6 +5,7 @@ import { Card, Page, PageHeader, RepAvatar, Tabs } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { APPOINTMENTS, QUOTES, type Appointment } from '../data/mock'
 import { cn } from '../lib/utils'
+import { t } from '../i18n'
 import { AGENDA_REPS, DayView, MonthView, WeekView } from './agenda/calendar'
 import { AppointmentDrawer, NewAppointmentDrawer, prefillFromQuote, type AppointmentPrefill } from './agenda/drawers'
 
@@ -56,11 +57,11 @@ export default function Agenda() {
   return (
     <Page>
       <PageHeader
-        title="Agenda"
+        title={t('Agenda')}
         actions={
           <button className="btn btn-sm btn-primary" onClick={openNew}>
             <CalendarPlus className="w-4 h-4" />
-            Rendez-vous
+            {t('Rendez-vous')}
           </button>
         }
       />
@@ -68,29 +69,29 @@ export default function Agenda() {
         <div className="px-4 py-3 border-b border-hairline space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <button className="btn btn-xs btn-quiet" aria-label="Semaine précédente">
+              <button className="btn btn-xs btn-quiet" aria-label={t('Semaine précédente')}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <button className="btn btn-xs btn-secondary">Aujourd'hui</button>
-              <button className="btn btn-xs btn-quiet" aria-label="Semaine suivante">
+              <button className="btn btn-xs btn-secondary">{t("Aujourd'hui")}</button>
+              <button className="btn btn-xs btn-quiet" aria-label={t('Semaine suivante')}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
-              <p className="text-sm font-semibold text-ink ml-1 whitespace-nowrap">{view === 'mois' ? 'Octobre 2026' : view === 'semaine' ? '18 – 24 oct. 2026' : 'Mardi 20 octobre'}</p>
+              <p className="text-sm font-semibold text-ink ml-1 whitespace-nowrap">{view === 'mois' ? t('Octobre 2026') : view === 'semaine' ? t('18 – 24 oct. 2026') : t('Mardi 20 octobre')}</p>
             </div>
             <Tabs<View>
               value={view}
               onChange={setView}
               tabs={[
-                { value: 'jour', label: 'Jour' },
-                { value: 'semaine', label: 'Semaine' },
-                { value: 'mois', label: 'Mois' },
+                { value: 'jour', label: t('Jour') },
+                { value: 'semaine', label: t('Semaine') },
+                { value: 'mois', label: t('Mois') },
               ]}
             />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {reps.length > 1 && (
               <button onClick={() => setHidden(new Set())} className={cn('h-7 px-2.5 rounded-full text-xs font-semibold border', hidden.size === 0 ? 'bg-ink text-white border-ink' : 'border-hairline text-ink-mute hover:text-ink')}>
-                Tous
+                {t('Tous')}
               </button>
             )}
             {reps.map((r) => (
@@ -106,7 +107,7 @@ export default function Agenda() {
             ))}
             <button onClick={() => setShowJobs((s) => !s)} aria-pressed={showJobs} className={cn('h-7 px-2.5 rounded-full text-xs font-semibold border flex items-center gap-1.5', showJobs ? 'border-hairline-strong bg-sand text-ink' : 'border-hairline text-ink-faint opacity-60')}>
               <HardHat className="w-3.5 h-3.5" />
-              Jours de travaux
+              {t('Jours de travaux')}
             </button>
           </div>
         </div>

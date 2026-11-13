@@ -1,6 +1,7 @@
 import { useEffect, type ComponentType, type ReactNode } from 'react'
 import { Bot, Mail, MessageSquare, Phone, StickyNote, X } from 'lucide-react'
 import { COMPANY_NAMES, STATUS_TONE, companyById, repById, type CompanyId, type Tone } from '../data/mock'
+import { getLang, locale, t } from '../i18n'
 import { cn } from '../lib/utils'
 import { LOGOS } from '../assets/logos'
 
@@ -26,7 +27,7 @@ export function Wordmark({ className, sub = true }: { className?: string; sub?: 
       <LogoMark />
       <span className="leading-none">
         <span className="block text-[1.05rem] font-semibold tracking-tight text-ink">hillman</span>
-        {sub && <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-mute mt-0.5">Centrale</span>}
+        {sub && <span className="block text-2xs font-semibold uppercase tracking-eyebrow text-ink-mute mt-0.5">{t('Centrale')}</span>}
       </span>
     </span>
   )
@@ -100,7 +101,8 @@ export function Stat({ label, value, sub, icon: IconC, delta, tone }: { label: R
       <div className="flex items-center gap-2 text-xs min-h-[1.125rem]">
         {delta !== undefined && (
           <span className={cn('font-semibold tnum', inverse ? 'text-white' : delta >= 0 ? 'text-tone-good-ink' : 'text-tone-critical-ink')}>
-            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString('fr-CA')} %
+            {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toLocaleString(locale())}
+            {getLang() === 'en' ? '%' : ' %'}
           </span>
         )}
         {sub && <span className={cn('truncate', inverse ? 'text-white/70' : 'text-ink-mute')}>{sub}</span>}
@@ -142,7 +144,7 @@ export function Badge({ tone = 'neutral', children, dot, className }: { tone?: T
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   return (
     <Badge tone={STATUS_TONE[status]} dot className={className}>
-      {status}
+      {t(status)}
     </Badge>
   )
 }
@@ -150,7 +152,7 @@ export function StatusBadge({ status, className }: { status: string; className?:
 /** Mockup: `ql`. */
 export function CompanyBadge({ id, full, className }: { id: string; full?: boolean; className?: string }) {
   const c = companyById(id)
-  return <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border whitespace-nowrap', c.tone, className)}>{full ? c.name : c.short}</span>
+  return <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold border whitespace-nowrap', c.tone, className)}>{full ? c.name : t(c.short)}</span>
 }
 
 /* ── Avatars ───────────────────────────────────────────────────────────── */
@@ -260,7 +262,7 @@ export function Drawer({ open, onClose, title, children, width = 'max-w-xl' }: {
       <div className={cn('relative w-full h-full bg-white shadow-float flex flex-col menu-in', width)}>
         <header className="h-14 px-5 border-b border-hairline flex items-center justify-between shrink-0">
           <h3 className="text-md font-semibold text-ink">{title}</h3>
-          <button onClick={onClose} aria-label="Fermer" className="p-1.5 rounded-md text-ink-mute hover:bg-sand">
+          <button onClick={onClose} aria-label={t('Fermer')} className="p-1.5 rounded-md text-ink-mute hover:bg-sand">
             <X className="w-4 h-4" />
           </button>
         </header>

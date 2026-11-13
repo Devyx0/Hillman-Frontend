@@ -7,6 +7,7 @@ import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, Thre
 import { CompanyBadge, Drawer, Page, RepAvatar, Tabs } from '../components/ui'
 import { ALL_LEADS, LEAD_PROFILES, LEAD_STAGES, channelStyle, leadStage, threadForLead } from '../data/leads'
 import { REPS, companyById, repById, type Lead } from '../data/mock'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 
@@ -43,40 +44,40 @@ export default function LeadDetail() {
   const ctx: MessageCtx = { name: lead.name, first: lead.name.split(' ')[0], company: company.name, rep: rep.first }
 
   const activity: TimelineItem[] = [
-    { icon: channel.icon, title: `Demande reçue · ${lead.channel}`, at: lead.ago },
-    { icon: Bot, title: "Réponse de l'agent IA", at: lead.ago, meta: 'en 38 s' },
-    ...(lead.booked ? [{ icon: CalendarCheck, title: 'Estimation réservée', at: lead.ago, meta: `${lead.booked} · ${rep.first}`, tone: 'primary' as const }] : []),
-    { icon: UserRound, title: `Assigné à ${rep.name}`, at: lead.ago },
+    { icon: channel.icon, title: t('Demande reçue · {channel}', { channel: t(lead.channel) }), at: t(lead.ago) },
+    { icon: Bot, title: t("Réponse de l'agent IA"), at: t(lead.ago), meta: t('en 38 s') },
+    ...(lead.booked ? [{ icon: CalendarCheck, title: t('Estimation réservée'), at: t(lead.ago), meta: `${t(lead.booked)} · ${rep.first}`, tone: 'primary' as const }] : []),
+    { icon: UserRound, title: t('Assigné à {name}', { name: rep.name }), at: t(lead.ago) },
   ]
 
   const createQuote = () => {
-    toast('Soumission créée à partir du lead')
+    toast(t('Soumission créée à partir du lead'))
     navigate('/soumissions/q64320')
   }
 
   return (
     <Page>
       <RecordHeader
-        back={{ to: '/leads', label: 'Leads' }}
+        back={{ to: '/leads', label: t('Leads') }}
         name={lead.name}
         chips={
           <>
             <LeadStageBadge lead={lead} />
             <CompanyBadge id={lead.company} />
-            {profile && <span className="text-xs text-ink-mute">{profile.type}</span>}
+            {profile && <span className="text-xs text-ink-mute">{t(profile.type)}</span>}
           </>
         }
         actions={
           <>
-            <button onClick={() => toast(`Appel vers ${lead.phone}…`)} className="btn btn-sm btn-secondary">
+            <button onClick={() => toast(t('Appel vers {name}…', { name: lead.phone }))} className="btn btn-sm btn-secondary">
               <Phone className="w-4 h-4" />
-              Appeler
+              {t('Appeler')}
             </button>
-            <MessageButton kind="sms" ctx={ctx} label="Texto" />
-            <MessageButton kind="email" ctx={ctx} label="Courriel" />
+            <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
+            <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
             <button onClick={createQuote} className="btn btn-sm btn-primary">
               <FilePenLine className="w-4 h-4" />
-              Créer la soumission
+              {t('Créer la soumission')}
             </button>
           </>
         }
@@ -84,7 +85,7 @@ export default function LeadDetail() {
 
       {stage >= 0 && (
         <StageBar
-          stages={LEAD_STAGES}
+          stages={LEAD_STAGES.map((s) => t(s))}
           current={stage}
           onPick={(i) => {
             if (i === 4) {
@@ -96,7 +97,7 @@ export default function LeadDetail() {
               return
             }
             setLead((l) => ({ ...l, status: STAGE_STATUS[i] }))
-            toast(`Étape : ${LEAD_STAGES[i]}`)
+            toast(t('Étape : {stage}', { stage: t(LEAD_STAGES[i]) }))
           }}
         />
       )}
@@ -106,14 +107,14 @@ export default function LeadDetail() {
           <InfoGroups
             groups={[
               {
-                title: 'Coordonnées',
+                title: t('Coordonnées'),
                 rows: [
-                  { icon: Phone, label: 'Téléphone', value: lead.phone, copy: lead.phone },
+                  { icon: Phone, label: t('Téléphone'), value: lead.phone, copy: lead.phone },
                   ...(lead.email
                     ? [
                         {
                           icon: Mail,
-                          label: 'Courriel',
+                          label: t('Courriel'),
                           value: (
                             <span className="block truncate" title={lead.email}>
                               {lead.email}
@@ -123,42 +124,42 @@ export default function LeadDetail() {
                         },
                       ]
                     : []),
-                  { icon: MapPin, label: 'Adresse', value: profile?.address ?? lead.city, copy: profile?.address },
+                  { icon: MapPin, label: t('Adresse'), value: profile ? t(profile.address) : lead.city, copy: profile?.address },
                 ],
               },
               {
-                title: 'Demande',
+                title: t('Demande'),
                 rows: [
-                  { icon: Wrench, label: 'Travaux', value: profile?.work ?? '—' },
-                  { icon: Flame, label: 'Urgence', value: profile?.urgency ?? '—' },
-                  { icon: Wallet, label: 'Budget', value: profile?.budget ?? '—' },
-                  { icon: CalendarClock, label: 'Échéance', value: profile?.timeline ?? '—' },
-                  { icon: House, label: 'Propriété', value: profile?.property ?? '—' },
+                  { icon: Wrench, label: t('Travaux'), value: profile ? t(profile.work) : '—' },
+                  { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
+                  { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
+                  { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
+                  { icon: House, label: t('Propriété'), value: profile ? t(profile.property) : '—' },
                 ],
               },
               {
-                title: 'Détails',
+                title: t('Détails'),
                 rows: [
                   {
                     icon: Inbox,
-                    label: 'Source',
+                    label: t('Source'),
                     value: (
                       <span className="inline-flex items-center gap-1.5">
                         <span className={cn('w-5 h-5 rounded flex items-center justify-center', channel.tone)}>
                           <channel.icon className="w-3 h-3" />
                         </span>
-                        {lead.channel}
+                        {t(lead.channel)}
                       </span>
                     ),
                   },
                   {
                     icon: Tag,
-                    label: 'Étiquettes',
+                    label: t('Étiquettes'),
                     value: (
                       <span className="flex flex-wrap gap-1 pt-0.5">
-                        {(profile?.tags ?? []).map((t) => (
-                          <span key={t} className="badge bg-sand text-ink-secondary">
-                            {t}
+                        {(profile?.tags ?? []).map((tag) => (
+                          <span key={tag} className="badge bg-sand text-ink-secondary">
+                            {t(tag)}
                           </span>
                         ))}
                       </span>
@@ -175,19 +176,19 @@ export default function LeadDetail() {
               value={tab}
               onChange={setTab}
               tabs={[
-                { value: 'conversation', label: 'Conversation', icon: MessageSquare },
-                { value: 'activite', label: 'Activité' },
-                { value: 'notes', label: 'Notes' },
+                { value: 'conversation', label: t('Conversation'), icon: MessageSquare },
+                { value: 'activite', label: t('Activité') },
+                { value: 'notes', label: t('Notes') },
               ]}
             />
             {tab === 'conversation' && <ThreadPanel thread={thread} />}
             {tab === 'activite' && <Timeline items={activity} />}
-            {tab === 'notes' && <Notes initial={lead.id === 'l3' ? [{ at: 'Hier', by: 'Hélène Petitpas', text: 'Le CA se réunit jeudi. Demander les plans des toits.' }] : []} />}
+            {tab === 'notes' && <Notes initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
           </>
         }
         right={
           <>
-            <SideCard title="Prochaine étape">
+            <SideCard title={t('Prochaine étape')}>
               {lead.booked ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
@@ -195,27 +196,27 @@ export default function LeadDetail() {
                       <CalendarCheck className="w-5 h-5" />
                     </span>
                     <div>
-                      <p className="text-sm font-semibold">{lead.booked}</p>
-                      <p className="text-xs text-ink-mute">Estimation · {rep.first}</p>
+                      <p className="text-sm font-semibold">{t(lead.booked)}</p>
+                      <p className="text-xs text-ink-mute">{t('Estimation')} · {rep.first}</p>
                     </div>
                   </div>
-                  <MessageButton kind="reminder" ctx={{ ...ctx, date: lead.booked }} label="Envoyer le rappel" variant="secondary" className="w-full" />
+                  <MessageButton kind="reminder" ctx={{ ...ctx, date: t(lead.booked) }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
                 </div>
               ) : (
                 <button onClick={() => setBooking(true)} className="btn btn-sm btn-primary w-full">
                   <CalendarCheck className="w-4 h-4" />
-                  Réserver une estimation
+                  {t('Réserver une estimation')}
                 </button>
               )}
             </SideCard>
-            <SideCard title="Résumé de l'agent IA">
-              <p className="text-sm text-ink-secondary">{lead.aiSummary}</p>
+            <SideCard title={t("Résumé de l'agent IA")}>
+              <p className="text-sm text-ink-secondary">{t(lead.aiSummary)}</p>
             </SideCard>
             <SideCard
-              title="Responsable"
+              title={t('Responsable')}
               action={
                 <button onClick={() => setChangingRep((o) => !o)} className="text-xs font-semibold text-primary-press">
-                  Changer
+                  {t('Changer')}
                 </button>
               }
             >
@@ -234,7 +235,7 @@ export default function LeadDetail() {
                         onClick={() => {
                           setLead((l) => ({ ...l, repId: r.id }))
                           setChangingRep(false)
-                          toast(`Assigné à ${r.name}`)
+                          toast(t('Assigné à {name}', { name: r.name }))
                         }}
                         className="w-full flex items-center gap-2 px-1 py-1.5 text-sm rounded hover:bg-sand"
                       >
@@ -251,11 +252,11 @@ export default function LeadDetail() {
               <button
                 onClick={() => {
                   setLead((l) => ({ ...l, status: 'Non qualifié' }))
-                  toast('Marqué non qualifié')
+                  toast(t('Marqué non qualifié'))
                 }}
                 className="btn btn-sm btn-ghost w-full text-ink-mute"
               >
-                Marquer non qualifié
+                {t('Marquer non qualifié')}
               </button>
             )}
           </>
@@ -268,7 +269,7 @@ export default function LeadDetail() {
           setBooking(false)
           setSlot(null)
         }}
-        title="Réserver une estimation"
+        title={t('Réserver une estimation')}
       >
         <div className="p-5 space-y-5">
           <div className="flex items-center gap-3">
@@ -277,13 +278,13 @@ export default function LeadDetail() {
           </div>
           {SLOTS.map((d) => (
             <div key={d.day}>
-              <p className="label-caps mb-2">{d.day}</p>
+              <p className="label-caps mb-2">{t(d.day)}</p>
               <div className="flex flex-wrap gap-2">
-                {d.times.map((t) => {
-                  const key = `${d.day} · ${t}`
+                {d.times.map((time) => {
+                  const key = `${d.day} · ${time}`
                   return (
                     <button key={key} onClick={() => setSlot(key)} className={cn('h-9 px-3 rounded-md text-sm font-semibold border', slot === key ? 'bg-primary text-white border-primary' : 'border-hairline-strong text-ink-secondary hover:border-primary')}>
-                      {t}
+                      {t(time)}
                     </button>
                   )
                 })}
@@ -297,11 +298,11 @@ export default function LeadDetail() {
               setLead((l) => ({ ...l, status: 'RDV réservé', booked: slot! }))
               setBooking(false)
               setSlot(null)
-              toast(`Estimation réservée · ${slot}`)
+              toast(`${t('Estimation réservée')} · ${t(slot!)}`)
             }}
           >
             <CalendarCheck className="w-4 h-4" />
-            Confirmer
+            {t('Confirmer')}
           </button>
         </div>
       </Drawer>

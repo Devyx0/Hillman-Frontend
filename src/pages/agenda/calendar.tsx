@@ -14,6 +14,7 @@ import { RepAvatar } from '../../components/ui'
 import { inScope, useApp } from '../../context/AppContext'
 import { JOBS, QUOTES, REPS, companyById, repById, type Appointment } from '../../data/mock'
 import { cn, formatHour, money } from '../../lib/utils'
+import { getLang, t } from '../../i18n'
 
 const DAY_ABBR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
 export const DAY_NAMES = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
@@ -35,7 +36,7 @@ function EventChip({ a, onClick, style, compact }: { a: Appointment; onClick: ()
     return (
       <div style={style} className="absolute rounded-md border border-hairline-strong text-2xs text-ink-mute p-1.5 overflow-hidden bg-[repeating-linear-gradient(135deg,var(--color-sand)_0_6px,var(--color-stone)_6px_12px)]">
         <Ban className="w-3 h-3 inline mr-1" />
-        Non dispo · {rep.first}
+        {t('Non dispo · {name}', { name: rep.first })}
       </div>
     )
   }
@@ -47,9 +48,9 @@ function EventChip({ a, onClick, style, compact }: { a: Appointment; onClick: ()
     >
       <p className="text-2xs font-bold leading-tight truncate flex items-center gap-1">
         {a.aiBooked && <Sparkles className="w-2.5 h-2.5 shrink-0" />}
-        {a.city || a.title}
+        {a.city || t(a.title)}
       </p>
-      {!compact && <p className="text-2xs leading-tight truncate opacity-90">{a.title}</p>}
+      {!compact && <p className="text-2xs leading-tight truncate opacity-90">{t(a.title)}</p>}
       {!compact && <p className="text-[10px] leading-tight opacity-75 tnum">{formatHour(a.start)}</p>}
     </button>
   )
@@ -83,7 +84,7 @@ function HourGutter() {
     <div className="w-12 shrink-0">
       {Array.from({ length: DAY_END - DAY_START }, (_, i) => (
         <div key={i} style={{ height: HOUR_HEIGHT }} className="text-2xs text-ink-mute tnum text-right pr-2 -mt-1.5">
-          {DAY_START + i} h
+          {getLang() === 'en' ? `${(DAY_START + i) % 12 || 12} ${DAY_START + i < 12 ? 'AM' : 'PM'}` : `${DAY_START + i} h`}
         </div>
       ))}
     </div>
@@ -124,7 +125,7 @@ function JobsStrip({ cols }: { cols: number[] }) {
   return (
     <div className="flex border-b border-hairline bg-sand/60">
       <div className="w-12 shrink-0 flex items-center justify-end pr-2">
-        <HardHat className="w-3.5 h-3.5 text-ink-mute" aria-label="Jours de travaux" />
+        <HardHat className="w-3.5 h-3.5 text-ink-mute" aria-label={t('Jours de travaux')} />
       </div>
       <div className="flex-1 relative py-1.5" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(0,1fr))`, gridAutoRows: '22px', rowGap: 3 }}>
         {jobs.map((j) => {
@@ -161,7 +162,7 @@ export function WeekView({ evts, onOpen, showJobs }: { evts: Appointment[]; onOp
           <div className="w-12 shrink-0" />
           {days.map((d) => (
             <div key={d} className={cn('flex-1 py-2.5 text-center border-l border-hairline', d === TODAY_INDEX && 'bg-primary-wash/50')}>
-              <p className="label-caps">{DAY_ABBR[d]}</p>
+              <p className="label-caps">{t(DAY_ABBR[d])}</p>
               <p className={cn('text-lg font-semibold tnum mx-auto w-8 h-8 rounded-full flex items-center justify-center', d === TODAY_INDEX ? 'bg-primary text-white' : 'text-ink')}>{18 + d}</p>
             </div>
           ))}
@@ -219,7 +220,7 @@ export function MonthView({ evts, onPickWeek }: { evts: Appointment[]; onPickWee
       <div className="grid grid-cols-7 gap-px bg-hairline rounded-lg overflow-hidden">
         {DAY_ABBR.map((d) => (
           <div key={d} className="bg-sand label-caps text-center py-2">
-            {d}
+            {t(d)}
           </div>
         ))}
         {cells.map((d, i) => {

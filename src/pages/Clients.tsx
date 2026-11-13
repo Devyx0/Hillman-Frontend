@@ -8,6 +8,7 @@ import { TOTAL_CLIENTS, companiesServing, relativeDay } from '../data/clients'
 import { CLIENTS, COMPANIES, fullName, type CompanyId } from '../data/mock'
 import { toast } from '../lib/toast'
 import { cn, normalize, num } from '../lib/utils'
+import { t } from '../i18n'
 
 export default function Clients() {
   const navigate = useNavigate()
@@ -45,16 +46,16 @@ export default function Clients() {
   return (
     <Page>
       <PageHeader
-        title="Clients"
+        title={t('Clients')}
         actions={
           <>
-            <button onClick={() => toast('Export CSV lancé')} className="btn btn-sm btn-secondary">
+            <button onClick={() => toast(t('Export CSV lancé'))} className="btn btn-sm btn-secondary">
               <Download className="w-4 h-4" />
-              Exporter
+              {t('Exporter')}
             </button>
-            <button onClick={() => toast('Nouvelle fiche client')} className="btn btn-sm btn-primary">
+            <button onClick={() => toast(t('Nouvelle fiche client'))} className="btn btn-sm btn-primary">
               <UserPlus className="w-4 h-4" />
-              Nouveau client
+              {t('Nouveau client')}
             </button>
           </>
         }
@@ -62,32 +63,32 @@ export default function Clients() {
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-mute" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Nom, téléphone, adresse, courriel…" className="form-input pl-9 bg-white" aria-label="Rechercher un client" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Nom, téléphone, adresse, courriel…')} className="form-input pl-9 bg-white" aria-label={t('Rechercher un client')} />
         </div>
-        <Select value={type} onChange={setType} options={[{ value: 'Tous', label: 'Tous les types' }, ...['Résidentiel', 'Commercial', 'Entrepreneur'].map((t) => ({ value: t, label: t }))]} className="sm:w-44 [&>button]:h-10 [&>button]:bg-white" />
-        {scope === 'all' && <Select value={company} onChange={setCompany} options={[{ value: 'Toutes', label: 'Toutes les compagnies' }, ...COMPANIES.map((c) => ({ value: c.id as string, label: c.name }))]} className="sm:w-52 [&>button]:h-10 [&>button]:bg-white" />}
+        <Select value={type} onChange={setType} options={[{ value: 'Tous', label: t('Tous les types') }, ...['Résidentiel', 'Commercial', 'Entrepreneur'].map((ty) => ({ value: ty, label: t(ty) }))]} className="sm:w-44 [&>button]:h-10 [&>button]:bg-white" />
+        {scope === 'all' && <Select value={company} onChange={setCompany} options={[{ value: 'Toutes', label: t('Toutes les compagnies') }, ...COMPANIES.map((c) => ({ value: c.id as string, label: c.name }))]} className="sm:w-52 [&>button]:h-10 [&>button]:bg-white" />}
       </div>
       {selected.size > 0 && (
         <div className="sticky top-20 z-20 bg-ink text-white rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-3 shadow-float menu-in">
           <span className="text-sm font-semibold tnum">
-            {selected.size} sélectionné{selected.size > 1 ? 's' : ''}
+            {selected.size > 1 ? t('{n} sélectionnés', { n: selected.size }) : t('{n} sélectionné', { n: selected.size })}
           </span>
           <div className="flex flex-wrap gap-2 ml-auto">
             <button
               onClick={() => {
-                toast('Relance démarrée')
+                toast(t('Relance démarrée'))
                 setSelected(new Set())
               }}
               className="btn btn-xs bg-white text-ink hover:bg-sand"
             >
               <Workflow className="w-3.5 h-3.5" />
-              Relancer
+              {t('Relancer')}
             </button>
-            <button onClick={() => toast('Export de la sélection')} className="btn btn-xs bg-white/15 text-white hover:bg-white/25">
+            <button onClick={() => toast(t('Export de la sélection'))} className="btn btn-xs bg-white/15 text-white hover:bg-white/25">
               <Download className="w-3.5 h-3.5" />
-              Exporter
+              {t('Exporter')}
             </button>
-            <button onClick={() => setSelected(new Set())} className="p-1.5 rounded-md hover:bg-white/15" aria-label="Annuler la sélection">
+            <button onClick={() => setSelected(new Set())} className="p-1.5 rounded-md hover:bg-white/15" aria-label={t('Annuler la sélection')}>
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -99,20 +100,20 @@ export default function Clients() {
             <thead className="border-b border-hairline">
               <tr>
                 <th className="th w-10">
-                  <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.c.id)))} className="accent-[var(--color-primary)]" aria-label="Tout sélectionner" />
+                  <input type="checkbox" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.c.id)))} className="accent-[var(--color-primary)]" aria-label={t('Tout sélectionner')} />
                 </th>
-                <th className="th">Client</th>
-                <th className="th">Téléphone</th>
-                <th className="th">Ville</th>
-                {scope === 'all' && <th className="th">Compagnies</th>}
-                <th className="th">Activité</th>
+                <th className="th">{t('Client')}</th>
+                <th className="th">{t('Téléphone')}</th>
+                <th className="th">{t('Ville')}</th>
+                {scope === 'all' && <th className="th">{t('Compagnies')}</th>}
+                <th className="th">{t('Activité')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
               {rows.slice(0, 25).map(({ c, served }) => (
                 <tr key={c.id} onClick={() => navigate(`/clients/${c.id}`)} className={cn('cursor-pointer hover:bg-sand/60 transition-colors', selected.has(c.id) && 'bg-primary-wash')}>
                   <td className="td" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-primary)]" aria-label={`Sélectionner ${fullName(c)}`} />
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-primary)]" aria-label={t('Sélectionner {name}', { name: fullName(c) })} />
                   </td>
                   <td className="td">
                     <div className="flex items-center gap-3 min-w-0">
@@ -133,7 +134,7 @@ export default function Clients() {
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="td text-center py-12 text-ink-mute">
-                    Aucun client trouvé.
+                    {t('Aucun client trouvé.')}
                   </td>
                 </tr>
               )}
@@ -142,10 +143,10 @@ export default function Clients() {
         </div>
         <div className="px-5 py-3 border-t border-hairline flex items-center justify-between text-xs text-ink-mute">
           <span className="tnum">
-            1 – {Math.min(25, rows.length)} de {num(TOTAL_CLIENTS[scope])}
+            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(TOTAL_CLIENTS[scope]) })}
           </span>
           <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-md hover:bg-sand" aria-label="Page précédente" disabled>
+            <button className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Page précédente')} disabled>
               <ChevronLeft className="w-4 h-4" />
             </button>
             {[1, 2, 3].map((p) => (
@@ -153,7 +154,7 @@ export default function Clients() {
                 {p}
               </button>
             ))}
-            <button className="p-1.5 rounded-md hover:bg-sand" aria-label="Page suivante">
+            <button className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Page suivante')}>
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>

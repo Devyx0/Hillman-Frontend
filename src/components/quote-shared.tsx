@@ -7,6 +7,7 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Image, Star } from 'lucide-react'
 import { QUOTE_STATUSES } from '../data/mock'
+import { t } from '../i18n'
 import { cn } from '../lib/utils'
 import { Field, StatusBadge } from './ui'
 
@@ -15,7 +16,7 @@ export function StatusPicker({ q, onChange }: { q: { status: string }; onChange:
   const [open, setOpen] = useState(false)
   return (
     <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-      <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 rounded-full hover:ring-2 hover:ring-hairline-strong" aria-label="Changer le statut">
+      <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 rounded-full hover:ring-2 hover:ring-hairline-strong" aria-label={t('Changer le statut')}>
         <StatusBadge status={q.status} />
         <ChevronDown className="w-3 h-3 text-ink-faint" />
       </button>
@@ -99,7 +100,7 @@ export function PhotoTile({ label, main }: { label: ReactNode; main?: boolean; e
         {main && (
           <span className="badge bg-ink text-white">
             <Star className="w-3 h-3 mr-1" />
-            Principale
+            {t('Principale')}
           </span>
         )}
       </div>

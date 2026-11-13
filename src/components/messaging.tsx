@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BellRing, ChevronDown, LoaderCircle, Mail, MessageSquare, Repeat, Send, Sparkles, Zap } from 'lucide-react'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { Drawer, Field, type Icon } from './ui'
@@ -26,21 +27,31 @@ export const MESSAGE_KINDS: Record<MessageKind, { label: string; icon: Icon; hin
 
 const signature = (c: MessageCtx) => `${c.rep ?? 'Jean-Pierre'}\n${c.company ?? 'Toitures Hillman'}`
 
+/** Template variables (call-time only: `date` default goes through `t()`). */
+const vars = (c: MessageCtx) => ({
+  first: c.first ?? '',
+  rep: c.rep ?? 'Jean-Pierre',
+  company: c.company ?? 'Toitures Hillman',
+  quoteNo: c.quoteNo ?? '',
+  date: c.date ?? t('demain à 10 h'),
+  signature: signature(c),
+})
+
 /** Mockup: `fd`. */
 export const TEMPLATES: { id: string; name: string; kinds: MessageKind[]; text: (c: MessageCtx) => string }[] = [
-  { id: 'suivi-sms', name: 'Suivi de soumission', kinds: ['sms'], text: (c) => `Bonjour ${c.first ?? ''}, c'est ${c.rep ?? 'Jean-Pierre'} de ${c.company ?? 'Toitures Hillman'}. Avez-vous bien reçu la soumission ${c.quoteNo ?? ''}? Je reste disponible pour vos questions.` },
-  { id: 'dispo-sms', name: 'Proposer une visite', kinds: ['sms'], text: (c) => `Bonjour ${c.first ?? ''}, je peux passer revoir les travaux avec vous cette semaine. Est-ce que mardi ou jeudi vous conviendrait? ${c.rep ?? 'Jean-Pierre'}, ${c.company ?? 'Toitures Hillman'}` },
-  { id: 'envoi-email', name: 'Envoi de soumission', kinds: ['email'], text: (c) => `Bonjour ${c.first ?? ''},\n\nVoici votre soumission ${c.quoteNo ?? ''}. Vous pouvez la consulter et l'accepter en ligne avec le lien ci-dessous.\n\nMerci,\n${signature(c)}` },
-  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6 actuel)', kinds: ['email'], text: (c) => `Bonjour ${c.first ?? ''},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission ${c.quoteNo ?? ''}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n${signature(c)}` },
-  { id: 'rappel-rdv', name: 'Rappel de rendez-vous', kinds: ['reminder'], text: (c) => `Rappel : ${c.rep ?? 'Jean-Pierre'} de ${c.company ?? 'Toitures Hillman'} sera chez vous ${c.date ?? 'demain à 10 h'}. Répondez C pour confirmer ou R pour reporter.` },
+  { id: 'suivi-sms', name: 'Suivi de soumission', kinds: ['sms'], text: (c) => t("Bonjour {first}, c'est {rep} de {company}. Avez-vous bien reçu la soumission {quoteNo}? Je reste disponible pour vos questions.", vars(c)) },
+  { id: 'dispo-sms', name: 'Proposer une visite', kinds: ['sms'], text: (c) => t('Bonjour {first}, je peux passer revoir les travaux avec vous cette semaine. Est-ce que mardi ou jeudi vous conviendrait? {rep}, {company}', vars(c)) },
+  { id: 'envoi-email', name: 'Envoi de soumission', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nVoici votre soumission {quoteNo}. Vous pouvez la consulter et l'accepter en ligne avec le lien ci-dessous.\n\nMerci,\n{signature}", vars(c)) },
+  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6 actuel)', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission {quoteNo}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n{signature}", vars(c)) },
+  { id: 'rappel-rdv', name: 'Rappel de rendez-vous', kinds: ['reminder'], text: (c) => t('Rappel : {rep} de {company} sera chez vous {date}. Répondez C pour confirmer ou R pour reporter.', vars(c)) },
 ]
 
 /** Stand-in for the AI rewrite the backend will provide (mockup: `N3`). */
 function improveWithAI(text: string) {
   return text
-    .replace('Avez-vous bien reçu', "Je voulais m'assurer que vous avez bien reçu")
-    .replace('Je reste disponible pour vos questions.', "Si vous avez des questions sur les matériaux ou l'échéancier, je peux passer vous voir cette semaine.")
-    .replace('Nous sommes très heureux', 'Merci encore, nous sommes très heureux')
+    .replace(t('Avez-vous bien reçu'), t("Je voulais m'assurer que vous avez bien reçu"))
+    .replace(t('Je reste disponible pour vos questions.'), t("Si vous avez des questions sur les matériaux ou l'échéancier, je peux passer vous voir cette semaine."))
+    .replace(t('Nous sommes très heureux'), t('Merci encore, nous sommes très heureux'))
 }
 
 const SEQUENCE_STEPS: { d: string; icon: Icon; t: string; s: string }[] = [
@@ -84,7 +95,7 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
         meta ? (
           <span className="flex items-center gap-2">
             <meta.icon className="w-4 h-4" />
-            {meta.label}
+            {t(meta.label)}
           </span>
         ) : (
           ''
@@ -94,7 +105,7 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
       {kind && meta && (
         <div className="p-5 space-y-5">
           <p className="text-sm text-ink-mute">
-            {meta.hint}
+            {t(meta.hint)}
             {ctx.name ? (
               <>
                 {' · '}
@@ -106,74 +117,74 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
             <div className="rounded-lg border border-hairline divide-y divide-hairline">
               {SEQUENCE_STEPS.map((s) => (
                 <div key={s.d} className="flex items-start gap-3 p-3">
-                  <span className="tnum text-xs font-semibold text-primary-press bg-primary-wash rounded-md px-2 py-1 shrink-0">{s.d}</span>
+                  <span className="tnum text-xs font-semibold text-primary-press bg-primary-wash rounded-md px-2 py-1 shrink-0">{t(s.d)}</span>
                   <s.icon className="w-4 h-4 text-ink-mute mt-1 shrink-0" />
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-ink">{s.t}</span>
-                    <span className="block text-xs text-ink-mute">{s.s}</span>
+                    <span className="block text-sm font-semibold text-ink">{t(s.t)}</span>
+                    <span className="block text-xs text-ink-mute">{t(s.s)}</span>
                   </span>
                 </div>
               ))}
-              <p className="p-3 text-xs text-ink-mute">La relance s'arrête dès que le client répond, signe ou que le statut change.</p>
+              <p className="p-3 text-xs text-ink-mute">{t("La relance s'arrête dès que le client répond, signe ou que le statut change.")}</p>
             </div>
           ) : (
             <>
               <div className="flex items-end gap-2 flex-wrap">
-                <Field label="Modèle" className="flex-1 min-w-[12rem]">
+                <Field label={t('Modèle')} className="flex-1 min-w-[12rem]">
                   <select
                     value={templateId}
                     onChange={(e) => {
                       setTemplateId(e.target.value)
-                      const t = TEMPLATES.find((x) => x.id === e.target.value)
-                      if (t) setText(t.text(ctx))
+                      const tpl = TEMPLATES.find((x) => x.id === e.target.value)
+                      if (tpl) setText(tpl.text(ctx))
                     }}
                     className="form-input"
                   >
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    {templates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {t(tpl.name)}
                       </option>
                     ))}
                   </select>
                 </Field>
                 <button onClick={improve} disabled={improving} className="btn btn-sm btn-quiet">
                   <Sparkles className="w-3.5 h-3.5" />
-                  Améliorer avec l'IA
+                  {t("Améliorer avec l'IA")}
                 </button>
               </div>
-              <Field label="Message">
+              <Field label={t('Message')}>
                 <div className="relative">
                   <textarea value={text} onChange={(e) => setText(e.target.value)} rows={kind === 'email' ? 10 : 5} className="form-input h-auto py-2.5 leading-relaxed" />
                   {improving && (
                     <div className="absolute inset-0 bg-white/70 rounded-md flex items-center justify-center gap-2 text-sm text-ink-mute">
                       <LoaderCircle className="w-4 h-4 animate-spin" />
-                      Amélioration…
+                      {t('Amélioration…')}
                     </div>
                   )}
                 </div>
               </Field>
-              {kind !== 'email' && <p className="text-2xs text-ink-mute tnum">{text.length} caractères · consentement texto ✓</p>}
+              {kind !== 'email' && <p className="text-2xs text-ink-mute tnum">{t('{n} caractères · consentement texto ✓', { n: text.length })}</p>}
             </>
           )}
           <div className="flex items-center justify-between gap-2 pt-2 border-t border-hairline">
             <button
               className="btn btn-sm btn-ghost"
               onClick={() => {
-                toast('Programmé pour demain 8 h 30')
+                toast(t('Programmé pour demain 8 h 30'))
                 close()
               }}
             >
-              Programmer
+              {t('Programmer')}
             </button>
             <button
               className="btn btn-sm btn-primary"
               onClick={() => {
-                toast(kind === 'sequence' ? 'Relance automatique démarrée' : 'Envoyé')
+                toast(kind === 'sequence' ? t('Relance automatique démarrée') : t('Envoyé'))
                 close()
               }}
             >
               <Send className="w-4 h-4" />
-              {kind === 'sequence' ? 'Démarrer' : 'Envoyer'}
+              {kind === 'sequence' ? t('Démarrer') : t('Envoyer')}
             </button>
           </div>
         </div>
@@ -183,14 +194,14 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
 }
 
 /** "Actions" dropdown that opens the compose drawer (mockup: `A3`). */
-export function ActionsMenu({ ctx, kinds = ['sms', 'email', 'sequence'], label = 'Actions', variant = 'secondary', className }: { ctx: MessageCtx; kinds?: MessageKind[]; label?: string; variant?: 'primary' | 'quiet' | 'secondary'; className?: string }) {
+export function ActionsMenu({ ctx, kinds = ['sms', 'email', 'sequence'], label, variant = 'secondary', className }: { ctx: MessageCtx; kinds?: MessageKind[]; label?: string; variant?: 'primary' | 'quiet' | 'secondary'; className?: string }) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<MessageKind | null>(null)
   return (
     <div className={cn('relative', className)}>
       <button onClick={() => setOpen((o) => !o)} className={cn('btn btn-sm', variant === 'primary' ? 'btn-primary' : variant === 'quiet' ? 'btn-quiet' : 'btn-secondary')}>
         <Zap className="w-4 h-4" />
-        {label}
+        {label ?? t('Actions')}
         <ChevronDown className="w-3.5 h-3.5 opacity-70" />
       </button>
       {open && (
@@ -210,8 +221,8 @@ export function ActionsMenu({ ctx, kinds = ['sms', 'email', 'sequence'], label =
                 >
                   <m.icon className="w-4 h-4 text-ink-mute mt-0.5 shrink-0" />
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-ink">{m.label}</span>
-                    <span className="block text-2xs text-ink-mute">{m.hint}</span>
+                    <span className="block text-sm font-medium text-ink">{t(m.label)}</span>
+                    <span className="block text-2xs text-ink-mute">{t(m.hint)}</span>
                   </span>
                 </button>
               )
@@ -232,7 +243,7 @@ export function MessageButton({ kind, ctx, className, label, size = 'sm', varian
     <>
       <button onClick={() => setOpen(kind)} className={cn('btn', size === 'xs' ? 'btn-xs' : 'btn-sm', `btn-${variant}`, className)}>
         <m.icon className="w-3.5 h-3.5" />
-        {label ?? m.label}
+        {label ?? t(m.label)}
       </button>
       <ComposeDrawer kind={open} ctx={ctx} onClose={() => setOpen(null)} />
     </>

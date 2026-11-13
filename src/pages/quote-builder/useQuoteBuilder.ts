@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MessageCtx, MessageKind } from '../../components/messaging'
 import { APPOINTMENTS, clientById, companyById, fullName, repById, type MaterialLine, type Quote } from '../../data/mock'
+import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { GST, QST, money, pct } from '../../lib/utils'
 import { BUILDER_SECTIONS, BUILDER_SECTIONS_SHORT, CATALOG_EXTRAS, SAMPLE_AI_DESCRIPTION, SAMPLE_VISIT_NOTES, TARGET_MARGIN, actualsSeed, quoteDefaults, type Actuals, type QuoteAddon, type SectionId } from '../../data/quote-builder'
@@ -60,7 +61,7 @@ export function useQuoteBuilder(quote: Quote) {
   const [comments, setComments] = useState('')
   const [payMode, setPayMode] = useState<'std' | 'autre'>('std')
   const [warranties, setWarranties] = useState<Warranties>({ fab: 'Prolongé BP 50 ans ferme', mo: '10 ans', offre: '30 jours' })
-  const [note, setNote] = useState(isDemo ? SAMPLE_VISIT_NOTES : '')
+  const [note, setNote] = useState(isDemo ? t(SAMPLE_VISIT_NOTES) : '')
   const [rewriting, setRewriting] = useState(false)
   const [moreMenu, setMoreMenu] = useState(false)
   const [composeKind, setComposeKind] = useState<MessageKind | null>(null)
@@ -71,11 +72,14 @@ export function useQuoteBuilder(quote: Quote) {
   const [listDraft, setListDraft] = useState<MaterialLine[]>([])
   const [listFilter, setListFilter] = useState('')
   const [actualsOpen, setActualsOpen] = useState(false)
-  const [actuals, setActuals] = useState<Actuals>(() => ({ final: 0, ...actualsSeed(isDemo, defaults.price + defaults.addons.filter((a) => !a.included).reduce((n, a) => n + a.price, 0)) }))
+  const [actuals, setActuals] = useState<Actuals>(() => {
+    const seed = actualsSeed(isDemo, defaults.price + defaults.addons.filter((a) => !a.included).reduce((n, a) => n + a.price, 0))
+    return { final: 0, ...seed, invoices: seed.invoices.map((i) => ({ ...i, label: t(i.label) })) }
+  })
   const [targetTotal, setTargetTotal] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([
-    { name: 'Garantie GAF System Plus.pdf', ext: 'PDF', email: true },
-    { name: 'Fiche technique Timberline HDZ.pdf', ext: 'PDF', email: false },
+    { name: t('Garantie GAF System Plus.pdf'), ext: 'PDF', email: true },
+    { name: t('Fiche technique Timberline HDZ.pdf'), ext: 'PDF', email: false },
   ])
 
   // ── Totals ──
@@ -109,18 +113,18 @@ export function useQuoteBuilder(quote: Quote) {
     setCosts(kept)
     setCostMode('std')
     setListFilter('')
-    toast(`${kept.length} items dans la soumission — totaux mis à jour`)
+    toast(t('{n} items dans la soumission — totaux mis à jour', { n: kept.length }))
   }
   const priceFromTotal = () => {
     const target = Number(String(targetTotal).replace(/\s/g, '').replace(',', '.'))
     if (!target) {
-      toast('Entrez un total visé, taxes incluses')
+      toast(t('Entrez un total visé, taxes incluses'))
       return
     }
     const beforeTax = target / (1 + GST + QST)
     const next = Math.round((beforeTax - paidAddons.reduce((n, a) => n + a.price, 0) + discount) * 100) / 100
     setPrice(next)
-    toast(`Prix calculé : ${money(next)} pour un total de ${money(target)}`)
+    toast(t('Prix calculé : {price} pour un total de {total}', { price: money(next), total: money(target) }))
   }
   const scopeLineCount = defaults.scope.reduce((n, s) => n + s.lines.length, 0)
   const done: Record<SectionId, boolean> = {
@@ -161,21 +165,21 @@ export function useQuoteBuilder(quote: Quote) {
   const rewriteNote = () => {
     setRewriting(true)
     window.setTimeout(() => {
-      setNote(SAMPLE_AI_DESCRIPTION)
+      setNote(t(SAMPLE_AI_DESCRIPTION))
       setRewriting(false)
-      toast("Note reformulée — relisez avant d'envoyer")
+      toast(t("Note reformulée — relisez avant d'envoyer"))
     }, 1300)
   }
 
   const msgCtx: MessageCtx & { amount: string } = { name: fullName(client), first: client.first, quoteNo: quote.no, company: company.name, rep: rep.first, amount: money(total * 0.15) }
   const appointments = APPOINTMENTS.filter((a) => a.quoteNo === quote.no || (isDemo && a.clientId === client.id))
   const costCats = [...new Set(costs.map((l) => l.cat))]
-  const filteredScope = defaults.scope.map((s) => ({ ...s, lines: s.lines.filter((l) => !scopeQuery || l.toLowerCase().includes(scopeQuery.toLowerCase())) })).filter((s) => s.lines.length)
+  const filteredScope = defaults.scope.map((s) => ({ ...s, lines: s.lines.filter((l) => !scopeQuery || t(l).toLowerCase().includes(scopeQuery.toLowerCase())) })).filter((s) => s.lines.length)
   const checks: Check[] = [
-    marginPct < TARGET_MARGIN ? { tone: 'critical', text: `Marge de ${pct(marginPct, 1)}, sous la cible de ${TARGET_MARGIN} %` } : { tone: 'good', text: `Marge au-dessus de la cible de ${TARGET_MARGIN} %` },
-    ...(labour && labourMargin < TARGET_MARGIN ? [{ tone: 'warn' as const, text: `Main-d'œuvre vendue sous la cible (${pct(labourMargin, 1)})` }] : []),
-    ...(hasSection('travaux') && quote.company === 'toit' && !checked.has('Permis de construction') ? [{ tone: 'warn' as const, text: 'Permis : ni inclus ni exclu dans Travaux' }] : []),
-    ...(client.email ? [] : [{ tone: 'warn' as const, text: 'Aucun courriel au dossier client' }]),
+    marginPct < TARGET_MARGIN ? { tone: 'critical', text: t('Marge de {m}, sous la cible de {target}', { m: pct(marginPct, 1), target: pct(TARGET_MARGIN) }) } : { tone: 'good', text: t('Marge au-dessus de la cible de {target}', { target: pct(TARGET_MARGIN) }) },
+    ...(labour && labourMargin < TARGET_MARGIN ? [{ tone: 'warn' as const, text: t("Main-d'œuvre vendue sous la cible ({m})", { m: pct(labourMargin, 1) }) }] : []),
+    ...(hasSection('travaux') && quote.company === 'toit' && !checked.has('Permis de construction') ? [{ tone: 'warn' as const, text: t('Permis : ni inclus ni exclu dans Travaux') }] : []),
+    ...(client.email ? [] : [{ tone: 'warn' as const, text: t('Aucun courriel au dossier client') }]),
   ]
 
   return {

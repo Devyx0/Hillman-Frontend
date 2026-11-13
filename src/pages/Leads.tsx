@@ -6,6 +6,7 @@ import { Avatar, CompanyBadge, Page, PageHeader, RepAvatar, Tabs } from '../comp
 import { inScope, useApp } from '../context/AppContext'
 import { ALL_LEADS, LEAD_PROFILES, channelStyle, leadBucket, leadStage, type LeadBucket } from '../data/leads'
 import { repById } from '../data/mock'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, normalize } from '../lib/utils'
 
@@ -27,11 +28,11 @@ export default function Leads() {
   return (
     <Page>
       <PageHeader
-        title="Leads"
+        title={t('Leads')}
         actions={
-          <button className="btn btn-sm btn-primary" onClick={() => toast('Nouveau lead (démo)')}>
+          <button className="btn btn-sm btn-primary" onClick={() => toast(t('Nouveau lead (démo)'))}>
             <Plus className="w-4 h-4" />
-            Ajouter un lead
+            {t('Ajouter un lead')}
           </button>
         }
       />
@@ -40,28 +41,28 @@ export default function Leads() {
           value={filter}
           onChange={setFilter}
           tabs={[
-            { value: 'all', label: 'Tous', count: count('all') },
-            { value: 'new', label: 'Nouveaux', count: count('new') },
-            { value: 'qualified', label: 'Qualifiés', count: count('qualified') },
-            { value: 'booked', label: 'RDV réservés', count: count('booked') },
-            { value: 'lost', label: 'Non qualifiés', count: count('lost') },
+            { value: 'all', label: t('Tous'), count: count('all') },
+            { value: 'new', label: t('Nouveaux'), count: count('new') },
+            { value: 'qualified', label: t('Qualifiés'), count: count('qualified') },
+            { value: 'booked', label: t('RDV réservés'), count: count('booked') },
+            { value: 'lost', label: t('Non qualifiés'), count: count('lost') },
           ]}
         />
         <label className="relative md:ml-auto md:w-72">
           <Search className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher…" className="form-input pl-9" aria-label="Rechercher un lead" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Rechercher…')} className="form-input pl-9" aria-label={t('Rechercher un lead')} />
         </label>
       </div>
       <div className="bg-white rounded-xl shadow-card overflow-hidden">
         <table className="w-full hidden md:table">
           <thead className="border-b border-hairline">
             <tr>
-              <th className="th">Nom</th>
-              <th className="th">Demande</th>
-              <th className="th">Source</th>
-              <th className="th">Étape</th>
-              <th className="th">Responsable</th>
-              <th className="th text-right">Reçu</th>
+              <th className="th">{t('Nom')}</th>
+              <th className="th">{t('Demande')}</th>
+              <th className="th">{t('Source')}</th>
+              <th className="th">{t('Étape')}</th>
+              <th className="th">{t('Responsable')}</th>
+              <th className="th text-right">{t('Reçu')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline">
@@ -79,7 +80,7 @@ export default function Leads() {
                     </div>
                   </td>
                   <td className="td">
-                    <span className="line-clamp-1">{LEAD_PROFILES[l.id]?.work ?? '—'}</span>
+                    <span className="line-clamp-1">{LEAD_PROFILES[l.id] ? t(LEAD_PROFILES[l.id].work) : '—'}</span>
                     {scope === 'all' && <CompanyBadge id={l.company} className="mt-1" />}
                   </td>
                   <td className="td">
@@ -87,7 +88,7 @@ export default function Leads() {
                       <span className={cn('w-6 h-6 rounded-md flex items-center justify-center', ch.tone)}>
                         <ch.icon className="w-3.5 h-3.5" />
                       </span>
-                      {l.channel}
+                      {t(l.channel)}
                     </span>
                   </td>
                   <td className="td">
@@ -99,7 +100,7 @@ export default function Leads() {
                       <span className="truncate">{repById(l.repId ?? 'jph')!.first}</span>
                     </span>
                   </td>
-                  <td className="td text-right text-xs text-ink-mute whitespace-nowrap">{l.ago}</td>
+                  <td className="td text-right text-xs text-ink-mute whitespace-nowrap">{t(l.ago)}</td>
                 </tr>
               )
             })}
@@ -113,7 +114,7 @@ export default function Leads() {
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-ink truncate">{l.name}</span>
                   <span className="block text-xs text-ink-mute truncate">
-                    {LEAD_PROFILES[l.id]?.work} · {l.city}
+                    {LEAD_PROFILES[l.id] ? t(LEAD_PROFILES[l.id].work) : undefined} · {l.city}
                   </span>
                 </span>
                 <LeadStageBadge lead={l} />
@@ -121,7 +122,7 @@ export default function Leads() {
             </li>
           ))}
         </ul>
-        {rows.length === 0 && <p className="px-5 py-12 text-center text-sm text-ink-mute">Aucun lead</p>}
+        {rows.length === 0 && <p className="px-5 py-12 text-center text-sm text-ink-mute">{t('Aucun lead')}</p>}
       </div>
     </Page>
   )

@@ -12,6 +12,7 @@
  */
 import { BadgeDollarSign, Calculator, ClipboardCheck, ClipboardList, FileText, ListChecks, MailCheck, Paperclip, ShieldCheck, User } from 'lucide-react'
 import type { Icon } from '../components/ui'
+import { locale, t } from '../i18n'
 import { DEFAULT_SCOPE, MATERIAL_LINES, SCOPE_SECTIONS, type CompanyId, type MaterialLine, type Quote, type ScopeSection } from './mock'
 
 /** Target margin, in % (mockup: `jn`). */
@@ -310,15 +311,15 @@ const INTERNAL_NOTES = [
   'Voisin intéressé aussi',
 ]
 
-/** Deterministic internal note for a quote; '' for a third of them (mockup: `Ao`). */
+/** Deterministic internal note for a quote, translated; '' for a third of them (mockup: `Ao`). Call during render. */
 export function internalNote(q: { id: string }) {
   let h = 0
   for (const ch of q.id) h = (h * 31 + ch.charCodeAt(0)) % 997
-  return h % 3 === 0 ? '' : INTERNAL_NOTES[h % INTERNAL_NOTES.length]
+  return h % 3 === 0 ? '' : t(INTERNAL_NOTES[h % INTERNAL_NOTES.length])
 }
 
 /** "2026-10-16" → "16 oct." (mockup: `s4`). */
-export const shortDate = (iso: string) => new Date(iso + 'T12:00').toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })
+export const shortDate = (iso: string) => new Date(iso + 'T12:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 
 /** Gross margin in percent (mockup: `l4`). */
 export const marginPct = (q: { amount: number; cost: number }) => (q.amount ? ((q.amount - q.cost) / q.amount) * 100 : 0)

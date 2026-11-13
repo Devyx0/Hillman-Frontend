@@ -7,6 +7,7 @@ import { Page, PageHeader, RepAvatar } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { REPS, companyById } from '../data/mock'
 import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type Deal, type PipelineColumnId as ColumnId } from '../data/pipeline'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort } from '../lib/utils'
 
@@ -35,10 +36,10 @@ export default function Pipeline() {
     if (deal && deal.col !== col) {
       toast(
         col === 'signe'
-          ? `${deal.name} → Signé · chantier créé dans « À planifier »`
+          ? t('{name} → Signé · chantier créé dans « À planifier »', { name: deal.name })
           : col === 'refuse'
-            ? `${deal.name} → Refusé · demande de raison envoyée`
-            : `${deal.name} → ${COLUMNS.find((c) => c.id === col)!.label}`,
+            ? t('{name} → Refusé · demande de raison envoyée', { name: deal.name })
+            : `${deal.name} → ${t(COLUMNS.find((c) => c.id === col)!.label)}`,
       )
     }
     setMenuId(null)
@@ -46,28 +47,28 @@ export default function Pipeline() {
 
   const open = visible.filter((d) => !['signe', 'refuse'].includes(d.col))
   const reps = REPS.filter((r) => r.company !== 'all' && (scope === 'all' || r.company === scope))
-  const repOptions: SelectOption[] = [{ value: 'all', label: 'Tous les représentants' }, ...reps.map((r) => ({ value: r.id, label: r.name }))]
+  const repOptions: SelectOption[] = [{ value: 'all', label: t('Tous les représentants') }, ...reps.map((r) => ({ value: r.id, label: r.name }))]
   const columns = COLUMNS.filter((c) => c.id !== 'refuse' || showRefused)
 
   return (
     <Page wide>
-      <PageHeader title="Pipeline" />
+      <PageHeader title={t('Pipeline')} />
       <FilterBar>
         {reps.length > 1 && (
-          <FilterField label="Représentant">
+          <FilterField label={t('Représentant')}>
             <Select value={rep} onChange={setRep} options={repOptions} className="w-52" />
           </FilterField>
         )}
-        <FilterField label="Montant">
-          <Select value={amountRange} onChange={setAmountRange} options={AMOUNT_RANGES} className="w-48" />
+        <FilterField label={t('Montant')}>
+          <Select value={amountRange} onChange={setAmountRange} options={AMOUNT_RANGES.map((r) => ({ ...r, label: t(r.label) }))} className="w-48" />
         </FilterField>
         <div className="col-span-2 md:ml-auto flex flex-wrap items-end gap-x-6 gap-y-2">
           <div>
-            <p className="label-caps">Pipeline ouvert</p>
+            <p className="label-caps">{t('Pipeline ouvert')}</p>
             <p className="text-lg font-semibold tnum">{moneyShort(open.reduce((n, d) => n + d.amount, 0))}</p>
           </div>
           <div>
-            <p className="label-caps">Signé</p>
+            <p className="label-caps">{t('Signé')}</p>
             <p className="text-lg font-semibold tnum text-tone-good-ink">{moneyShort(visible.filter((d) => d.col === 'signe').reduce((n, d) => n + d.amount, 0))}</p>
           </div>
         </div>
@@ -96,7 +97,7 @@ export default function Pipeline() {
                 <div className="px-3 pt-3 pb-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-ink flex items-center gap-2">
-                      {col.label}
+                      {t(col.label)}
                       <span className="text-2xs font-bold bg-white text-ink-mute px-1.5 rounded-full tnum">{items.length}</span>
                     </p>
                     <p className="text-xs font-semibold tnum text-ink-secondary">{moneyShort(total)}</p>
@@ -126,7 +127,7 @@ export default function Pipeline() {
                             setMenuId(menuId === d.id ? null : d.id)
                           }}
                           className="p-1 -mr-1 rounded text-ink-faint hover:text-ink hover:bg-sand"
-                          aria-label="Déplacer vers"
+                          aria-label={t('Déplacer vers')}
                         >
                           <Ellipsis className="w-4 h-4" />
                         </button>
@@ -134,8 +135,8 @@ export default function Pipeline() {
                       <div className="flex items-center justify-between mt-2.5">
                         <div className="flex items-center gap-2">
                           <RepAvatar id={d.repId} size="xs" />
-                          <span className={cn('text-2xs font-semibold px-1.5 py-0.5 rounded-full tnum', ageTone(d.days))} title="Jours dans l'étape">
-                            {d.days} j
+                          <span className={cn('text-2xs font-semibold px-1.5 py-0.5 rounded-full tnum', ageTone(d.days))} title={t("Jours dans l'étape")}>
+                            {t('{n} j', { n: d.days })}
                           </span>
                         </div>
                         <p className="text-sm font-semibold tnum text-ink">
@@ -150,48 +151,48 @@ export default function Pipeline() {
                             setCompose({ kind: 'sms', ctx: { name: d.name, first: d.name.split(' ')[0], quoteNo: d.no === 'Lead' ? undefined : d.no, company: companyById(d.company).name } })
                           }}
                           className="w-7 h-7 rounded-md bg-white shadow-card flex items-center justify-center text-ink-mute hover:text-primary-press"
-                          aria-label="Texto"
+                          aria-label={t('Texto')}
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            toast(`Appel vers ${d.name}…`)
+                            toast(t('Appel vers {name}…', { name: d.name }))
                           }}
                           className="w-7 h-7 rounded-md bg-white shadow-card flex items-center justify-center text-ink-mute hover:text-primary-press"
-                          aria-label="Appeler"
+                          aria-label={t('Appeler')}
                         >
                           <Phone className="w-3.5 h-3.5" />
                         </button>
                       </div>
                       {menuId === d.id && (
                         <div onClick={(e) => e.stopPropagation()} className="absolute right-2 top-8 z-20 w-52 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in cursor-default">
-                          <p className="label-caps px-3 py-1.5">Déplacer vers</p>
+                          <p className="label-caps px-3 py-1.5">{t('Déplacer vers')}</p>
                           {COLUMNS.filter((c) => c.id !== d.col).map((c) => (
                             <button key={c.id} onClick={() => move(d.id, c.id)} className="w-full text-left px-3 py-1.5 text-sm text-ink-secondary hover:bg-sand">
-                              {c.label}
+                              {t(c.label)}
                             </button>
                           ))}
                         </div>
                       )}
                     </article>
                   ))}
-                  {items.length === 0 && <p className="text-xs text-ink-faint text-center py-6 border-2 border-dashed border-hairline-strong rounded-lg">Vide</p>}
+                  {items.length === 0 && <p className="text-xs text-ink-faint text-center py-6 border-2 border-dashed border-hairline-strong rounded-lg">{t('Vide')}</p>}
                 </div>
               </div>
             )
           })}
           {!showRefused && (
-            <button onClick={() => setShowRefused(true)} className="w-12 shrink-0 self-stretch rounded-xl bg-stone/60 hover:bg-stone flex flex-col items-center py-3 gap-2 text-ink-mute" aria-label="Afficher Refusé">
+            <button onClick={() => setShowRefused(true)} className="w-12 shrink-0 self-stretch rounded-xl bg-stone/60 hover:bg-stone flex flex-col items-center py-3 gap-2 text-ink-mute" aria-label={t('Afficher Refusé')}>
               <ChevronRight className="w-4 h-4" />
-              <span className="text-xs font-semibold [writing-mode:vertical-rl]">Refusé · {inColumn('refuse').length}</span>
+              <span className="text-xs font-semibold [writing-mode:vertical-rl]">{t('Refusé')} · {inColumn('refuse').length}</span>
             </button>
           )}
           {showRefused && (
             <button onClick={() => setShowRefused(false)} className="btn btn-xs btn-ghost self-start mt-3">
               <ChevronDown className="w-3.5 h-3.5 rotate-90" />
-              Masquer
+              {t('Masquer')}
             </button>
           )}
         </div>

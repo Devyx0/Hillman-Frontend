@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
+import { t } from '../i18n'
 import { cn, normalize } from '../lib/utils'
 
 /** Label above a filter control (mockup: `Es`). */
@@ -116,8 +117,8 @@ export function Select<T extends string = string>({
                 ref={input}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher…"
-                aria-label="Filtrer les options"
+                placeholder={t('Rechercher…')}
+                aria-label={t('Filtrer les options')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && filtered.length === 1) {
                     e.preventDefault()
@@ -129,7 +130,7 @@ export function Select<T extends string = string>({
             </div>
           )}
           <div className="py-1 max-h-64 overflow-y-auto">
-            {filtered.length === 0 && <p className="px-3 py-4 text-center text-xs text-ink-mute">Aucun résultat</p>}
+            {filtered.length === 0 && <p className="px-3 py-4 text-center text-xs text-ink-mute">{t('Aucun résultat')}</p>}
             {filtered.map((o) => {
               const active = o.value === value
               return (

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Bot, Check, Clock, Copy, Eye, FileText, Mail, MessageSquare, Paperclip, PhoneIncoming, PhoneOutgoing, Play, Send, ShieldCheck, Sparkles, StickyNote } from 'lucide-react'
 import { ME, companyById, type Message, type Thread } from '../data/mock'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { Avatar, Badge, CHANNEL_ICONS, type Icon } from './ui'
@@ -35,10 +36,10 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
         <div className="max-w-md text-center text-xs text-ink-mute bg-white/70 border border-hairline rounded-lg px-3 py-2">
           <span className="inline-flex items-center gap-1.5 font-semibold text-ink-secondary">
             <Eye className="w-3.5 h-3.5" />
-            {m.meta ?? 'Activité'}
+            {m.meta ? t(m.meta) : t('Activité')}
           </span>
-          <p className="mt-0.5">{m.text}</p>
-          <p className="text-2xs mt-1 text-ink-faint">{m.at}</p>
+          <p className="mt-0.5">{t(m.text)}</p>
+          <p className="text-2xs mt-1 text-ink-faint">{t(m.at)}</p>
         </div>
       </div>
     )
@@ -49,14 +50,14 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
           <div className="px-4 py-3 flex items-center gap-3 border-b border-hairline">
             <span className="w-9 h-9 rounded-full bg-sand flex items-center justify-center">{m.dir === 'out' ? <PhoneOutgoing className="w-4 h-4" /> : <PhoneIncoming className="w-4 h-4" />}</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-ink">{m.text}</p>
+              <p className="text-sm font-semibold text-ink">{t(m.text)}</p>
               <p className="text-2xs text-ink-mute">
-                {m.by ?? thread.name} · {m.at}
+                {m.by ?? thread.name} · {t(m.at)}
               </p>
             </div>
-            <button onClick={() => toast("Lecture de l'enregistrement…")} className="btn btn-xs btn-quiet">
+            <button onClick={() => toast(t("Lecture de l'enregistrement…"))} className="btn btn-xs btn-quiet">
               <Play className="w-3.5 h-3.5" />
-              Écouter
+              {t('Écouter')}
             </button>
           </div>
         </div>
@@ -69,17 +70,17 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
           <div className="px-4 py-2.5 border-b border-hairline flex items-center gap-2 text-xs text-ink-mute">
             <Mail className="w-3.5 h-3.5" />
             <span className="font-semibold text-ink-secondary">{m.dir === 'out' ? m.by : thread.name}</span>
-            <span className="ml-auto">{m.at}</span>
+            <span className="ml-auto">{t(m.at)}</span>
           </div>
-          <p className="px-4 py-3 text-sm text-ink-secondary whitespace-pre-line">{m.text}</p>
+          <p className="px-4 py-3 text-sm text-ink-secondary whitespace-pre-line">{t(m.text)}</p>
           {m.meta && (
             <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg bg-sand px-3 py-2 text-xs">
               <FileText className="w-4 h-4 text-ink-mute" />
-              <span className="font-semibold text-ink">{m.meta.split(' · ')[0]}</span>
+              <span className="font-semibold text-ink">{t(m.meta.split(' · ')[0])}</span>
               {m.meta.includes('·') && (
                 <Badge tone="info" className="ml-auto">
                   <Eye className="w-3 h-3" />
-                  {m.meta.split(' · ')[1]}
+                  {t(m.meta.split(' · ')[1])}
                 </Badge>
               )}
             </div>
@@ -99,27 +100,27 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
             {ai ? (
               <>
                 <Bot className="w-3 h-3" />
-                Agent IA Hillman
+                {t('Agent IA Hillman')}
               </>
             ) : (
               <>
                 <Clock className="w-3 h-3" />
-                {m.by?.replace('Automatisation · ', 'Suivi automatique · ')}
+                {t(m.by?.replace('Automatisation · ', 'Suivi automatique · ') ?? '')}
               </>
             )}
           </p>
         )}
-        <div className={cn('px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed', out ? (ai ? 'bg-lavender text-ink rounded-br-md' : 'bg-primary text-white rounded-br-md') : 'bg-white text-ink shadow-card rounded-bl-md')}>{m.text}</div>
+        <div className={cn('px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed', out ? (ai ? 'bg-lavender text-ink rounded-br-md' : 'bg-primary text-white rounded-br-md') : 'bg-white text-ink shadow-card rounded-bl-md')}>{t(m.text)}</div>
         <p className={cn('text-2xs text-ink-faint mt-1 flex items-center gap-1', out && 'justify-end')}>
           <ChannelIcon className="w-3 h-3" />
-          {m.at}
+          {t(m.at)}
           {out && !ai && !auto && m.by ? ` · ${m.by}` : ''}
-          {out && ' · Livré'}
+          {out && ` · ${t('Livré')}`}
         </p>
         {m.meta && ai && (
           <p className="text-2xs mt-1 flex items-center gap-1 justify-end text-tone-good-ink font-semibold">
             <ShieldCheck className="w-3 h-3" />
-            {m.meta}
+            {t(m.meta)}
           </p>
         )}
       </div>
@@ -141,12 +142,12 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
   const [text, setText] = useState('')
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [drafting, setDrafting] = useState(false)
-  const hint = suggestion ?? AI_SUGGESTIONS[thread.id]
+  const hint = suggestion ?? (AI_SUGGESTIONS[thread.id] ? t(AI_SUGGESTIONS[thread.id]) : undefined)
 
   const draft = () => {
     setDrafting(true)
     window.setTimeout(() => {
-      setText(hint ?? `Bonjour ${thread.name.split(' ')[0]}, merci pour votre message! Je vous reviens dans la journée avec les détails.`)
+      setText(hint ?? t('Bonjour {name}, merci pour votre message! Je vous reviens dans la journée avec les détails.', { name: thread.name.split(' ')[0] }))
       setDrafting(false)
     }, 700)
   }
@@ -154,7 +155,7 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
     if (!text.trim()) return
     onSend({ id: 'x' + Date.now(), dir: 'out', channel: mode === 'note' ? 'note' : mode, at: "À l'instant", by: ME.name, text, meta: mode === 'note' ? 'Note interne' : undefined })
     setText('')
-    toast(mode === 'note' ? 'Note ajoutée' : 'Message envoyé')
+    toast(mode === 'note' ? t('Note ajoutée') : t('Message envoyé'))
   }
 
   return (
@@ -163,80 +164,80 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
         {COMPOSER_MODES.map((o) => (
           <button key={o.v} onClick={() => setMode(o.v)} className={cn('h-7 px-2.5 rounded-md text-xs font-semibold flex items-center gap-1.5', mode === o.v ? (o.v === 'note' ? 'bg-tone-warn-soft text-tone-warn-ink' : 'bg-ink text-white') : 'text-ink-mute hover:bg-sand')}>
             <o.i className="w-3.5 h-3.5" />
-            {o.l}
+            {t(o.l)}
           </button>
         ))}
         <span className="ml-auto text-2xs text-ink-mute hidden sm:inline">
-          De : {companyById(thread.company).name} · {companyById(thread.company).phone}
+          {t('De : {company} · {phone}', { company: companyById(thread.company).name, phone: companyById(thread.company).phone })}
         </span>
       </div>
       {!text && !drafting && (
         <button onClick={draft} className="mb-2 w-full text-left rounded-lg border border-lavender bg-lavender-soft px-3 py-2 text-sm text-ink-secondary hover:bg-lavender/40 flex items-start gap-2">
           <Sparkles className="w-4 h-4 text-ink mt-0.5 shrink-0" />
           <span className="line-clamp-2 md:line-clamp-none">
-            <span className="font-semibold text-ink">Suggestion IA</span>
+            <span className="font-semibold text-ink">{t('Suggestion IA')}</span>
             {' · '}
-            {hint ? hint.slice(0, 92) + '…' : 'Générer une réponse à partir du dossier client'}
+            {hint ? hint.slice(0, 92) + '…' : t('Générer une réponse à partir du dossier client')}
           </span>
         </button>
       )}
       <div className={cn('rounded-lg border focus-within:ring-2 focus-within:ring-ring focus-within:border-primary', mode === 'note' ? 'border-tone-warn bg-tone-warn-soft/40' : 'border-hairline-input')}>
         <textarea
-          value={drafting ? "L'IA rédige une réponse à partir de la soumission et de l'historique…" : text}
+          value={drafting ? t("L'IA rédige une réponse à partir de la soumission et de l'historique…") : text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
           disabled={drafting}
-          placeholder={mode === 'note' ? "Note visible seulement par l'équipe… @mention" : `Écrire à ${thread.name}…`}
+          placeholder={mode === 'note' ? t("Note visible seulement par l'équipe… @mention") : t('Écrire à {name}…', { name: thread.name })}
           className="w-full resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-ink-faint disabled:text-ink-mute"
-          aria-label="Message"
+          aria-label={t('Message')}
         />
         <div className="flex items-center gap-1 px-2 pb-2 flex-wrap">
           <div className="relative">
             <button onClick={() => setTemplatesOpen((o) => !o)} className="btn btn-xs btn-ghost">
               <FileText className="w-3.5 h-3.5" />
-              Modèles
+              {t('Modèles')}
             </button>
             {templatesOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setTemplatesOpen(false)} />
                 <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in">
-                  {QUICK_REPLIES.map((t) => (
+                  {QUICK_REPLIES.map((qr) => (
                     <button
-                      key={t.name}
+                      key={qr.name}
                       onClick={() => {
-                        setText(t.text)
+                        setText(t(qr.text))
                         setTemplatesOpen(false)
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-sand"
                     >
-                      <span className="block text-sm font-medium text-ink">{t.name}</span>
-                      <span className="block text-2xs text-ink-mute truncate">{t.text}</span>
+                      <span className="block text-sm font-medium text-ink">{t(qr.name)}</span>
+                      <span className="block text-2xs text-ink-mute truncate">{t(qr.text)}</span>
                     </button>
                   ))}
                 </div>
               </>
             )}
           </div>
-          <button onClick={() => toast('Soumission jointe en lien sécurisé')} className="btn btn-xs btn-ghost">
+          <button onClick={() => toast(t('Soumission jointe en lien sécurisé'))} className="btn btn-xs btn-ghost">
             <Paperclip className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Joindre la soumission</span>
+            <span className="hidden sm:inline">{t('Joindre la soumission')}</span>
           </button>
           <div className="ml-auto flex items-center gap-1">
             <button
               onClick={() => {
                 if (text) {
-                  toast('Programmé demain 8 h 30')
+                  toast(t('Programmé demain 8 h 30'))
                   setText('')
                 }
               }}
               className="btn btn-xs btn-quiet"
-              aria-label="Programmer l'envoi"
+              aria-label={t("Programmer l'envoi")}
             >
               <Clock className="w-3.5 h-3.5" />
             </button>
             <button onClick={send} className="btn btn-xs btn-primary">
               <Send className="w-3.5 h-3.5" />
-              {mode === 'note' ? 'Ajouter' : 'Envoyer'}
+              {mode === 'note' ? t('Ajouter') : t('Envoyer')}
             </button>
           </div>
         </div>
@@ -288,7 +289,7 @@ export function StageBar({ stages, current, onPick }: { stages: string[]; curren
           >
             {past && <Check className="w-3.5 h-3.5 shrink-0" />}
             {!past && !active && <span className="sm:hidden tnum">{i + 1}</span>}
-            <span className={cn('truncate', !active && 'hidden sm:inline')}>{s}</span>
+            <span className={cn('truncate', !active && 'hidden sm:inline')}>{t(s)}</span>
           </button>
         )
       })}
@@ -322,10 +323,10 @@ export function InfoGroups({ groups }: { groups: { title: string; rows: InfoRow[
                   <button
                     onClick={() => {
                       navigator.clipboard?.writeText(r.copy!).catch(() => {})
-                      toast('Copié')
+                      toast(t('Copié'))
                     }}
                     className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded hover:bg-sand"
-                    aria-label={`Copier ${r.label}`}
+                    aria-label={t('Copier {label}', { label: r.label })}
                   >
                     <Copy className="w-3.5 h-3.5 text-ink-mute" />
                   </button>
@@ -417,15 +418,15 @@ export function Notes({ initial }: { initial: Note[] }) {
   const [draft, setDraft] = useState('')
   const add = () => {
     if (!draft.trim()) return
-    setNotes((n) => [{ at: "Aujourd'hui", by: 'Jean-Pierre Hillman', text: draft.trim() }, ...n])
+    setNotes((n) => [{ at: t("Aujourd'hui"), by: 'Jean-Pierre Hillman', text: draft.trim() }, ...n])
     setDraft('')
   }
   return (
     <div className="bg-white rounded-xl shadow-card p-5 space-y-4">
       <div className="flex gap-2">
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="Ajouter une note…" className="form-input" aria-label="Nouvelle note" />
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder={t('Ajouter une note…')} className="form-input" aria-label={t('Nouvelle note')} />
         <button onClick={add} disabled={!draft.trim()} className="btn btn-md btn-primary">
-          Ajouter
+          {t('Ajouter')}
         </button>
       </div>
       <ul className="space-y-3">
@@ -437,7 +438,7 @@ export function Notes({ initial }: { initial: Note[] }) {
             <p className="text-sm text-ink-secondary">{n.text}</p>
           </li>
         ))}
-        {notes.length === 0 && <li className="text-sm text-ink-mute">Aucune note</li>}
+        {notes.length === 0 && <li className="text-sm text-ink-mute">{t('Aucune note')}</li>}
       </ul>
     </div>
   )

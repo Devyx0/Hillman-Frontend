@@ -5,11 +5,13 @@ import { CompanyLogo } from '../components/ui'
 import { CLIENTS, DEFAULT_SCOPE, SCOPE_SECTIONS, companyById } from '../data/mock'
 import { toast } from '../lib/toast'
 import { GST, QST, cn, money } from '../lib/utils'
+import { t } from '../i18n'
+import { LanguageSwitch } from '../i18n/LanguageProvider'
 import { PORTAL_PRICE_LINES, PortalSection, REFUSAL_REASONS, SignaturePad, TermsAccordion } from './portal/parts'
 
 type Step = 'review' | 'sign' | 'refuse' | 'done' | 'refused'
 
-const WARRANTIES = (rbq: string) => ['GAF System Plus · 50 ans', "Main-d'œuvre · 10 ans", `Licence RBQ ${rbq}`]
+const WARRANTIES = (rbq: string) => [t('GAF System Plus · 50 ans'), t("Main-d'œuvre · 10 ans"), t('Licence RBQ {rbq}', { rbq })]
 
 const PAYMENT_SCHEDULE: [number, string][] = [
   [15, 'Mise de fond à la signature'],
@@ -49,10 +51,13 @@ export default function Portal() {
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-hairline">
         <div className="max-w-5xl mx-auto h-16 px-4 md:px-6 flex items-center justify-between gap-3">
           <CompanyLogo id={company.id} className="h-9 sm:h-10 max-w-[150px] sm:max-w-[190px]" />
-          <a href={`tel:${company.phone}`} className="btn btn-sm btn-secondary">
-            <Phone className="w-4 h-4" />
-            <span className="hidden sm:inline">{company.phone}</span>
-          </a>
+          <div className="flex items-center gap-2">
+            <LanguageSwitch />
+            <a href={`tel:${company.phone}`} className="btn btn-sm btn-secondary">
+              <Phone className="w-4 h-4" />
+              <span className="hidden sm:inline">{company.phone}</span>
+            </a>
+          </div>
         </div>
       </header>
 
@@ -64,12 +69,12 @@ export default function Portal() {
             <section className="rounded-2xl bg-ink text-white p-5 md:p-8">
               <div className="grid md:grid-cols-[1fr_auto] gap-6 items-end">
                 <div>
-                  <p className="eyebrow text-white/60 mb-2">Soumission {no}</p>
+                  <p className="eyebrow text-white/60 mb-2">{t('Soumission {no}', { no })}</p>
                   <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-white">
-                    Bonjour {client.first}, voici votre <em className="accent-serif">soumission</em>.
+                    {t('Bonjour {first}, voici votre', { first: client.first })} <em className="accent-serif">{t('soumission')}</em>.
                   </h1>
                   <p className="text-white/70 mt-3 text-md">
-                    Réfection de toiture · {client.no}, {client.street}, {client.city}
+                    {t('Réfection de toiture')} · {client.no}, {client.street}, {client.city}
                   </p>
                 </div>
                 <div className="flex items-center gap-3 bg-white/10 rounded-xl p-3 md:p-4">
@@ -79,11 +84,11 @@ export default function Portal() {
                     <div className="flex gap-1.5 mt-2">
                       <a href="tel:5818887993" className="h-8 px-2.5 rounded-md bg-white text-ink text-xs font-semibold inline-flex items-center gap-1.5">
                         <Phone className="w-3.5 h-3.5" />
-                        Appeler
+                        {t('Appeler')}
                       </a>
-                      <button onClick={() => toast('Message envoyé à Jean-Pierre')} className="h-8 px-2.5 rounded-md bg-white/15 text-white text-xs font-semibold inline-flex items-center gap-1.5">
+                      <button onClick={() => toast(t('Message envoyé à Jean-Pierre'))} className="h-8 px-2.5 rounded-md bg-white/15 text-white text-xs font-semibold inline-flex items-center gap-1.5">
                         <MessageSquare className="w-3.5 h-3.5" />
-                        Texto
+                        {t('Texto')}
                       </button>
                     </div>
                   </div>
@@ -93,36 +98,36 @@ export default function Portal() {
 
             <div className="grid lg:grid-cols-[1fr_320px] gap-5 items-start">
               <div className="space-y-5 min-w-0">
-                <PortalSection title="Prix">
+                <PortalSection title={t('Prix')}>
                   <dl className="divide-y divide-hairline border-y border-hairline">
                     {PORTAL_PRICE_LINES.map((l) => (
                       <div key={l.label} className="flex items-start justify-between gap-4 py-3">
-                        <dt className="min-w-0 text-sm font-semibold">{l.label}</dt>
+                        <dt className="min-w-0 text-sm font-semibold">{t(l.label)}</dt>
                         <dd className="text-sm font-semibold tnum whitespace-nowrap">{money(l.amount)}</dd>
                       </div>
                     ))}
                   </dl>
                   <dl className="mt-3 space-y-1.5 text-sm max-w-xs ml-auto">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-mute">Sous-total</dt>
+                      <dt className="text-ink-mute">{t('Sous-total')}</dt>
                       <dd className="tnum">{money(subtotal)}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-mute">TPS 5 %</dt>
+                      <dt className="text-ink-mute">{t('TPS 5 %')}</dt>
                       <dd className="tnum text-ink-mute">{money(gst)}</dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-ink-mute">TVQ 9,975 %</dt>
+                      <dt className="text-ink-mute">{t('TVQ 9,975 %')}</dt>
                       <dd className="tnum text-ink-mute">{money(qst)}</dd>
                     </div>
                     <div className="flex justify-between gap-2 pt-1.5 border-t border-hairline text-md">
-                      <dt className="font-semibold">Total</dt>
+                      <dt className="font-semibold">{t('Total')}</dt>
                       <dd className="font-semibold tnum">{money(total)}</dd>
                     </div>
                   </dl>
                 </PortalSection>
 
-                <PortalSection title="Ce qui est inclus">
+                <PortalSection title={t('Ce qui est inclus')}>
                   <div className="divide-y divide-hairline border-y border-hairline">
                     {included.map((s) => {
                       const open = expanded.has(s.name)
@@ -143,7 +148,7 @@ export default function Portal() {
                             <span className="w-6 h-6 rounded-full bg-tone-good-soft text-tone-good-ink flex items-center justify-center shrink-0">
                               <Check className="w-3.5 h-3.5" />
                             </span>
-                            <span className="flex-1 text-sm font-semibold">{s.name}</span>
+                            <span className="flex-1 text-sm font-semibold">{t(s.name)}</span>
                             <span className="text-2xs text-ink-mute tnum">{s.lines.length}</span>
                             <ChevronDown className={cn('w-4 h-4 text-ink-mute transition-transform', open && 'rotate-180')} />
                           </button>
@@ -152,7 +157,7 @@ export default function Portal() {
                               {s.lines.map((l) => (
                                 <li key={l} className="text-sm text-ink-secondary flex gap-2">
                                   <span className="w-1 h-1 rounded-full bg-ink-faint mt-2 shrink-0" />
-                                  {l}
+                                  {t(l)}
                                 </li>
                               ))}
                             </ul>
@@ -162,12 +167,12 @@ export default function Portal() {
                     })}
                   </div>
                   <p className="mt-4 text-xs text-ink-mute">
-                    <span className="font-semibold text-ink-secondary">Exclus :</span> {exclusions.join(' · ')}
+                    <span className="font-semibold text-ink-secondary">{t('Exclus :')}</span> {exclusions.map((x) => t(x)).join(' · ')}
                   </p>
                 </PortalSection>
 
                 <div className="grid md:grid-cols-2 gap-5">
-                  <PortalSection title="Garanties">
+                  <PortalSection title={t('Garanties')}>
                     <ul className="space-y-2.5 text-sm text-ink-secondary">
                       {WARRANTIES(company.rbq).map((w) => (
                         <li key={w} className="flex gap-2">
@@ -177,12 +182,12 @@ export default function Portal() {
                       ))}
                     </ul>
                   </PortalSection>
-                  <PortalSection title="Paiements">
+                  <PortalSection title={t('Paiements')}>
                     <ol className="space-y-2.5">
                       {PAYMENT_SCHEDULE.map(([percent, label], i) => (
                         <li key={i} className="flex items-center gap-3">
-                          <span className="w-10 h-7 rounded-md flex items-center justify-center text-xs font-bold tnum bg-sand text-ink-secondary">{percent} %</span>
-                          <span className="flex-1 text-sm text-ink-secondary">{label}</span>
+                          <span className="w-10 h-7 rounded-md flex items-center justify-center text-xs font-bold tnum bg-sand text-ink-secondary">{t('{n} %', { n: percent })}</span>
+                          <span className="flex-1 text-sm text-ink-secondary">{t(label)}</span>
                           <span className="text-sm font-semibold tnum">{money((total * percent) / 100)}</span>
                         </li>
                       ))}
@@ -191,23 +196,23 @@ export default function Portal() {
                 </div>
 
                 {step === 'sign' && (
-                  <PortalSection id="signer" title="Accepter la soumission" className="border-2 border-primary">
+                  <PortalSection id="signer" title={t('Accepter la soumission')} className="border-2 border-primary">
                     <div className="space-y-4">
                       <TermsAccordion />
                       <label className="flex flex-col gap-1">
-                        <span className="label-caps">Nom complet</span>
+                        <span className="label-caps">{t('Nom complet')}</span>
                         <input id="sign-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={`${client.first} ${client.last}`} className="form-input" />
                       </label>
                       <div>
-                        <span className="label-caps block mb-1">Signature</span>
+                        <span className="label-caps block mb-1">{t('Signature')}</span>
                         <SignaturePad onChange={setSigned} />
                       </div>
                       <label className="flex items-start gap-2.5 text-sm text-ink-secondary">
                         <input id="sign-agree" type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="w-5 h-5 mt-0.5 accent-[var(--color-primary)] shrink-0" />
-                        J'accepte la soumission {no} et les termes et conditions.
+                        {t("J'accepte la soumission {no} et les termes et conditions.", { no })}
                       </label>
                       <button disabled={!name.trim() || !signed || !agreed} onClick={() => goTo('done')} className="btn btn-lg btn-primary w-full">
-                        Accepter et signer
+                        {t('Accepter et signer')}
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
@@ -215,7 +220,7 @@ export default function Portal() {
                 )}
 
                 {step === 'refuse' && (
-                  <PortalSection id="refuser" title="Refuser la soumission">
+                  <PortalSection id="refuser" title={t('Refuser la soumission')}>
                     <div className="flex flex-wrap gap-2">
                       {REFUSAL_REASONS.map((r) => (
                         <button
@@ -224,20 +229,20 @@ export default function Portal() {
                           aria-pressed={reason === r}
                           className={cn('h-9 px-3.5 rounded-full text-sm font-semibold border transition-colors', reason === r ? 'bg-ink text-white border-ink' : 'bg-white border-hairline-strong text-ink-secondary hover:bg-sand')}
                         >
-                          {r}
+                          {t(r)}
                         </button>
                       ))}
                     </div>
                     <label className="flex flex-col gap-1 mt-4">
-                      <span className="label-caps">Commentaire (facultatif)</span>
+                      <span className="label-caps">{t('Commentaire (facultatif)')}</span>
                       <textarea id="refuse-comment" rows={3} value={comment} onChange={(e) => setComment(e.target.value)} className="form-input h-auto py-2.5" />
                     </label>
                     <div className="flex flex-wrap justify-end gap-2 mt-4">
                       <button onClick={() => goTo('review')} className="btn btn-sm btn-ghost">
-                        Annuler
+                        {t('Annuler')}
                       </button>
                       <button disabled={!reason} onClick={() => goTo('refused')} className="btn btn-sm btn-dark">
-                        Envoyer ma réponse
+                        {t('Envoyer ma réponse')}
                       </button>
                     </div>
                   </PortalSection>
@@ -247,21 +252,21 @@ export default function Portal() {
               <aside className="hidden lg:block sticky top-24">
                 {/* `shadow-elevated` is the mockup's class (= --shadow-2); `shadow-2` keeps it rendering until the theme defines it. */}
                 <div className="bg-white rounded-2xl shadow-elevated p-5">
-                  <p className="label-caps">Total</p>
+                  <p className="label-caps">{t('Total')}</p>
                   <p className="text-3xl font-semibold tnum tracking-tight mt-1">{money(total)}</p>
-                  <p className="text-xs text-ink-mute">taxes incluses · valide jusqu'au 15 nov.</p>
+                  <p className="text-xs text-ink-mute">{t("taxes incluses · valide jusqu'au 15 nov.")}</p>
                   {step !== 'sign' && (
                     <button onClick={() => goTo('sign', 'signer')} className="btn btn-lg btn-primary w-full mt-5">
                       <PenLine className="w-4 h-4" />
-                      Accepter et signer
+                      {t('Accepter et signer')}
                     </button>
                   )}
-                  <button onClick={() => toast('PDF téléchargé')} className="btn btn-sm btn-ghost w-full mt-2">
+                  <button onClick={() => toast(t('PDF téléchargé'))} className="btn btn-sm btn-ghost w-full mt-2">
                     <Download className="w-4 h-4" />
-                    Télécharger le PDF
+                    {t('Télécharger le PDF')}
                   </button>
                   <button onClick={() => goTo('refuse', 'refuser')} className="w-full mt-1 text-xs text-ink-mute hover:text-ink underline underline-offset-2">
-                    Refuser la soumission
+                    {t('Refuser la soumission')}
                   </button>
                 </div>
               </aside>
@@ -277,22 +282,22 @@ export default function Portal() {
         <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-hairline px-4 py-3 shadow-float">
           <div className="flex items-center justify-between gap-3 max-w-5xl mx-auto">
             <div className="min-w-0">
-              <p className="text-2xs text-ink-mute">Total · taxes incluses</p>
+              <p className="text-2xs text-ink-mute">{t('Total · taxes incluses')}</p>
               <p className="text-lg font-semibold tnum leading-tight">{money(total)}</p>
               {step === 'review' && (
                 <button onClick={() => goTo('refuse', 'refuser')} className="text-2xs text-ink-mute underline underline-offset-2">
-                  Refuser
+                  {t('Refuser')}
                 </button>
               )}
             </div>
             {step === 'review' ? (
               <button onClick={() => goTo('sign', 'signer')} className="btn btn-md btn-primary">
                 <PenLine className="w-4 h-4" />
-                Accepter et signer
+                {t('Accepter et signer')}
               </button>
             ) : (
               <button onClick={() => document.getElementById('signer')?.scrollIntoView({ behavior: 'smooth' })} className="btn btn-md btn-dark">
-                Continuer
+                {t('Continuer')}
               </button>
             )}
           </div>
@@ -310,19 +315,19 @@ function AcceptedPanel({ total, no, name }: { total: number; no: string; name: s
         <Check className="w-8 h-8" />
       </span>
       <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mt-5">
-        Merci, c'est <em className="accent-serif">accepté</em>!
+        {t("Merci, c'est")} <em className="accent-serif">{t('accepté')}</em>!
       </h1>
       <p className="text-md text-ink-mute mt-2 max-w-lg mx-auto">
-        Soumission {no} signée par {name || 'vous'} · {money(total)}. Jean-Pierre vous contactera sous peu.
+        {t('Soumission {no} signée par {name} · {total}. Jean-Pierre vous contactera sous peu.', { no, name: name || t('vous'), total: money(total) })}
       </p>
       <div className="flex flex-wrap justify-center gap-2 mt-6">
-        <button onClick={() => toast('Copie signée téléchargée')} className="btn btn-md btn-primary">
+        <button onClick={() => toast(t('Copie signée téléchargée'))} className="btn btn-md btn-primary">
           <Download className="w-4 h-4" />
-          Copie signée (PDF)
+          {t('Copie signée (PDF)')}
         </button>
-        <button onClick={() => toast('Rappel ajouté à votre calendrier')} className="btn btn-md btn-secondary">
+        <button onClick={() => toast(t('Rappel ajouté à votre calendrier'))} className="btn btn-md btn-secondary">
           <CalendarPlus className="w-4 h-4" />
-          Ajouter un rappel
+          {t('Ajouter un rappel')}
         </button>
       </div>
     </section>
@@ -337,9 +342,9 @@ function RefusedPanel({ reason }: { reason: string | null }) {
         <X className="w-8 h-8" />
       </span>
       <h1 className="text-3xl font-semibold tracking-tight mt-5">
-        Merci pour votre <em className="accent-serif">réponse</em>
+        {t('Merci pour votre')} <em className="accent-serif">{t('réponse')}</em>
       </h1>
-      <p className="text-md text-ink-mute mt-2 max-w-lg mx-auto">Votre décision est notée{reason ? ` (${reason.toLowerCase()})` : ''}.</p>
+      <p className="text-md text-ink-mute mt-2 max-w-lg mx-auto">{reason ? t('Votre décision est notée ({reason}).', { reason: t(reason).toLowerCase() }) : t('Votre décision est notée.')}</p>
     </section>
   )
 }

@@ -35,3 +35,14 @@ npm run dev
 `/` Aujourd'hui · `/leads` · `/leads/:id` · `/pipeline` · `/soumissions` · `/soumissions/:id` (quote builder) ·
 `/clients` · `/clients/:id` · `/conversations` · `/agenda` · `/catalogue` (`?tab=parametres` for settings) ·
 `/portail/:no` (client-facing quote portal, no app chrome)
+
+## Language (EN / FR)
+
+The UI is English by default, with an EN/FR switch in the top bar (and on the client portal). The choice is
+remembered in `localStorage` (`hillman.lang`).
+
+- French is the source language: UI strings are written in French and wrapped in `t()` from `src/i18n`.
+- English translations live in `src/i18n/en/*.ts`, keyed by the exact French string.
+- `tx(context, text)` handles the few strings whose English depends on where they appear.
+- Canonical values used in logic (statuses, stages, filter values) stay French and are translated only where displayed.
+- In dev, `window.__i18nMissing` lists strings rendered in English mode without a translation.

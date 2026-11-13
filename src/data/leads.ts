@@ -1,6 +1,8 @@
 import { Globe, Megaphone, MessageCircle, PhoneIncoming, Search, Bot, Users } from 'lucide-react'
 import { createElement } from 'react'
 import type { Icon } from '../components/ui'
+import { getLang, t } from '../i18n'
+import { formatHour } from '../lib/utils'
 import { LEADS, THREADS, type Lead, type Message, type Thread } from './mock'
 
 /** Brand icon (lucide-react no longer ships brand icons). */
@@ -96,26 +98,28 @@ export const channelStyle = (channel: string) => CHANNEL_STYLES[channel] ?? { ic
 
 const LEAD_THREAD: Record<string, string> = { l1: 't2', l2: 't3', l4: 't5' }
 
-/** Conversation for a lead: the real thread if one exists, otherwise a synthesised one (mockup: `k3`). */
+/** Conversation for a lead: the real thread if one exists, otherwise a synthesised one (mockup: `k3`). Display text is translated at call time. */
 export function threadForLead(lead: Lead): Thread {
-  const existing = LEAD_THREAD[lead.id] && THREADS.find((t) => t.id === LEAD_THREAD[lead.id])
+  const existing = LEAD_THREAD[lead.id] && THREADS.find((th) => th.id === LEAD_THREAD[lead.id])
   if (existing) return existing
   const first = lead.name.split(' ')[0]
-  const at = lead.received.slice(11).replace(':', ' h ')
+  const hhmm = lead.received.slice(11)
+  const at = getLang() === 'en' ? formatHour(Number(hhmm.slice(0, 2)) + Number(hhmm.slice(3, 5)) / 60) : hhmm.replace(':', ' h ')
+  const aiAgent = t('Agent IA Hillman')
   const messages: Message[] = [
     {
       id: lead.id + 'a',
       dir: 'in',
       channel: 'note',
-      at: `${lead.ago}`,
-      text: lead.channel === 'Appel entrant' ? `Appel entrant transcrit : « ${lead.message} »` : `« ${lead.message} »`,
-      meta: lead.channel === 'Site web' ? 'Formulaire du site web' : lead.channel === 'Appel entrant' ? 'Appel entrant · 4 min 12 s' : lead.channel,
+      at: t(lead.ago),
+      text: lead.channel === 'Appel entrant' ? t('Appel entrant transcrit : « {message} »', { message: t(lead.message) }) : t('« {message} »', { message: t(lead.message) }),
+      meta: lead.channel === 'Site web' ? t('Formulaire du site web') : lead.channel === 'Appel entrant' ? t('Appel entrant · 4 min 12 s') : t(lead.channel),
     },
   ]
   if (lead.status !== 'Non qualifié')
-    messages.push({ id: lead.id + 'b', dir: 'out', channel: 'ai', at, by: 'Agent IA Hillman', text: `Bonjour ${first}, merci pour votre demande! Un estimateur peut passer voir les travaux sans frais. Préférez-vous un rendez-vous en semaine ou le samedi matin?` })
-  if (lead.status === 'Qualifié par IA' || lead.status === 'À contacter') messages.push({ id: lead.id + 'c', dir: 'in', channel: 'sms', at, text: 'En semaine, idéalement en après-midi. Merci!' })
+    messages.push({ id: lead.id + 'b', dir: 'out', channel: 'ai', at, by: aiAgent, text: t('Bonjour {first}, merci pour votre demande! Un estimateur peut passer voir les travaux sans frais. Préférez-vous un rendez-vous en semaine ou le samedi matin?', { first }) })
+  if (lead.status === 'Qualifié par IA' || lead.status === 'À contacter') messages.push({ id: lead.id + 'c', dir: 'in', channel: 'sms', at, text: t('En semaine, idéalement en après-midi. Merci!') })
   if (lead.status === 'Non qualifié')
-    messages.push({ id: lead.id + 'd', dir: 'out', channel: 'ai', at, by: 'Agent IA Hillman', text: `Bonjour ${first}! Êtes-vous propriétaire de l'immeuble? Nos estimations se font avec le propriétaire.` })
+    messages.push({ id: lead.id + 'd', dir: 'out', channel: 'ai', at, by: aiAgent, text: t("Bonjour {first}! Êtes-vous propriétaire de l'immeuble? Nos estimations se font avec le propriétaire.", { first }) })
   return { id: 'lt-' + lead.id, name: lead.name, company: lead.company, channel: 'sms', unread: 0, last: messages[messages.length - 1].text, at, assigned: lead.repId ?? 'jph', aiHandled: true, messages }
 }

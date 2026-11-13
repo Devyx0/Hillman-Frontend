@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import { ChevronDown, Eraser, PenLine, ShieldCheck } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { t } from '../../i18n'
 
 /** Priced lines shown to the client (mockup: `Ex`). */
 export const PORTAL_PRICE_LINES: { label: string; detail: string; amount: number }[] = [
@@ -38,10 +39,10 @@ export function TermsAccordion() {
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
         <span className="flex items-center gap-2 text-sm font-semibold text-ink">
           <ShieldCheck className="w-4 h-4 text-ink-mute" />
-          Termes et conditions
+          {t('Termes et conditions')}
         </span>
         <span className="flex items-center gap-2 text-2xs text-ink-mute">
-          {open ? 'Masquer' : 'Lire'}
+          {open ? t('Masquer') : t('Lire')}
           <ChevronDown className={cn('w-4 h-4 transition-transform', open && 'rotate-180')} />
         </span>
       </button>
@@ -49,8 +50,8 @@ export function TermsAccordion() {
         <div className="px-4 pb-4 space-y-3 max-h-72 overflow-y-auto">
           {TERMS.map((s) => (
             <div key={s.t}>
-              <p className="text-xs font-semibold text-ink">{s.t}</p>
-              <p className="text-xs text-ink-secondary leading-relaxed">{s.d}</p>
+              <p className="text-xs font-semibold text-ink">{t(s.t)}</p>
+              <p className="text-xs text-ink-secondary leading-relaxed">{t(s.d)}</p>
             </div>
           ))}
         </div>
@@ -133,19 +134,19 @@ export function SignaturePad({ onChange }: { onChange: (signed: boolean) => void
         onPointerUp={end}
         onPointerLeave={end}
         className="w-full h-36 rounded-xl border border-dashed border-hairline-strong bg-sand touch-none cursor-crosshair"
-        aria-label="Zone de signature"
+        aria-label={t('Zone de signature')}
       />
       {!signed && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-sm text-ink-faint">
           <PenLine className="w-4 h-4" />
-          Signez ici avec le doigt ou la souris
+          {t('Signez ici avec le doigt ou la souris')}
         </span>
       )}
       <div className="absolute left-4 right-4 bottom-8 border-b border-hairline-strong pointer-events-none" />
       {signed && (
         <button onClick={clear} className="absolute top-2 right-2 btn btn-xs btn-ghost bg-white/80">
           <Eraser className="w-3.5 h-3.5" />
-          Effacer
+          {t('Effacer')}
         </button>
       )}
     </div>

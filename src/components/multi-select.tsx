@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
+import { t } from '../i18n'
 import { cn, normalize } from '../lib/utils'
 import type { SelectOption } from './filters'
 
@@ -140,8 +141,8 @@ export function MultiSelect({
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher…"
-                aria-label="Filtrer les options"
+                placeholder={t('Rechercher…')}
+                aria-label={t('Filtrer les options')}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && filtered.length === 1) {
                     e.preventDefault()
@@ -172,7 +173,7 @@ export function MultiSelect({
                 </span>
               </button>
             )}
-            {filtered.length === 0 && <p className="px-3 py-4 text-center text-xs text-ink-mute">Aucun résultat</p>}
+            {filtered.length === 0 && <p className="px-3 py-4 text-center text-xs text-ink-mute">{t('Aucun résultat')}</p>}
             {filtered.map((o) => {
               const on = selected.has(o.value)
               return (

@@ -1,5 +1,6 @@
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
+import { LanguageProvider } from './i18n/LanguageProvider'
 import AppLayout from './layout/AppLayout'
 import Agenda from './pages/Agenda'
 import Catalogue from './pages/Catalogue'
@@ -17,6 +18,7 @@ import Today from './pages/Today'
 export default function App() {
   return (
     <AppProvider>
+      <LanguageProvider>
       <HashRouter>
         <Routes>
           {/* Client-facing portal (no app chrome) */}
@@ -37,6 +39,7 @@ export default function App() {
           </Route>
         </Routes>
       </HashRouter>
+      </LanguageProvider>
     </AppProvider>
   )
 }

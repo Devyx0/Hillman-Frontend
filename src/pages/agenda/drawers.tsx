@@ -13,6 +13,7 @@ import { toast } from '../../lib/toast'
 import { cn, formatHour, money } from '../../lib/utils'
 import { DAY_NAMES, TODAY_INDEX, capitalize } from './calendar'
 import { Select } from '../../components/filters'
+import { t } from '../../i18n'
 
 export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClose: () => void }) {
   if (!a) {
@@ -33,7 +34,7 @@ export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClo
     company: companyById(rep.company === 'all' ? 'toit' : rep.company).name,
     rep: rep.first,
     quoteNo: quote?.no,
-    date: `${DAY_NAMES[a.day]} ${18 + a.day} oct. à ${formatHour(a.start)}`,
+    date: t('{day} {d} oct. à {time}', { day: t(DAY_NAMES[a.day]), d: 18 + a.day, time: formatHour(a.start) }),
   }
   return (
     <Drawer
@@ -41,8 +42,8 @@ export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClo
       onClose={onClose}
       title={
         <span className="flex items-center gap-2">
-          {a.type}
-          {a.aiBooked && <Sparkles className="w-4 h-4 text-ink-mute" aria-label="Réservé par l'agent IA" />}
+          {t(a.type)}
+          {a.aiBooked && <Sparkles className="w-4 h-4 text-ink-mute" aria-label={t("Réservé par l'agent IA")} />}
         </span>
       }
     >
@@ -50,27 +51,27 @@ export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClo
         <div className={cn('rounded-xl p-4 border-l-4', `bg-${rep.color} text-${rep.color}-ink border-${rep.color}-ink`)}>
           <p className="text-lg font-semibold">
             {a.city}
-            {a.title ? ` · ${a.title}` : ''}
+            {a.title ? ` · ${t(a.title)}` : ''}
           </p>
           <p className="text-sm mt-1 flex items-center gap-1.5">
             <Clock className="w-4 h-4" />
-            {capitalize(DAY_NAMES[a.day])} {18 + a.day} octobre · {formatHour(a.start)} – {formatHour(a.end)}
+            {t('{day} {d} octobre', { day: capitalize(t(DAY_NAMES[a.day])), d: 18 + a.day })} · {formatHour(a.start)} – {formatHour(a.end)}
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="label-caps mb-1">Représentant</p>
+            <p className="label-caps mb-1">{t('Représentant')}</p>
             <p className="flex items-center gap-2 font-semibold text-ink">
               <RepAvatar id={rep.id} />
               {rep.name}
             </p>
           </div>
           <div>
-            <p className="label-caps mb-1">Client</p>
+            <p className="label-caps mb-1">{t('Client')}</p>
             <p className="font-semibold text-ink truncate">{name}</p>
           </div>
           <div className="col-span-2">
-            <p className="label-caps mb-1">Adresse</p>
+            <p className="label-caps mb-1">{t('Adresse')}</p>
             <p className="text-ink-secondary flex items-center gap-1.5">
               <MapPin className="w-4 h-4 text-ink-mute" />
               {client ? `${client.no}, ${client.street}, ${client.city} ${client.postal}` : `${a.city}, QC`}
@@ -81,22 +82,22 @@ export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClo
           <Link to={`/soumissions/${quote.id}`} className="flex items-center gap-3 rounded-lg border border-hairline p-3 hover:border-primary">
             <FilePenLine className="w-5 h-5 text-ink-mute" />
             <p className="min-w-0 flex-1 text-sm font-semibold text-ink truncate">
-              {quote.no} · {quote.workType}
+              {quote.no} · {t(quote.workType)}
             </p>
             <span className="text-sm font-semibold tnum">{money(quote.amount, false)}</span>
           </Link>
         )}
         <div className="flex flex-wrap gap-2">
-          <MessageButton kind="reminder" ctx={ctx} label="Rappel" />
-          <MessageButton kind="sms" ctx={ctx} label="Texto" />
-          <button className="btn btn-sm btn-secondary" onClick={() => toast('Itinéraire ouvert dans Google Maps')}>
+          <MessageButton kind="reminder" ctx={ctx} label={t('Rappel')} />
+          <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
+          <button className="btn btn-sm btn-secondary" onClick={() => toast(t('Itinéraire ouvert dans Google Maps'))}>
             <Navigation className="w-3.5 h-3.5" />
-            Itinéraire
+            {t('Itinéraire')}
           </button>
           {client && (
             <Link to={`/clients/${client.id}`} className="btn btn-sm btn-ghost">
               <UserRound className="w-3.5 h-3.5" />
-              Fiche client
+              {t('Fiche client')}
             </Link>
           )}
         </div>
@@ -104,22 +105,22 @@ export function AppointmentDrawer({ a, onClose }: { a: Appointment | null; onClo
           <button
             className="btn btn-sm btn-secondary flex-1"
             onClick={() => {
-              toast('Rendez-vous déplacé — client avisé')
+              toast(t('Rendez-vous déplacé — client avisé'))
               onClose()
             }}
           >
             <CalendarClock className="w-4 h-4" />
-            Déplacer
+            {t('Déplacer')}
           </button>
           <button
             className="btn btn-sm btn-ghost flex-1 hover:text-tone-critical-ink"
             onClick={() => {
-              toast('Rendez-vous annulé')
+              toast(t('Rendez-vous annulé'))
               onClose()
             }}
           >
             <Ban className="w-4 h-4" />
-            Annuler
+            {t('Annuler')}
           </button>
         </div>
       </div>
@@ -143,7 +144,7 @@ export interface AppointmentPrefill {
 function appointmentSubject(q: Quote) {
   const parts = q.workType.split('·').map((p) => p.trim())
   const work = q.company === 'toit' ? (parts[1] ?? parts[0]) : parts[0]
-  return `${q.city}, ${work}`
+  return `${q.city}, ${t(work)}`
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -159,7 +160,7 @@ function nextFreeSlot(repId: string, evts: Appointment[]) {
 export function prefillFromQuote(q: Quote, evts: Appointment[]): AppointmentPrefill {
   const c = clientById(q.clientId)!
   const { day, h } = nextFreeSlot(q.repId, evts)
-  const phones = [c.phone, c.mobile].filter(Boolean).join(' · cell. ')
+  const phones = [c.phone, c.mobile].filter(Boolean).join(t(' · cell. '))
   return {
     repId: q.repId,
     quoteId: q.id,
@@ -167,7 +168,7 @@ export function prefillFromQuote(q: Quote, evts: Appointment[]): AppointmentPref
     start: localDateTime(day, h),
     end: localDateTime(day, h + 1),
     description: `${fullName(c)}${c.company ? ` (${c.company})` : ''}\n${c.no}, ${c.street}, ${c.city} ${c.postal}\n${phones}`,
-    slotNote: `Prochaine plage libre : ${DAY_NAMES[day]} ${18 + day} oct., ${formatHour(h)}`,
+    slotNote: t('Prochaine plage libre : {day} {d} oct., {time}', { day: t(DAY_NAMES[day]), d: 18 + day, time: formatHour(h) }),
   }
 }
 
@@ -181,7 +182,7 @@ export function NewAppointmentDrawer({ open, onClose, onCreate, prefill, reps }:
   const repQuotes = QUOTES.filter((q) => reps.some((r) => r.id === q.repId))
   const fromQuote = prefill ? QUOTES.find((q) => q.id === prefill.quoteId) : undefined
   const quoteOptions = [
-    { value: '', label: 'Aucune' },
+    { value: '', label: t('Aucune') },
     ...[...(fromQuote ? [fromQuote] : []), ...repQuotes.filter((q) => q.id !== fromQuote?.id).slice(0, 30)].map((q) => ({ value: q.id, label: `${q.no} · ${fullName(clientById(q.clientId)!)}` })),
   ]
   return (
@@ -191,7 +192,7 @@ export function NewAppointmentDrawer({ open, onClose, onCreate, prefill, reps }:
       title={
         <span className="flex items-center gap-2">
           <CalendarPlus className="w-4 h-4" />
-          Créer un rendez-vous
+          {t('Créer un rendez-vous')}
         </span>
       }
     >
@@ -199,24 +200,24 @@ export function NewAppointmentDrawer({ open, onClose, onCreate, prefill, reps }:
         {fromQuote && (
           <p className="text-xs font-semibold text-primary-press flex items-center gap-1.5">
             <FilePenLine className="w-3.5 h-3.5" />
-            Depuis {fromQuote.no}
+            {t('Depuis {no}', { no: fromQuote.no })}
           </p>
         )}
-        <Field label="Sujet">
-          <input id="rdv-sujet" className="form-input" value={subject} placeholder="Ville, Type de travaux" onChange={(e) => setSubject(e.target.value)} />
+        <Field label={t('Sujet')}>
+          <input id="rdv-sujet" className="form-input" value={subject} placeholder={t('Ville, Type de travaux')} onChange={(e) => setSubject(e.target.value)} />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Date début">
+          <Field label={t('Date début')}>
             <input id="rdv-debut" type="datetime-local" className="form-input" value={start} onChange={(e) => setStart(e.target.value)} />
           </Field>
-          <Field label="Date fin">
+          <Field label={t('Date fin')}>
             <input id="rdv-fin" type="datetime-local" className="form-input" value={end} onChange={(e) => setEnd(e.target.value)} />
           </Field>
         </div>
-        <Field label="Soumission">
+        <Field label={t('Soumission')}>
           <Select value={quoteId} onChange={setQuoteId} options={quoteOptions} />
         </Field>
-        <Field label="Représentant">
+        <Field label={t('Représentant')}>
           <Select value={repId} onChange={setRepId} options={reps.map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))} />
         </Field>
         {prefill && repId === prefill.repId && (
@@ -225,12 +226,12 @@ export function NewAppointmentDrawer({ open, onClose, onCreate, prefill, reps }:
             {prefill.slotNote}
           </p>
         )}
-        <Field label="Description">
-          <textarea id="rdv-description" rows={4} className="form-input h-auto py-2.5" value={description} placeholder="Nom du client, adresse, téléphone" onChange={(e) => setDescription(e.target.value)} />
+        <Field label={t('Description')}>
+          <textarea id="rdv-description" rows={4} className="form-input h-auto py-2.5" value={description} placeholder={t('Nom du client, adresse, téléphone')} onChange={(e) => setDescription(e.target.value)} />
         </Field>
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <input id="rdv-rappel" type="checkbox" defaultChecked className="accent-[var(--color-primary)]" />
-          Confirmation + rappel la veille
+          {t('Confirmation + rappel la veille')}
         </label>
         <button
           className="btn btn-md btn-primary w-full"
@@ -251,12 +252,12 @@ export function NewAppointmentDrawer({ open, onClose, onCreate, prefill, reps }:
               quoteNo: quote?.no,
               clientId: quote?.clientId,
             })
-            toast('Rendez-vous créé · confirmation envoyée au client')
+            toast(t('Rendez-vous créé · confirmation envoyée au client'))
             onClose()
           }}
         >
           <CalendarPlus className="w-4 h-4" />
-          Enregistrer
+          {t('Enregistrer')}
         </button>
       </div>
     </Drawer>

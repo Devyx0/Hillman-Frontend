@@ -9,6 +9,7 @@ import { CompanyBadge, Page, PageHeader, RepAvatar, Stat, StatusBadge, Tabs } fr
 import { inScope, useApp } from '../context/AppContext'
 import { COMPANIES, QUOTES, QUOTE_STATUSES, REPS, SOURCES, TODAY, clientById, companyById, fullName, repById, type Quote } from '../data/mock'
 import { internalNote, isAutoAction, marginPct, shortDate } from '../data/quote-builder'
+import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort, num, pct } from '../lib/utils'
 
@@ -82,7 +83,7 @@ export default function Quotes() {
 
   const setStatus = (id: string, status: string) => {
     setQuotes((all) => all.map((q) => (q.id === id ? { ...q, status } : q)))
-    toast(`Statut → ${status}`)
+    toast(t('Statut → {status}', { status: t(status) }))
   }
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -111,24 +112,24 @@ export default function Quotes() {
   return (
     <Page>
       <PageHeader
-        title="Soumissions"
+        title={t('Soumissions')}
         actions={
           <>
-            <button className="btn btn-sm btn-secondary" onClick={() => toast('Export CSV de ' + num(results.length) + ' soumissions')}>
+            <button className="btn btn-sm btn-secondary" onClick={() => toast(t('Export CSV de {n} soumissions', { n: num(results.length) }))}>
               <Download className="w-4 h-4" />
-              Exporter
+              {t('Exporter')}
             </button>
             <button className="btn btn-sm btn-primary" onClick={() => navigate('/soumissions/q64320')}>
               <Plus className="w-4 h-4" />
-              Nouvelle soumission
+              {t('Nouvelle soumission')}
             </button>
           </>
         }
       />
       <div className="grid grid-cols-3 gap-3 md:gap-4">
-        <Stat label="En attente" value={moneyShort(pending.reduce((n, q) => n + q.amount, 0) * 9)} />
-        <Stat label="Taux de signature" value={pct(signRate)} />
-        <Stat label="Ouvertes, sans réponse" value={num(openedNoReply)} />
+        <Stat label={t('En attente')} value={moneyShort(pending.reduce((n, q) => n + q.amount, 0) * 9)} />
+        <Stat label={t('Taux de signature')} value={pct(signRate)} />
+        <Stat label={t('Ouvertes, sans réponse')} value={num(openedNoReply)} />
       </div>
       <div className="flex flex-col 2xl:flex-row 2xl:items-center gap-3">
         <Tabs
@@ -137,42 +138,42 @@ export default function Quotes() {
             setView(v)
             setSelected(new Set())
           }}
-          tabs={VIEWS.map((v) => ({ value: v.value, label: v.label, count: scoped.filter(v.test).length }))}
+          tabs={VIEWS.map((v) => ({ value: v.value, label: t(v.label), count: scoped.filter(v.test).length }))}
         />
         <div className="relative 2xl:ml-auto 2xl:w-80 md:max-w-md">
           <Search className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher…" className="form-input pl-9" aria-label="Rechercher une soumission" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Rechercher…')} className="form-input pl-9" aria-label={t('Rechercher une soumission')} />
         </div>
       </div>
       <FilterBar>
-        <FilterField label="Statut">
-          <MultiSelect values={statuses} onChange={setStatuses} options={QUOTE_STATUSES.map((s) => ({ value: s, label: s }))} allLabel="Tous les statuts" className="md:w-48" />
+        <FilterField label={t('Statut')}>
+          <MultiSelect values={statuses} onChange={setStatuses} options={QUOTE_STATUSES.map((s) => ({ value: s, label: t(s) }))} allLabel={t('Tous les statuts')} className="md:w-48" />
         </FilterField>
         {group && (
-          <FilterField label="Compagnie">
-            <Select value={company} onChange={setCompany} options={[{ value: 'all', label: 'Toutes' }, ...COMPANIES.map((c) => ({ value: c.id as string, label: c.name }))]} className="md:w-44" />
+          <FilterField label={t('Compagnie')}>
+            <Select value={company} onChange={setCompany} options={[{ value: 'all', label: t('Toutes') }, ...COMPANIES.map((c) => ({ value: c.id as string, label: c.name }))]} className="md:w-44" />
           </FilterField>
         )}
-        <FilterField label="Représentant">
+        <FilterField label={t('Représentant')}>
           <Select
             value={rep}
             onChange={setRep}
-            options={[{ value: 'all', label: 'Tous' }, ...REPS.filter((r) => r.id !== 'hpe' && (group || r.company === scope)).map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))]}
+            options={[{ value: 'all', label: t('Tous') }, ...REPS.filter((r) => r.id !== 'hpe' && (group || r.company === scope)).map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))]}
             className="md:w-48"
           />
         </FilterField>
-        <FilterField label="Source">
-          <Select value={source} onChange={setSource} options={[{ value: 'all', label: 'Toutes' }, ...SOURCES.map((s) => ({ value: s, label: s }))]} className="md:w-40" />
+        <FilterField label={t('Source')}>
+          <Select value={source} onChange={setSource} options={[{ value: 'all', label: t('Toutes') }, ...SOURCES.map((s) => ({ value: s, label: t(s) }))]} className="md:w-40" />
         </FilterField>
-        <FilterField label="Période">
+        <FilterField label={t('Période')}>
           <Select
             value={period}
             onChange={setPeriod}
             options={[
-              { value: '7', label: '7 derniers jours' },
-              { value: '30', label: '30 derniers jours' },
-              { value: '90', label: '90 derniers jours' },
-              { value: 'all', label: 'Depuis 2015' },
+              { value: '7', label: t('7 derniers jours') },
+              { value: '30', label: t('30 derniers jours') },
+              { value: '90', label: t('90 derniers jours') },
+              { value: 'all', label: t('Depuis 2015') },
             ]}
             className="md:w-44"
           />
@@ -180,7 +181,7 @@ export default function Quotes() {
         {filtered ? (
           <button onClick={clearFilters} className="btn btn-xs btn-ghost self-end mb-1">
             <X className="w-3.5 h-3.5" />
-            Effacer
+            {t('Effacer')}
           </button>
         ) : null}
       </FilterBar>
@@ -188,16 +189,16 @@ export default function Quotes() {
         {selected.size > 0 ? (
           <div className="px-4 py-2.5 bg-ink text-white flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold mr-2 tnum">
-              {selected.size} sélectionnée{selected.size > 1 ? 's' : ''}
+              {t(selected.size > 1 ? '{n} sélectionnées' : '{n} sélectionnée', { n: selected.size })}
             </span>
-            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => setCompose({ kind: 'sequence', ctx: { name: `${selected.size} clients` } })}>
+            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => setCompose({ kind: 'sequence', ctx: { name: t('{n} clients', { n: selected.size }) } })}>
               <Workflow className="w-3.5 h-3.5" />
-              Relancer
+              {t('Relancer')}
             </button>
             <div className="relative">
               <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => setBulkStatusOpen((o) => !o)}>
                 <Tags className="w-3.5 h-3.5" />
-                Statut
+                {t('Statut')}
               </button>
               {bulkStatusOpen && (
                 <>
@@ -210,7 +211,7 @@ export default function Quotes() {
                         onClick={() => {
                           setQuotes((all) => all.map((q) => (selected.has(q.id) ? { ...q, status: s } : q)))
                           setBulkStatusOpen(false)
-                          toast(`${selected.size} soumissions → ${s}`)
+                          toast(t('{n} soumissions → {status}', { n: selected.size, status: t(s) }))
                           setSelected(new Set())
                         }}
                       >
@@ -221,28 +222,28 @@ export default function Quotes() {
                 </>
               )}
             </div>
-            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => toast('Assignées à Olivier Fontaine')}>
+            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => toast(t('Assignées à {name}', { name: 'Olivier Fontaine' }))}>
               <UserCog className="w-3.5 h-3.5" />
-              Assigner
+              {t('Assigner')}
             </button>
-            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => toast('Export CSV prêt')}>
+            <button className="btn btn-xs bg-white/10 hover:bg-white/20 text-white" onClick={() => toast(t('Export CSV prêt'))}>
               <Download className="w-3.5 h-3.5" />
-              Exporter
+              {t('Exporter')}
             </button>
-            <button className="ml-auto p-1 rounded hover:bg-white/10" aria-label="Désélectionner" onClick={() => setSelected(new Set())}>
+            <button className="ml-auto p-1 rounded hover:bg-white/10" aria-label={t('Désélectionner')} onClick={() => setSelected(new Set())}>
               <X className="w-4 h-4" />
             </button>
           </div>
         ) : (
           <div className="px-4 py-2.5 border-b border-hairline flex flex-wrap items-center gap-3 text-xs text-ink-mute">
             <span className="tnum">
-              {num(results.length)} résultat{results.length > 1 ? 's' : ''}
+              {t(results.length > 1 ? '{n} résultats' : '{n} résultat', { n: num(results.length) })}
             </span>
             <span className="ml-auto flex items-center gap-1">
               <ArrowUpDown className="w-3.5 h-3.5" />
               {(['date', 'amount', 'views'] as SortKey[]).map((k) => (
                 <button key={k} onClick={() => setSort(k)} className={cn('px-1.5 py-0.5 rounded font-semibold', sort === k ? 'bg-ink text-white' : 'hover:text-ink')}>
-                  {SORT_LABEL[k]}
+                  {t(SORT_LABEL[k])}
                 </button>
               ))}
             </span>
@@ -253,17 +254,17 @@ export default function Quotes() {
             <thead className="bg-sand/60 border-b border-hairline">
               <tr>
                 <th className="th px-2.5 w-10">
-                  <input type="checkbox" aria-label="Tout sélectionner" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(page.map((q) => q.id)))} className="accent-[var(--color-primary)]" />
+                  <input type="checkbox" aria-label={t('Tout sélectionner')} checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(page.map((q) => q.id)))} className="accent-[var(--color-primary)]" />
                 </th>
-                <th className="th px-2.5">No</th>
-                <th className="th px-2.5">Client</th>
-                {group && <th className="th px-2.5">Compagnie</th>}
-                <th className="th px-2.5">Rep.</th>
-                <th className="th px-2.5 text-right">Montant</th>
-                <th className="th px-2.5 text-right">Marge</th>
-                <th className="th px-2.5">Statut</th>
-                <th className="th px-2.5">Vues</th>
-                <th className="th px-2.5">Suivi</th>
+                <th className="th px-2.5">{t('No')}</th>
+                <th className="th px-2.5">{t('Client')}</th>
+                {group && <th className="th px-2.5">{t('Compagnie')}</th>}
+                <th className="th px-2.5">{t('Rep.')}</th>
+                <th className="th px-2.5 text-right">{t('Montant')}</th>
+                <th className="th px-2.5 text-right">{t('Marge')}</th>
+                <th className="th px-2.5">{t('Statut')}</th>
+                <th className="th px-2.5">{t('Vues')}</th>
+                <th className="th px-2.5">{t('Suivi')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
@@ -274,7 +275,7 @@ export default function Quotes() {
                 return (
                   <tr key={q.id} onClick={() => navigate(`/soumissions/${q.id}`)} className={cn('group cursor-pointer hover:bg-sand/60 transition-colors', selected.has(q.id) && 'bg-primary-wash')}>
                     <td className="td px-2.5" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" aria-label={`Sélectionner ${q.no}`} checked={selected.has(q.id)} onChange={() => toggle(q.id)} className="accent-[var(--color-primary)]" />
+                      <input type="checkbox" aria-label={t('Sélectionner {no}', { no: q.no })} checked={selected.has(q.id)} onChange={() => toggle(q.id)} className="accent-[var(--color-primary)]" />
                     </td>
                     <td className="td px-2.5 font-semibold text-ink tnum whitespace-nowrap">
                       {q.no}
@@ -283,7 +284,7 @@ export default function Quotes() {
                     <td className="td px-2.5">
                       <p className="font-semibold text-ink truncate max-w-[190px]">{fullName(c)}</p>
                       <p className="text-2xs text-ink-mute truncate max-w-[190px]">{q.city}</p>
-                      {query.trim().length >= 3 && note && fold(note).includes(fold(query.trim())) && <p className="text-2xs text-primary-press truncate max-w-[170px]">« {note} »</p>}
+                      {query.trim().length >= 3 && note && fold(note).includes(fold(query.trim())) && <p className="text-2xs text-primary-press truncate max-w-[170px]">{t('« {message} »', { message: t(note) })}</p>}
                     </td>
                     {group && (
                       <td className="td px-2.5">
@@ -313,20 +314,20 @@ export default function Quotes() {
                     <td className="td px-2.5 text-xs whitespace-nowrap relative">
                       {q.nextAction ? (
                         <span className="inline-flex items-center gap-1.5 text-ink-mute">
-                          {isAutoAction(q.nextAction) && <Zap className="w-3 h-3 text-primary-press" aria-label="automatique" />}
-                          <span className="truncate max-w-[140px]">{q.nextAction.replace(/\s*\(auto\)/, '').replace('J+7', 'J+6')}</span>
+                          {isAutoAction(q.nextAction) && <Zap className="w-3 h-3 text-primary-press" aria-label={t('automatique')} />}
+                          <span className="truncate max-w-[140px]">{t(q.nextAction.replace(/\s*\(auto\)/, '').replace('J+7', 'J+6'))}</span>
                         </span>
                       ) : (
                         <span className="text-ink-faint">—</span>
                       )}
                       <div onClick={(e) => e.stopPropagation()} className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 p-0.5 bg-white rounded-md shadow-card opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label="Envoyer un texto" onClick={() => setCompose({ kind: 'sms', ctx: ctxFor(q) })}>
+                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label={t('Envoyer un texto')} onClick={() => setCompose({ kind: 'sms', ctx: ctxFor(q) })}>
                           <MessageSquare className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label="Envoyer un courriel" onClick={() => setCompose({ kind: 'email', ctx: ctxFor(q) })}>
+                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label={t('Envoyer un courriel')} onClick={() => setCompose({ kind: 'email', ctx: ctxFor(q) })}>
                           <Mail className="w-4 h-4" />
                         </button>
-                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label="Ouvrir" onClick={() => navigate(`/soumissions/${q.id}`)}>
+                        <button className="p-1.5 rounded-md hover:bg-sand text-ink-mute hover:text-primary-press" aria-label={t('Ouvrir')} onClick={() => navigate(`/soumissions/${q.id}`)}>
                           <ArrowUpRight className="w-4 h-4" />
                         </button>
                       </div>
@@ -337,7 +338,7 @@ export default function Quotes() {
               {page.length === 0 && (
                 <tr>
                   <td colSpan={group ? 10 : 9} className="py-14 text-center text-sm text-ink-mute">
-                    Aucun résultat
+                    {t('Aucun résultat')}
                   </td>
                 </tr>
               )}
@@ -346,10 +347,10 @@ export default function Quotes() {
         </div>
         <div className="px-4 py-3 border-t border-hairline flex flex-wrap items-center justify-between gap-3 text-xs text-ink-mute">
           <span className="tnum">
-            {results.length ? `1–${Math.min(50, results.length)}` : '0'} de {view === 'all' && !filtered ? '21 384' : num(results.length)}
+            {t('{range} de {total}', { range: results.length ? `1–${Math.min(50, results.length)}` : '0', total: view === 'all' && !filtered ? t('21 384') : num(results.length) })}
           </span>
           <div className="flex items-center gap-1">
-            <button className="btn btn-xs btn-quiet" aria-label="Page précédente" disabled>
+            <button className="btn btn-xs btn-quiet" aria-label={t('Page précédente')} disabled>
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             {[1, 2, 3].map((n) => (
@@ -359,7 +360,7 @@ export default function Quotes() {
             ))}
             <span className="px-1">…</span>
             <button className="w-8 h-8 rounded-md text-xs font-semibold hover:bg-sand tnum">428</button>
-            <button className="btn btn-xs btn-quiet" aria-label="Page suivante">
+            <button className="btn btn-xs btn-quiet" aria-label={t('Page suivante')}>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>

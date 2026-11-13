@@ -6,7 +6,8 @@ import { Avatar, Badge, CHANNEL_ICONS, CompanyBadge, Empty, StatusBadge, type Ic
 import { inScope, useApp } from '../context/AppContext'
 import { APPOINTMENTS, LEADS, ME, QUOTES, THREADS, clientById, companyById, repById, type CompanyId, type Message, type Thread } from '../data/mock'
 import { toast } from '../lib/toast'
-import { cn, money } from '../lib/utils'
+import { cn, formatHour, money } from '../lib/utils'
+import { getLang, t } from '../i18n'
 
 type ThreadFilter = 'all' | 'unread' | 'ai' | 'mine' | 'sms' | 'email' | 'call'
 
@@ -22,8 +23,9 @@ const THREAD_FILTERS: { v: ThreadFilter; label: string; icon?: Icon }[] = [
 ]
 
 const DAY_ABBR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
+const DAY_ABBR_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** 13.5 → "13 h 30", 10 → "10 h 00" (mockup: `y4`). */
-const hourLabel = (h: number) => `${Math.floor(h)} h ${h % 1 ? String(Math.round((h % 1) * 60)).padStart(2, '0') : '00'}`
+const hourLabel = (h: number) => getLang() === 'en' ? formatHour(h) : `${Math.floor(h)} h ${h % 1 ? String(Math.round((h % 1) * 60)).padStart(2, '0') : '00'}`
 /** Threads that belong to a lead rather than a client (mockup: `j4`). */
 const THREAD_LEAD: Record<string, string> = { t2: 'l1', t3: 'l2', t5: 'l4' }
 
@@ -47,7 +49,7 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
         <Avatar name={thread.name} size="lg" />
         <p className="flex-1 min-w-0 text-md font-semibold text-ink truncate">{thread.name}</p>
         {onClose && (
-          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-sand xl:hidden" aria-label="Fermer">
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-sand xl:hidden" aria-label={t('Fermer')}>
             <X className="w-4 h-4" />
           </button>
         )}
@@ -80,7 +82,7 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
           {quote.views > 0 && (
             <p className="mt-1 flex items-center gap-1.5 text-xs text-primary-press font-semibold">
               <Eye className="w-3.5 h-3.5" />
-              Ouverte {quote.views} fois
+              {t('Ouverte {n} fois', { n: quote.views })}
             </p>
           )}
         </Link>
@@ -88,11 +90,11 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
       {appt && (
         <div className="flex items-center gap-3">
           <div className="w-11 text-center rounded-md bg-sand py-1 shrink-0">
-            <p className="text-2xs text-ink-mute uppercase">{DAY_ABBR[appt.day]}</p>
+            <p className="text-2xs text-ink-mute uppercase">{(getLang() === 'en' ? DAY_ABBR_EN : DAY_ABBR)[appt.day]}</p>
             <p className="text-sm font-semibold tnum">{18 + appt.day}</p>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-ink truncate">{appt.title}</p>
+            <p className="text-sm font-semibold text-ink truncate">{t(appt.title)}</p>
             <p className="text-2xs text-ink-mute">
               {hourLabel(appt.start)} · {repById(appt.repId)!.name}
             </p>
@@ -102,7 +104,7 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
       {recordHref && (
         <Link to={recordHref} className="btn btn-sm btn-secondary w-full">
           <UserRound className="w-4 h-4" />
-          Ouvrir la fiche
+          {t('Ouvrir la fiche')}
         </Link>
       )}
     </div>
@@ -165,8 +167,8 @@ const SENT_EMAILS: SentEmail[] = [
 function SentList({ rows, activeId, onOpen }: { rows: SentEmail[]; activeId?: string; onOpen: (id: string) => void }) {
   if (!rows.length)
     return (
-      <Empty icon={Inbox} title="Aucun courriel">
-        Changez les filtres ou la compagnie.
+      <Empty icon={Inbox} title={t('Aucun courriel')}>
+        {t('Changez les filtres ou la compagnie.')}
       </Empty>
     )
   return (
@@ -177,10 +179,10 @@ function SentList({ rows, activeId, onOpen }: { rows: SentEmail[]; activeId?: st
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-ink-secondary truncate flex-1">{e.client}</p>
-              <span className="text-2xs text-ink-mute shrink-0">{e.date}</span>
+              <span className="text-2xs text-ink-mute shrink-0">{t(e.date)}</span>
             </div>
-            <p className="text-xs text-ink-mute truncate mt-0.5">{e.subject}</p>
-            <p className="text-2xs text-ink-mute mt-1">{e.type === 'Rappel' ? 'Rappel automatique' : e.by}</p>
+            <p className="text-xs text-ink-mute truncate mt-0.5">{t(e.subject)}</p>
+            <p className="text-2xs text-ink-mute mt-1">{e.type === 'Rappel' ? t('Rappel automatique') : e.by}</p>
           </div>
         </button>
       ))}
@@ -194,34 +196,34 @@ function SentEmailView({ e, onBack }: { e: SentEmail; onBack: () => void }) {
   return (
     <div className="flex-1 flex flex-col min-w-0">
       <div className="h-16 bg-white border-b border-hairline px-3 md:px-5 flex items-center gap-3 shrink-0">
-        <button onClick={onBack} className="md:hidden p-1.5 rounded-md hover:bg-sand" aria-label="Retour">
+        <button onClick={onBack} className="md:hidden p-1.5 rounded-md hover:bg-sand" aria-label={t('Retour')}>
           <ChevronLeft className="w-5 h-5" />
         </button>
         <span className="w-9 h-9 rounded-full bg-sand flex items-center justify-center">
           <Mail className="w-4 h-4 text-ink-mute" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink truncate">{e.subject}</p>
-          <p className="text-2xs text-ink-mute truncate">{e.date}</p>
+          <p className="text-sm font-semibold text-ink truncate">{t(e.subject)}</p>
+          <p className="text-2xs text-ink-mute truncate">{t(e.date)}</p>
         </div>
         {quoteId && (
           <Link to={`/soumissions/${quoteId}`} className="btn btn-xs btn-secondary">
             <FileText className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Ouvrir {e.quoteNo}</span>
+            <span className="hidden sm:inline">{t('Ouvrir {no}', { no: e.quoteNo })}</span>
           </Link>
         )}
-        <button onClick={() => toast('Courriel renvoyé à ' + e.email)} className="btn btn-xs btn-quiet">
+        <button onClick={() => toast(t('Courriel renvoyé à {email}', { email: e.email }))} className="btn btn-xs btn-quiet">
           <Send className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Renvoyer</span>
+          <span className="hidden sm:inline">{t('Renvoyer')}</span>
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 md:px-6 py-5">
         <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-card">
           <dl className="px-5 py-4 border-b border-hairline grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-sm">
             {[
-              ['À', e.email],
-              ['Envoyé par', e.by],
-              ['Soumission', e.quoteNo],
+              [t('À'), e.email],
+              [t('Envoyé par'), e.by === 'Automatique' ? t(e.by) : e.by],
+              [t('Soumission'), e.quoteNo],
             ].map(([label, value]) => (
               <Fragment key={label}>
                 <dt className="label-caps self-center">{label}</dt>
@@ -229,21 +231,21 @@ function SentEmailView({ e, onBack }: { e: SentEmail; onBack: () => void }) {
               </Fragment>
             ))}
           </dl>
-          <p className="px-5 py-4 text-sm text-ink-secondary whitespace-pre-line leading-relaxed">{e.body}</p>
+          <p className="px-5 py-4 text-sm text-ink-secondary whitespace-pre-line leading-relaxed">{t(e.body)}</p>
           <div className="px-5 pb-5 flex flex-wrap items-center gap-2">
             {e.attach && (
               <span className="flex items-center gap-2 rounded-lg bg-sand px-3 py-2 text-xs">
                 <Paperclip className="w-3.5 h-3.5 text-ink-mute" />
-                <span className="font-semibold text-ink">{e.attach}</span>
+                <span className="font-semibold text-ink">{t(e.attach)}</span>
               </span>
             )}
             {e.opened ? (
               <Badge tone="info">
                 <Eye className="w-3 h-3" />
-                Ouvert {e.opened} fois
+                {t('Ouvert {n} fois', { n: e.opened })}
               </Badge>
             ) : (
-              <Badge tone="neutral">Pas encore ouvert</Badge>
+              <Badge tone="neutral">{t('Pas encore ouvert')}</Badge>
             )}
           </div>
         </div>
@@ -321,39 +323,39 @@ export default function Conversations() {
     <div className="h-[calc(100vh-4rem)] flex bg-sand">
       <div className={cn('w-full md:w-80 lg:w-96 bg-white border-r border-hairline flex flex-col shrink-0', pane === 'thread' && 'hidden md:flex')}>
         <div className="p-4 border-b border-hairline space-y-3">
-          <h1 className="text-xl font-semibold text-ink">Conversations</h1>
+          <h1 className="text-xl font-semibold text-ink">{t('Conversations')}</h1>
           <div className="grid grid-cols-2 gap-1 p-1 bg-sand rounded-lg" role="tablist">
             {VIEW_TABS.map(([v, label, IconC]) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={cn('h-8 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5', view === v ? 'bg-white text-ink shadow-card' : 'text-ink-mute hover:text-ink')}>
                 <IconC className="w-3.5 h-3.5" />
-                {label}
+                {t(label)}
               </button>
             ))}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'sent' ? 'Client, no de soumission, objet…' : 'Rechercher une conversation'} className="form-input pl-9 h-9 bg-sand border-transparent" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={view === 'sent' ? t('Client, no de soumission, objet…') : t('Rechercher une conversation')} className="form-input pl-9 h-9 bg-sand border-transparent" />
           </div>
           {view === 'sent' ? (
             <div className="grid grid-cols-3 gap-1.5">
-              <select aria-label="Type d'envoi" value={sentType} onChange={(e) => setSentType(e.target.value)} className="form-input h-8 text-xs px-2">
-                <option value="all">Tous types</option>
-                <option>Soumission</option>
-                <option>Rappel</option>
+              <select aria-label={t("Type d'envoi")} value={sentType} onChange={(e) => setSentType(e.target.value)} className="form-input h-8 text-xs px-2">
+                <option value="all">{t('Tous types')}</option>
+                <option value="Soumission">{t('Soumission')}</option>
+                <option value="Rappel">{t('Rappel')}</option>
               </select>
-              <select aria-label="Envoyé par" value={sentBy} onChange={(e) => setSentBy(e.target.value)} className="form-input h-8 text-xs px-2">
-                <option value="all">Tous envoyeurs</option>
+              <select aria-label={t('Envoyé par')} value={sentBy} onChange={(e) => setSentBy(e.target.value)} className="form-input h-8 text-xs px-2">
+                <option value="all">{t('Tous envoyeurs')}</option>
                 {senders.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === 'Automatique' ? t(s) : s}
                   </option>
                 ))}
               </select>
-              <select aria-label="Date d'envoi" value={sentDay} onChange={(e) => setSentDay(e.target.value)} className="form-input h-8 text-xs px-2">
-                <option value="all">Toutes dates</option>
-                <option value="today">Aujourd'hui</option>
-                <option value="yesterday">Hier</option>
-                <option value="week">Cette semaine</option>
+              <select aria-label={t("Date d'envoi")} value={sentDay} onChange={(e) => setSentDay(e.target.value)} className="form-input h-8 text-xs px-2">
+                <option value="all">{t('Toutes dates')}</option>
+                <option value="today">{t("Aujourd'hui")}</option>
+                <option value="yesterday">{t('Hier')}</option>
+                <option value="week">{t('Cette semaine')}</option>
               </select>
             </div>
           ) : (
@@ -361,7 +363,7 @@ export default function Conversations() {
               {THREAD_FILTERS.map((f) => (
                 <button key={f.v} onClick={() => setFilter(f.v)} className={cn('h-7 px-2.5 rounded-md text-xs font-semibold whitespace-nowrap flex items-center gap-1 shrink-0', filter === f.v ? 'bg-ink text-white' : 'bg-sand text-ink-mute hover:text-ink')}>
                   {f.icon && <f.icon className="w-3 h-3" />}
-                  {f.label}
+                  {t(f.label)}
                   {counts[f.v] ? <span className="tnum opacity-70">{counts[f.v]}</span> : null}
                 </button>
               ))}
@@ -381,37 +383,37 @@ export default function Conversations() {
           ) : (
             <>
               {visible.length === 0 && (
-                <Empty icon={Inbox} title="Aucune conversation">
-                  Changez de filtre ou de compagnie.
+                <Empty icon={Inbox} title={t('Aucune conversation')}>
+                  {t('Changez de filtre ou de compagnie.')}
                 </Empty>
               )}
-              {visible.map((t) => {
-                const ChannelIcon = CHANNEL_ICONS[t.channel]
-                const ai = hasAI(t)
+              {visible.map((th) => {
+                const ChannelIcon = CHANNEL_ICONS[th.channel]
+                const ai = hasAI(th)
                 return (
-                  <button key={t.id} onClick={() => openThread(t.id)} className={cn('w-full text-left px-4 py-3 border-b border-hairline flex gap-3 transition-colors', active?.id === t.id ? 'bg-primary-wash' : 'hover:bg-sand')}>
+                  <button key={th.id} onClick={() => openThread(th.id)} className={cn('w-full text-left px-4 py-3 border-b border-hairline flex gap-3 transition-colors', active?.id === th.id ? 'bg-primary-wash' : 'hover:bg-sand')}>
                     <div className="relative shrink-0">
-                      <Avatar name={t.name} size="md" />
+                      <Avatar name={th.name} size="md" />
                       <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-card flex items-center justify-center">
                         <ChannelIcon className="w-3 h-3 text-ink-mute" />
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <p className={cn('text-sm truncate flex-1', t.unread ? 'font-bold text-ink' : 'font-semibold text-ink-secondary')}>{t.name}</p>
-                        <span className="text-2xs text-ink-mute shrink-0">{t.at}</span>
+                        <p className={cn('text-sm truncate flex-1', th.unread ? 'font-bold text-ink' : 'font-semibold text-ink-secondary')}>{th.name}</p>
+                        <span className="text-2xs text-ink-mute shrink-0">{t(th.at)}</span>
                       </div>
-                      <p className={cn('text-xs truncate mt-0.5', t.unread ? 'text-ink' : 'text-ink-mute')}>{t.last}</p>
-                      {(scope === 'all' || ai || t.unread > 0) && (
+                      <p className={cn('text-xs truncate mt-0.5', th.unread ? 'text-ink' : 'text-ink-mute')}>{t(th.last)}</p>
+                      {(scope === 'all' || ai || th.unread > 0) && (
                         <div className="flex items-center gap-1.5 mt-1.5">
-                          {scope === 'all' && <CompanyBadge id={t.company} />}
+                          {scope === 'all' && <CompanyBadge id={th.company} />}
                           {ai && (
                             <span className="badge bg-lavender text-ink !text-2xs !px-1.5">
                               <Bot className="w-2.5 h-2.5 mr-0.5" />
-                              IA
+                              {t('IA')}
                             </span>
                           )}
-                          {t.unread > 0 && <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-2xs font-bold flex items-center justify-center tnum">{t.unread}</span>}
+                          {th.unread > 0 && <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-2xs font-bold flex items-center justify-center tnum">{th.unread}</span>}
                         </div>
                       )}
                     </div>
@@ -430,14 +432,14 @@ export default function Conversations() {
           </div>
         ) : (
           <div className="flex-1 hidden md:flex items-center justify-center">
-            <Empty icon={Mail} title="Aucun courriel sélectionné" />
+            <Empty icon={Mail} title={t('Aucun courriel sélectionné')} />
           </div>
         ))}
 
       {view === 'threads' && active && (
         <div className={cn('flex-1 flex flex-col min-w-0', pane === 'list' && 'hidden md:flex')}>
           <div className="h-16 bg-white border-b border-hairline px-3 md:px-5 flex items-center gap-3 shrink-0">
-            <button onClick={() => setPane('list')} className="md:hidden p-1.5 rounded-md hover:bg-sand" aria-label="Retour">
+            <button onClick={() => setPane('list')} className="md:hidden p-1.5 rounded-md hover:bg-sand" aria-label={t('Retour')}>
               <ChevronLeft className="w-5 h-5" />
             </button>
             <Avatar name={active.name} size="md" />
@@ -448,33 +450,33 @@ export default function Conversations() {
             <button
               onClick={() => {
                 setAiOn((prev) => ({ ...prev, [active.id]: !prev[active.id] }))
-                toast(aiActive ? 'Vous avez pris le relais' : "Conversation confiée à l'agent IA")
+                toast(aiActive ? t('Vous avez pris le relais') : t("Conversation confiée à l'agent IA"))
               }}
               className={cn('btn btn-xs', aiActive ? 'bg-lavender text-ink hover:bg-lavender/70' : 'btn-quiet')}
             >
               {aiActive ? (
                 <>
                   <Hand className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Prendre le relais</span>
+                  <span className="hidden sm:inline">{t('Prendre le relais')}</span>
                 </>
               ) : (
                 <>
                   <Bot className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Confier à l'agent IA</span>
+                  <span className="hidden sm:inline">{t("Confier à l'agent IA")}</span>
                 </>
               )}
             </button>
-            <button onClick={() => toast('Appel lancé via le numéro de ' + companyById(active.company).short)} className="btn btn-xs btn-secondary" aria-label="Appeler">
+            <button onClick={() => toast(t('Appel lancé via le numéro de {company}', { company: t(companyById(active.company).short) }))} className="btn btn-xs btn-secondary" aria-label={t('Appeler')}>
               <Phone className="w-3.5 h-3.5" />
             </button>
-            <button onClick={() => setContactOpen(true)} className="btn btn-xs btn-secondary xl:hidden" aria-label="Fiche">
+            <button onClick={() => setContactOpen(true)} className="btn btn-xs btn-secondary xl:hidden" aria-label={t('Fiche')}>
               <UserRound className="w-3.5 h-3.5" />
             </button>
           </div>
           {aiActive && (
             <div className="bg-lavender-soft border-b border-lavender px-5 py-2 text-xs text-ink-secondary flex items-center gap-2">
               <Bot className="w-4 h-4 text-ink" />
-              <span className="font-semibold text-ink">L'agent IA répond à ce client</span>
+              <span className="font-semibold text-ink">{t("L'agent IA répond à ce client")}</span>
             </div>
           )}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-5 space-y-4">

@@ -8,6 +8,7 @@ import { useApp } from '../context/AppContext'
 import { CLIENTS, QUOTES, REPS, THREADS, clientById, companyById, fullName, repById, type Quote, type Thread } from '../data/mock'
 import { toast } from '../lib/toast'
 import { money } from '../lib/utils'
+import { t } from '../i18n'
 
 /** Statuses that count as an open quote (mockup: `x4`). */
 const OPEN_STATUSES = ['En soumission', 'À rappeler', 'Rappel courriel envoyé', 'Client va nous rappeler']
@@ -63,8 +64,8 @@ export default function ClientDetail() {
               channel: 'email',
               at: q.date,
               by: repById(q.repId)!.name,
-              text: `Bonjour ${client.first}, voici votre soumission ${q.no}. Vous pouvez la consulter et la signer en ligne.`,
-              meta: `Soumission ${q.no}${q.views ? ` · Ouverte ${q.views} fois` : ''}`,
+              text: t('Bonjour {first}, voici votre soumission {no}. Vous pouvez la consulter et la signer en ligne.', { first: client.first, no: q.no }),
+              meta: t('Soumission {no}', { no: q.no }) + (q.views ? ' · ' + t('Ouverte {n} fois', { n: q.views }) : ''),
             },
           ]
         : [],
@@ -73,52 +74,52 @@ export default function ClientDetail() {
 
   const activity: TimelineItem[] = isDemo
     ? [
-        { icon: MessageSquare, title: 'Texto reçu', at: "Aujourd'hui 8 h 41" },
-        { icon: Eye, title: 'A ouvert H64320 (3e fois)', at: "Aujourd'hui 8 h 30", tone: 'primary' },
-        { icon: MessageSquare, title: 'Texto de suivi J+2 (automatique)', at: 'Dim. 18 oct.' },
-        { icon: Mail, title: 'Soumission H64320 envoyée', at: 'Ven. 16 oct.' },
-        { icon: CalendarDays, title: 'Estimation à domicile', at: 'Jeu. 15 oct.' },
-        { icon: PhoneCall, title: 'Appel entrant · 3 min 24 s', at: 'Mar. 13 oct.' },
-        { icon: FilePenLine, title: 'G58114 · Payé · Signature Gouttières', at: '28 août 2025' },
-        { icon: FilePenLine, title: 'G31877 · Payé · Signature Gouttières', at: '30 avr. 2021' },
+        { icon: MessageSquare, title: t('Texto reçu'), at: t("Aujourd'hui 8 h 41") },
+        { icon: Eye, title: t('A ouvert H64320 (3e fois)'), at: t("Aujourd'hui 8 h 30"), tone: 'primary' },
+        { icon: MessageSquare, title: t('Texto de suivi J+2 (automatique)'), at: t('Dim. 18 oct.') },
+        { icon: Mail, title: t('Soumission H64320 envoyée'), at: t('Ven. 16 oct.') },
+        { icon: CalendarDays, title: t('Estimation à domicile'), at: t('Jeu. 15 oct.') },
+        { icon: PhoneCall, title: t('Appel entrant · 3 min 24 s'), at: t('Mar. 13 oct.') },
+        { icon: FilePenLine, title: t('G58114 · Payé · Signature Gouttières'), at: t('28 août 2025') },
+        { icon: FilePenLine, title: t('G31877 · Payé · Signature Gouttières'), at: t('30 avr. 2021') },
       ]
-    : quotes.slice(0, 5).map((q) => ({ icon: FilePenLine, title: `${q.no} · ${q.status}`, at: q.date }))
-  const nextStep = isDemo ? { when: 'Mar. 20 oct. · 15 h 00', what: 'Revoir le client' } : null
+    : quotes.slice(0, 5).map((q) => ({ icon: FilePenLine, title: `${q.no} · ${t(q.status)}`, at: q.date }))
+  const nextStep = isDemo ? { when: t('Mar. 20 oct. · 15 h 00'), what: t('Revoir le client') } : null
   const address = `${client.no}, ${client.street}, ${client.city} ${client.postal}`
 
   return (
     <Page>
       <RecordHeader
-        back={{ to: '/clients', label: 'Clients' }}
+        back={{ to: '/clients', label: t('Clients') }}
         name={fullName(client)}
         chips={
           <>
             <Badge tone="good" dot>
-              Client
+              {t('Client')}
             </Badge>
             {companies.map((c) => (
               <CompanyBadge key={c} id={c} />
             ))}
-            <span className="text-xs text-ink-mute">{client.type}</span>
+            <span className="text-xs text-ink-mute">{t(client.type)}</span>
           </>
         }
         actions={
           <>
-            <button onClick={() => toast(`Appel vers ${client.mobile ?? client.phone}…`)} className="btn btn-sm btn-secondary">
+            <button onClick={() => toast(t('Appel vers {phone}…', { phone: client.mobile ?? client.phone }))} className="btn btn-sm btn-secondary">
               <Phone className="w-4 h-4" />
-              Appeler
+              {t('Appeler')}
             </button>
-            <MessageButton kind="sms" ctx={ctx} label="Texto" />
-            <MessageButton kind="email" ctx={ctx} label="Courriel" />
+            <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
+            <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
             <button
               onClick={() => {
-                toast('Nouvelle soumission · coordonnées copiées')
+                toast(t('Nouvelle soumission · coordonnées copiées'))
                 navigate('/soumissions/q64320')
               }}
               className="btn btn-sm btn-primary"
             >
               <Plus className="w-4 h-4" />
-              Nouvelle soumission
+              {t('Nouvelle soumission')}
             </button>
           </>
         }
@@ -126,9 +127,9 @@ export default function ClientDetail() {
       <div className="grid grid-cols-3 rounded-lg overflow-hidden bg-white shadow-card divide-x divide-hairline">
         {(
           [
-            ['Valeur à vie', money(lifetime, false)],
-            ['Soumissions ouvertes', open.length ? money(open.reduce((n, q) => n + q.amount, 0), false) : '—'],
-            ['Client depuis', client.since],
+            [t('Valeur à vie'), money(lifetime, false)],
+            [t('Soumissions ouvertes'), open.length ? money(open.reduce((n, q) => n + q.amount, 0), false) : '—'],
+            [t('Client depuis'), client.since],
           ] as const
         ).map(([label, value]) => (
           <div key={label} className="h-10 px-3 flex items-center justify-center gap-2 min-w-0">
@@ -142,13 +143,13 @@ export default function ClientDetail() {
           <InfoGroups
             groups={[
               {
-                title: 'Coordonnées',
+                title: t('Coordonnées'),
                 rows: [
-                  { icon: Phone, label: 'Téléphone', value: client.phone, copy: client.phone },
-                  ...(client.mobile ? [{ icon: Smartphone, label: 'Cellulaire', value: client.mobile, copy: client.mobile }] : []),
+                  { icon: Phone, label: t('Téléphone'), value: client.phone, copy: client.phone },
+                  ...(client.mobile ? [{ icon: Smartphone, label: t('Cellulaire'), value: client.mobile, copy: client.mobile }] : []),
                   {
                     icon: Mail,
-                    label: 'Courriel',
+                    label: t('Courriel'),
                     value: (
                       <span className="block truncate" title={client.email}>
                         {client.email}
@@ -156,23 +157,23 @@ export default function ClientDetail() {
                     ),
                     copy: client.email,
                   },
-                  { icon: MapPin, label: 'Adresse', value: address, copy: address },
+                  { icon: MapPin, label: t('Adresse'), value: address, copy: address },
                 ],
               },
               {
-                title: 'Détails',
+                title: t('Détails'),
                 rows: [
-                  { icon: Inbox, label: 'Source', value: client.source },
-                  { icon: House, label: 'Propriété', value: isDemo ? 'Maison 1998 · 2 étages' : client.type },
-                  { icon: ShieldCheck, label: 'Consentement texto', value: client.consentSms ? 'Oui' : 'Non' },
+                  { icon: Inbox, label: t('Source'), value: t(client.source) },
+                  { icon: House, label: t('Propriété'), value: isDemo ? t('Maison 1998 · 2 étages') : t(client.type) },
+                  { icon: ShieldCheck, label: t('Consentement texto'), value: client.consentSms ? t('Oui') : t('Non') },
                   {
                     icon: Tag,
-                    label: 'Étiquettes',
+                    label: t('Étiquettes'),
                     value: (
                       <span className="flex flex-wrap gap-1 pt-0.5">
-                        {(isDemo ? ['Bardeaux', 'Décision en couple'] : [client.type]).map((t) => (
-                          <span key={t} className="badge bg-sand text-ink-secondary">
-                            {t}
+                        {(isDemo ? ['Bardeaux', 'Décision en couple'] : [client.type]).map((tag) => (
+                          <span key={tag} className="badge bg-sand text-ink-secondary">
+                            {t(tag)}
                           </span>
                         ))}
                       </span>
@@ -189,11 +190,11 @@ export default function ClientDetail() {
               value={tab}
               onChange={setTab}
               tabs={[
-                { value: 'conversation', label: 'Conversation', icon: MessageSquare },
-                { value: 'activite', label: 'Activité' },
-                { value: 'soumissions', label: 'Soumissions', count: quotes.length },
-                { value: 'notes', label: 'Notes' },
-                { value: 'fichiers', label: 'Fichiers' },
+                { value: 'conversation', label: t('Conversation'), icon: MessageSquare },
+                { value: 'activite', label: t('Activité') },
+                { value: 'soumissions', label: t('Soumissions'), count: quotes.length },
+                { value: 'notes', label: t('Notes') },
+                { value: 'fichiers', label: t('Fichiers') },
               ]}
             />
             {tab === 'conversation' && <ThreadPanel thread={thread} />}
@@ -203,18 +204,18 @@ export default function ClientDetail() {
                 <table className="w-full min-w-[560px]">
                   <thead className="border-b border-hairline">
                     <tr>
-                      <th className="th">No</th>
-                      <th className="th">Travaux</th>
-                      <th className="th">Représentant</th>
-                      <th className="th">Statut</th>
-                      <th className="th text-right">Montant</th>
+                      <th className="th">{t('No')}</th>
+                      <th className="th">{t('Travaux')}</th>
+                      <th className="th">{t('Représentant')}</th>
+                      <th className="th">{t('Statut')}</th>
+                      <th className="th text-right">{t('Montant')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-hairline">
                     {quotes.map((q) => (
-                      <tr key={q.id} onClick={() => (q.id.startsWith('qx') ? toast('Soumission archivée') : navigate(`/soumissions/${q.id}`))} className="hover:bg-sand/60 cursor-pointer">
+                      <tr key={q.id} onClick={() => (q.id.startsWith('qx') ? toast(t('Soumission archivée')) : navigate(`/soumissions/${q.id}`))} className="hover:bg-sand/60 cursor-pointer">
                         <td className="td font-semibold text-ink tnum">{q.no}</td>
-                        <td className="td">{q.workType}</td>
+                        <td className="td">{t(q.workType)}</td>
                         <td className="td">
                           <RepName id={q.repId} />
                         </td>
@@ -228,15 +229,15 @@ export default function ClientDetail() {
                 </table>
               </div>
             )}
-            {tab === 'notes' && <Notes initial={isDemo ? [{ at: '16 oct.', by: 'Jean-Pierre Hillman', text: 'Décide avec son conjoint. Préfère les textos après 17 h.' }] : []} />}
+            {tab === 'notes' && <Notes initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
             {tab === 'fichiers' && (
               <ul className="bg-white rounded-xl shadow-card divide-y divide-hairline">
                 {quotes.slice(0, 4).map((q) => (
                   <li key={q.id} className="flex items-center gap-3 px-5 py-3">
                     <FileText className="w-4 h-4 text-ink-mute" />
-                    <span className="flex-1 text-sm font-semibold">Soumission {q.no}.pdf</span>
+                    <span className="flex-1 text-sm font-semibold">{t('Soumission {no}.pdf', { no: q.no })}</span>
                     <span className="text-xs text-ink-mute">{q.date}</span>
-                    <button onClick={() => toast('Téléchargé')} className="p-1.5 rounded hover:bg-sand" aria-label="Télécharger">
+                    <button onClick={() => toast(t('Téléchargé'))} className="p-1.5 rounded hover:bg-sand" aria-label={t('Télécharger')}>
                       <Download className="w-4 h-4 text-ink-mute" />
                     </button>
                   </li>
@@ -247,7 +248,7 @@ export default function ClientDetail() {
         }
         right={
           <>
-            <SideCard title="Prochaine étape">
+            <SideCard title={t('Prochaine étape')}>
               {nextStep ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
@@ -261,23 +262,23 @@ export default function ClientDetail() {
                       </p>
                     </div>
                   </div>
-                  <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.when }} label="Envoyer le rappel" variant="secondary" className="w-full" />
+                  <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.when }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
                 </div>
               ) : (
                 <button onClick={() => navigate(`/agenda?nouveau=${open[0]?.id ?? 'q64320'}`)} className="btn btn-sm btn-secondary w-full">
                   <CalendarDays className="w-4 h-4" />
-                  Planifier un rendez-vous
+                  {t('Planifier un rendez-vous')}
                 </button>
               )}
             </SideCard>
             {open[0] && (
-              <SideCard title="Soumission ouverte">
+              <SideCard title={t('Soumission ouverte')}>
                 <Link to={`/soumissions/${open[0].id}`} className="block group">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold group-hover:text-primary-press">{open[0].no}</p>
                     <StatusBadge status={open[0].status} />
                   </div>
-                  <p className="text-xs text-ink-mute mt-0.5 truncate">{open[0].workType}</p>
+                  <p className="text-xs text-ink-mute mt-0.5 truncate">{t(open[0].workType)}</p>
                   <div className="flex items-center justify-between mt-2">
                     <p className="text-xl font-semibold tnum">{money(open[0].amount, false)}</p>
                     {open[0].views > 0 && (
@@ -290,7 +291,7 @@ export default function ClientDetail() {
                 </Link>
               </SideCard>
             )}
-            <SideCard title="Responsable">
+            <SideCard title={t('Responsable')}>
               <RepName id={owner.id} size="md" />
             </SideCard>
           </>
