@@ -51,13 +51,18 @@ export const shell: Record<string, string> = {
   'Envoyer un courriel': 'Send an email',
   'Avec la soumission en pièce jointe': 'With the quote attached',
   'Démarrer la relance automatique': 'Start automatic follow-up sequence',
-  'Texto J+2 puis courriel J+6': 'Text on day 2, then email on day 6',
+  'Courriel et texto à J+6, J+12 et J+20': 'Email and text on day 6, 12 and 20',
   'Rappel de rendez-vous': 'Appointment reminder',
   'Texto la veille du rendez-vous': 'Text the day before the appointment',
   'Suivi de soumission': 'Quote follow-up',
   'Proposer une visite': 'Offer a visit',
   'Envoi de soumission': 'Sending the quote',
-  'Suivi de soumission (courriel J+6 actuel)': 'Quote follow-up (current day-6 email)',
+  'Suivi de soumission (courriel J+6, J+12, J+20)': 'Quote follow-up (day 6, 12, 20 email)',
+  'J+12': 'Day 12',
+  'J+20': 'Day 20',
+  'Courriel et texto de suivi': 'Follow-up email and text',
+  'Dernier courriel et texto de suivi': 'Last follow-up email and text',
+  'Modèles « Suivi de soumission », avec le lien pour accepter': '“Quote follow-up” templates, with the link to accept',
   "Bonjour {first}, c'est {rep} de {company}. Avez-vous bien reçu la soumission {quoteNo}? Je reste disponible pour vos questions.":
     "Hi {first}, it's {rep} from {company}. Did you receive quote {quoteNo}? I'm available if you have any questions.",
   'Bonjour {first}, je peux passer revoir les travaux avec vous cette semaine. Est-ce que mardi ou jeudi vous conviendrait? {rep}, {company}':
@@ -215,8 +220,8 @@ export const shell: Record<string, string> = {
 
   /* ── Quote next actions ──────────────────────────────────────────────── */
   'Appel de suivi': 'Follow-up call',
-  'Texto J+10 (auto)': 'Day-10 text (auto)',
-  'Courriel J+6 (auto)': 'Day-6 email (auto)',
+  'Courriel + texto J+12 (auto)': 'Day-12 email + text (auto)',
+  'Courriel + texto J+6 (auto)': 'Day-6 email + text (auto)',
   'Appeler — a ouvert 3 fois': 'Call — opened 3 times',
 
   /* ── Lead stages & statuses ──────────────────────────────────────────── */

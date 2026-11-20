@@ -36,7 +36,7 @@ export const clients: Record<string, string> = {
   "Aujourd'hui 8 h 41": "Today 8:41 AM",
   "A ouvert H64320 (3e fois)": "Opened H64320 (3rd time)",
   "Aujourd'hui 8 h 30": "Today 8:30 AM",
-  "Texto de suivi J+2 (automatique)": "Day 2 follow-up text (automatic)",
+  "Texto de suivi de Jean-Pierre": "Follow-up text from Jean-Pierre",
   "Dim. 18 oct.": "Sun., Oct. 18",
   "Soumission H64320 envoyée": "Quote H64320 sent",
   "Ven. 16 oct.": "Fri., Oct. 16",

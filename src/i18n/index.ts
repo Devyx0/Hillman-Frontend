@@ -40,6 +40,25 @@ export function setLang(next: Lang) {
   document.documentElement.lang = next === 'en' ? 'en-CA' : 'fr-CA'
 }
 
+/**
+ * Run `fn` with the language temporarily set to `l`, then restore the UI language. Use it to render
+ * client-facing text (portal, PDF, email/text drafts) in the CLIENT's language regardless of the
+ * rep's UI language:  `inLang(clientLang(client), () => t('Soumission {no}', { no }))`.
+ * `t`, `locale()`, `money`, `formatHour` … all follow the temporary language inside `fn`.
+ */
+export function inLang<T>(l: Lang, fn: () => T): T {
+  const prev = lang
+  lang = l
+  try {
+    return fn()
+  } finally {
+    lang = prev
+  }
+}
+
+/** `t()` in a given language (shorthand for `inLang(l, () => t(text, vars))`). */
+export const tIn = (l: Lang, text: string, vars?: Record<string, string | number>) => inLang(l, () => t(text, vars))
+
 /** BCP 47 locale for number/date formatting in the current language. */
 export const locale = () => (lang === 'en' ? 'en-CA' : 'fr-CA')
 

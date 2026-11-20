@@ -21,7 +21,7 @@ export interface MessageCtx {
 export const MESSAGE_KINDS: Record<MessageKind, { label: string; icon: Icon; hint: string }> = {
   sms: { label: 'Envoyer un texto', icon: MessageSquare, hint: 'Envoyé depuis le numéro de la compagnie' },
   email: { label: 'Envoyer un courriel', icon: Mail, hint: 'Avec la soumission en pièce jointe' },
-  sequence: { label: 'Démarrer la relance automatique', icon: Repeat, hint: 'Texto J+2 puis courriel J+6' },
+  sequence: { label: 'Démarrer la relance automatique', icon: Repeat, hint: 'Courriel et texto à J+6, J+12 et J+20' },
   reminder: { label: 'Rappel de rendez-vous', icon: BellRing, hint: 'Texto la veille du rendez-vous' },
 }
 
@@ -42,7 +42,7 @@ export const TEMPLATES: { id: string; name: string; kinds: MessageKind[]; text: 
   { id: 'suivi-sms', name: 'Suivi de soumission', kinds: ['sms'], text: (c) => t("Bonjour {first}, c'est {rep} de {company}. Avez-vous bien reçu la soumission {quoteNo}? Je reste disponible pour vos questions.", vars(c)) },
   { id: 'dispo-sms', name: 'Proposer une visite', kinds: ['sms'], text: (c) => t('Bonjour {first}, je peux passer revoir les travaux avec vous cette semaine. Est-ce que mardi ou jeudi vous conviendrait? {rep}, {company}', vars(c)) },
   { id: 'envoi-email', name: 'Envoi de soumission', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nVoici votre soumission {quoteNo}. Vous pouvez la consulter et l'accepter en ligne avec le lien ci-dessous.\n\nMerci,\n{signature}", vars(c)) },
-  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6 actuel)', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission {quoteNo}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n{signature}", vars(c)) },
+  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6, J+12, J+20)', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission {quoteNo}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n{signature}", vars(c)) },
   { id: 'rappel-rdv', name: 'Rappel de rendez-vous', kinds: ['reminder'], text: (c) => t('Rappel : {rep} de {company} sera chez vous {date}. Répondez C pour confirmer ou R pour reporter.', vars(c)) },
 ]
 
@@ -54,9 +54,11 @@ function improveWithAI(text: string) {
     .replace(t('Nous sommes très heureux'), t('Merci encore, nous sommes très heureux'))
 }
 
+/** Matches the default sequence in `FOLLOW_UP_SEQUENCES` (client decision: J+6, J+12, J+20 by email and text). */
 const SEQUENCE_STEPS: { d: string; icon: Icon; t: string; s: string }[] = [
-  { d: 'J+2', icon: MessageSquare, t: 'Texto de suivi du représentant', s: 'Modèle « Suivi de soumission »' },
-  { d: 'J+6', icon: Mail, t: 'Courriel de suivi', s: 'Le texte que vous envoyez déjà, avec le lien pour accepter' },
+  { d: 'J+6', icon: Mail, t: 'Courriel et texto de suivi', s: 'Modèles « Suivi de soumission », avec le lien pour accepter' },
+  { d: 'J+12', icon: Mail, t: 'Courriel et texto de suivi', s: 'Modèles « Suivi de soumission », avec le lien pour accepter' },
+  { d: 'J+20', icon: MessageSquare, t: 'Dernier courriel et texto de suivi', s: 'Modèles « Suivi de soumission », avec le lien pour accepter' },
 ]
 
 /** Compose drawer for texto / courriel / relance / rappel (mockup: `Pi`). */

@@ -250,7 +250,7 @@ function ClientRecord({ client }: { client: Client }) {
     ? [
         { icon: MessageSquare, title: t('Texto reçu'), at: t("Aujourd'hui 8 h 41") },
         { icon: Eye, title: t('A ouvert H64320 (3e fois)'), at: t("Aujourd'hui 8 h 30"), tone: 'primary' },
-        { icon: MessageSquare, title: t('Texto de suivi J+2 (automatique)'), at: t('Dim. 18 oct.') },
+        { icon: MessageSquare, title: t('Texto de suivi de Jean-Pierre'), at: t('Dim. 18 oct.') },
         { icon: Mail, title: t('Soumission H64320 envoyée'), at: t('Ven. 16 oct.') },
         { icon: CalendarDays, title: t('Estimation à domicile'), at: t('Jeu. 15 oct.') },
         { icon: PhoneCall, title: t('Appel entrant · 3 min 24 s'), at: t('Mar. 13 oct.') },

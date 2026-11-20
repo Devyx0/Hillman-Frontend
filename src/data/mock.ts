@@ -135,7 +135,12 @@ export interface Client {
   lastActivity: string
   consentSms: boolean
   type: string
+  /** Language for everything sent to this client (portal, PDF, emails, texts). Default French. */
+  language?: 'fr' | 'en'
 }
+
+/** The client's communication language (French unless set). */
+export const clientLang = (c?: { language?: 'fr' | 'en' }): 'fr' | 'en' => c?.language ?? 'fr'
 
 const strip = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 
@@ -233,7 +238,7 @@ for (let i = 0; i < 96; i++) {
     lastViewed: rand() > 0.5 ? daysAgo(Math.floor(between(0, 4))) : undefined,
     daysInStatus: Math.min(age, Math.floor(between(0, 20))),
     hot: rand() > 0.82,
-    nextAction: status === 'À rappeler' ? 'Appel de suivi' : status === 'Rappel courriel envoyé' ? 'Texto J+10 (auto)' : status === 'En soumission' ? 'Courriel J+6 (auto)' : undefined,
+    nextAction: status === 'À rappeler' ? 'Appel de suivi' : status === 'Rappel courriel envoyé' ? 'Courriel + texto J+12 (auto)' : status === 'En soumission' ? 'Courriel + texto J+6 (auto)' : undefined,
     nextActionDate: daysAgo(-Math.floor(between(0, 6))),
   })
 }
@@ -314,7 +319,7 @@ export const THREADS: Thread[] = [
     messages: [
       { id: 'm1', dir: 'out', channel: 'email', at: 'ven. 16 oct. · 15 h 12', by: 'Jean-Pierre Hillman', text: 'Bonjour Mme Gagnon, voici votre soumission H64320 pour la réfection complète de votre toiture. Vous pouvez la consulter, choisir votre option et la signer en ligne.', meta: 'Soumission H64320 jointe · Ouvert 3 fois' },
       { id: 'm2', dir: 'in', channel: 'note', at: 'sam. 17 oct. · 10 h 03', text: 'Isabelle a consulté la soumission (2 min 40 s) — section Garanties.', meta: 'Activité portail' },
-      { id: 'm3', dir: 'out', channel: 'sms', at: 'dim. 18 oct. · 10 h 00', by: 'Automatisation · Suivi J+2', text: "Bonjour Isabelle, c'est Jean-Pierre de Toitures Hillman. Avez-vous des questions sur votre soumission? Je peux passer vous voir cette semaine. Répondez à ce texto au besoin 🙂" },
+      { id: 'm3', dir: 'out', channel: 'sms', at: 'dim. 18 oct. · 10 h 00', by: 'Jean-Pierre Hillman', text: "Bonjour Isabelle, c'est Jean-Pierre de Toitures Hillman. Avez-vous des questions sur votre soumission? Je peux passer vous voir cette semaine. Répondez à ce texto au besoin 🙂" },
       { id: 'm4', dir: 'in', channel: 'sms', at: '8 h 39', text: 'Bonjour! Oui on regarde ça avec mon conjoint.' },
       { id: 'm5', dir: 'in', channel: 'sms', at: '8 h 41', text: 'Est-ce que le prix inclut le contreplaqué si on en trouve de pourri?' },
     ],
