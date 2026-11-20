@@ -1,4 +1,4 @@
-/** Catalogue → Items coûtants: cost / sell prices, target margin, video link per item (PDF item 7). */
+/** Catalogue → Items coûtants: cost / sell prices, target margin, video link per item and per section (PDF item 7). */
 import { useState } from 'react'
 import { Check, ChevronRight, ExternalLink, Package, Percent, PlayCircle, Plus, Trash2, TriangleAlert, Video } from 'lucide-react'
 import { Badge, Card, Field } from '../../components/ui'
@@ -9,34 +9,15 @@ import { useStore } from '../../data/store'
 import { toast } from '../../lib/toast'
 import { cn, pct } from '../../lib/utils'
 import { t } from '../../i18n'
-import { COST_ITEMS, addCostCategory, addCostItem, allCostItems, applyTargetMargin, isFixedFee, removeCostItem, updateCostItem, type CostItem } from './data'
+import { COST_ITEMS, addCostCategory, addCostItem, allCostItems, applyTargetMargin, categoryVideo, isFixedFee, removeCostItem, setCategoryVideo, updateCostItem, videoEmbed, type CostItem } from './data'
 import { useCanEditCatalogue } from './context'
 import { logChange } from './settings/data'
 import { Modal } from './settings/shared'
 
 const UNITS = ['paq.', 'rlx', 'unité', 'boîte', 'jour', 'h', 'pi', 'pi²', 'lot', 'panneau', 'forfait']
 
-/** YouTube / Vimeo URL → embeddable URL, or undefined when the link isn't one of those. */
-export function videoEmbed(url?: string) {
-  if (!url) return undefined
-  try {
-    const u = new URL(url.trim())
-    const host = u.hostname.replace(/^www\.|^m\./, '')
-    if (host === 'youtube.com') {
-      const id = u.searchParams.get('v') ?? (/^\/(?:shorts|embed)\/([\w-]+)/.exec(u.pathname)?.[1] ?? '')
-      return id ? `https://www.youtube-nocookie.com/embed/${id}` : undefined
-    }
-    if (host === 'youtu.be') return `https://www.youtube-nocookie.com/embed/${u.pathname.slice(1)}`
-    if (host === 'vimeo.com') {
-      const id = /^\/(\d+)/.exec(u.pathname)?.[1]
-      return id ? `https://player.vimeo.com/video/${id}` : undefined
-    }
-    if (host === 'player.vimeo.com') return u.toString()
-  } catch {
-    /* not a URL */
-  }
-  return undefined
-}
+/** Moved to ./data (shared with the quote builder and the portal); re-exported for existing imports. */
+export { videoEmbed }
 
 export function CostItemsTab() {
   useStore()
@@ -48,6 +29,7 @@ export function CostItemsTab() {
   const [category, setCategory] = useState('Bardeaux')
   const [targetMargin, setTargetMargin] = useState(30)
   const [videoFor, setVideoFor] = useState<CostItem | null>(null)
+  const [sectionVideo, setSectionVideo] = useState(false)
   const [adding, setAdding] = useState(false)
   const [newCat, setNewCat] = useState<string | null>(null)
   const categories = Object.keys(COST_ITEMS[general] ?? {})
@@ -149,12 +131,21 @@ export function CostItemsTab() {
           icon={Package}
           pad={false}
           actions={
-            canEdit &&
             category && (
-              <button className="btn btn-xs btn-secondary" onClick={() => setAdding(true)}>
-                <Plus className="w-3.5 h-3.5" />
-                {t('Item')}
-              </button>
+              <span className="flex items-center gap-1.5">
+                {(canEdit || categoryVideo(general, category)) && (
+                  <button className={cn('btn btn-xs', categoryVideo(general, category) ? 'btn-ghost text-primary-press' : 'btn-ghost')} onClick={() => setSectionVideo(true)} title={t('Vidéo de la section')}>
+                    <PlayCircle className="w-3.5 h-3.5" />
+                    {categoryVideo(general, category) ? t('Vidéo de la section') : t('Ajouter une vidéo à la section')}
+                  </button>
+                )}
+                {canEdit && (
+                  <button className="btn btn-xs btn-secondary" onClick={() => setAdding(true)}>
+                    <Plus className="w-3.5 h-3.5" />
+                    {t('Item')}
+                  </button>
+                )}
+              </span>
             )
           }
         >
@@ -227,20 +218,46 @@ export function CostItemsTab() {
           </div>
         </Card>
       </div>
-      {videoFor && <VideoModal key={videoFor.id} item={videoFor} canEdit={canEdit} onClose={() => setVideoFor(null)} me={me} />}
+      {videoFor && (
+        <VideoModal
+          key={videoFor.id}
+          name={videoFor.name}
+          current={videoFor.video}
+          canEdit={canEdit}
+          onClose={() => setVideoFor(null)}
+          onSave={(url) => {
+            updateCostItem(videoFor.id, { video: url })
+            logChange(me, 'catalogue', url ? 'A ajouté une vidéo à « {name} »' : 'A retiré la vidéo de « {name} »', { name: videoFor.name })
+          }}
+        />
+      )}
+      {sectionVideo && (
+        <VideoModal
+          key={general + category}
+          name={category}
+          current={categoryVideo(general, category)}
+          canEdit={canEdit}
+          hint={t('Vidéo de toute la section « {cat} » (par exemple notre méthode d’installation). Chaque item peut aussi avoir sa propre vidéo.', { cat: t(category) })}
+          onClose={() => setSectionVideo(false)}
+          onSave={(url) => {
+            setCategoryVideo(general, category, url)
+            logChange(me, 'catalogue', url ? 'A ajouté une vidéo à « {name} »' : 'A retiré la vidéo de « {name} »', { name: category })
+          }}
+        />
+      )}
       {adding && <NewItemModal general={general} category={category} onClose={() => setAdding(false)} me={me} />}
     </div>
   )
 }
 
-function VideoModal({ item, canEdit, onClose, me }: { item: CostItem; canEdit: boolean; onClose: () => void; me: string }) {
-  const [url, setUrl] = useState(item.video ?? '')
+/** Video link of an item or a section: preview + edit. */
+function VideoModal({ name, current, canEdit, onClose, onSave, hint }: { name: string; current?: string; canEdit: boolean; onClose: () => void; onSave: (url?: string) => void; hint?: string }) {
+  const [url, setUrl] = useState(current ?? '')
   const embed = videoEmbed(url)
   const valid = !url.trim() || /^https?:\/\//.test(url.trim())
   const save = () => {
     if (!valid) return toast(t('Le lien doit commencer par https://'))
-    updateCostItem(item.id, { video: url.trim() || undefined })
-    logChange(me, 'catalogue', url.trim() ? 'A ajouté une vidéo à « {name} »' : 'A retiré la vidéo de « {name} »', { name: item.name })
+    onSave(url.trim() || undefined)
     toast(url.trim() ? t('Vidéo enregistrée') : t('Vidéo retirée'))
     onClose()
   }
@@ -248,7 +265,7 @@ function VideoModal({ item, canEdit, onClose, me }: { item: CostItem; canEdit: b
     <Modal
       open
       onClose={onClose}
-      title={t('Vidéo — {name}', { name: t(item.name) })}
+      title={t('Vidéo — {name}', { name: t(name) })}
       width="max-w-2xl"
       footer={
         canEdit ? (
@@ -256,7 +273,7 @@ function VideoModal({ item, canEdit, onClose, me }: { item: CostItem; canEdit: b
             <button className="btn btn-sm btn-ghost" onClick={onClose}>
               {t('Annuler')}
             </button>
-            <button className="btn btn-sm btn-primary" disabled={url === (item.video ?? '')} onClick={save}>
+            <button className="btn btn-sm btn-primary" disabled={url === (current ?? '')} onClick={save}>
               {t('Enregistrer')}
             </button>
           </>
@@ -264,6 +281,7 @@ function VideoModal({ item, canEdit, onClose, me }: { item: CostItem; canEdit: b
       }
     >
       <div className="space-y-3">
+        {hint && <p className="text-sm text-ink-mute">{hint}</p>}
         {canEdit && (
           <Field label={t('Lien YouTube ou Vimeo')}>
             <input className="form-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" autoFocus />
@@ -271,7 +289,7 @@ function VideoModal({ item, canEdit, onClose, me }: { item: CostItem; canEdit: b
         )}
         {embed ? (
           <div className="aspect-video rounded-lg overflow-hidden bg-ink">
-            <iframe src={embed} title={t(item.name)} className="w-full h-full" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+            <iframe src={embed} title={t(name)} className="w-full h-full" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
           </div>
         ) : url.trim() ? (
           <div className="rounded-lg bg-sand p-4 text-sm text-ink-mute flex items-center gap-2">

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { NoAccess } from '../components/states'
 import { Page } from '../components/ui'
 import { useAuth } from './AuthContext'
-import type { Permission } from './permissions'
+import { isCrewRole, type Permission } from './permissions'
 
 /** Sends signed-out visitors to /connexion, remembering where they were going. */
 export function RequireAuth({ children }: { children: ReactNode }) {
@@ -37,4 +37,24 @@ export function IfCan({ perm, children }: { perm: Permission | Permission[]; chi
   const { can } = useAuth()
   const ok = Array.isArray(perm) ? perm.some(can) : can(perm)
   return ok ? <>{children}</> : null
+}
+
+/** Home of the field crew view. */
+export const CREW_HOME = '/equipe'
+
+/**
+ * Layout route for the office screens (leads, quotes, clients, agenda, catalogue…): field crew
+ * accounts never see them and are sent to their own home, `/equipe`.
+ */
+export function StaffOnly({ children }: { children?: ReactNode }) {
+  const { user } = useAuth()
+  if (isCrewRole(user)) return <Navigate to={CREW_HOME} replace />
+  return <>{children ?? <Outlet />}</>
+}
+
+/** Layout route for the field crew screens (`/equipe/*`): other roles go back to Aujourd'hui. */
+export function CrewOnly({ children }: { children?: ReactNode }) {
+  const { user } = useAuth()
+  if (!isCrewRole(user)) return <Navigate to="/" replace />
+  return <>{children ?? <Outlet />}</>
 }

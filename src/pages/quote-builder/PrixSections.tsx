@@ -1,10 +1,11 @@
-import { Equal, LoaderCircle, Plus, Sparkles, Upload } from 'lucide-react'
+import { Equal, LoaderCircle, PlayCircle, Plus, Sparkles, Upload } from 'lucide-react'
 import { Field } from '../../components/ui'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, money, pct } from '../../lib/utils'
 import { BuilderSection, ToggleChip } from '../../components/quote-shared'
-import { CAA_RATE } from '../../data/quote-builder'
+import { CAA_LABEL, tierVideo, type QuoteAddon } from '../../data/quote-builder'
+import { tierCatalogueVideo } from '../../pages/catalogue/data'
 import { PhotoGrid } from './PhotosSection'
 import type { Builder } from './useQuoteBuilder'
 
@@ -33,7 +34,7 @@ export function PrixSection({ b }: { b: Builder }) {
             <div className="rounded-lg border border-hairline p-3 space-y-2">
               <label className="flex items-center gap-2 text-sm text-ink">
                 <input type="checkbox" checked={b.caa} onChange={() => b.setCaa(!b.caa)} className="w-4 h-4 accent-[var(--color-primary)]" />
-                {t('Membre CAA-Québec (−{n} %)', { n: Math.round(CAA_RATE * 100) })}
+                {t(CAA_LABEL)}
               </label>
               {b.caa && <input className="form-input h-8 text-sm" value={b.caaNo} onChange={(e) => b.setCaaNo(e.target.value)} placeholder={t('No de membre CAA')} aria-label={t('No de membre CAA')} />}
             </div>
@@ -42,7 +43,7 @@ export function PrixSection({ b }: { b: Builder }) {
             {b.pricing.lines.length > 1 &&
               b.pricing.lines.map((l, i) => (
                 <div key={i} className="flex justify-between gap-2 text-ink-secondary">
-                  <span className="truncate">{t(l.label, { item: l.item ? t(l.item) : '', n: Math.round(CAA_RATE * 100) })}</span>
+                  <span className="truncate">{t(l.label, { item: l.item ? t(l.item) : '' })}</span>
                   <span className="tnum">{money(l.amount)}</span>
                 </div>
               ))}
@@ -89,49 +90,17 @@ export function PrixSection({ b }: { b: Builder }) {
           <Field label={t('Commentaires')}>
             <textarea value={b.comments} onChange={(e) => b.setComments(e.target.value)} rows={3} className="form-input h-auto py-2" placeholder="" />
           </Field>
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="label-caps">{t('Ajout')}</p>
-              <button className="btn btn-xs btn-ghost" onClick={() => b.setAddons((prev) => [...prev, { id: 'n' + prev.length, desc: 'Nouvelle ligne', price: 0, included: false }])}>
-                <Plus className="w-3.5 h-3.5" />
-                {t('Ajouter')}
-              </button>
-            </div>
-            <div className="overflow-x-auto rounded-lg border border-hairline">
-              <table className="w-full min-w-[460px] text-sm">
-                <thead className="bg-sand/60">
-                  <tr>
-                    <th className="th">{t('Description')}</th>
-                    <th className="th text-right">{t('Prix $')}</th>
-                    <th className="th text-center">{t('Inclus')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hairline">
-                  {b.addons.map((a, i) => (
-                    <tr key={a.id}>
-                      <td className="px-4 py-2 text-ink-secondary">{t(a.desc)}</td>
-                      <td className="px-4 py-2 text-right">
-                        <input type="number" value={a.price} onChange={(e) => b.setAddons((prev) => prev.map((x, k) => (k === i ? { ...x, price: Number(e.target.value) } : x)))} className="w-24 h-8 px-2 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary" aria-label={t('Prix {desc}', { desc: t(a.desc) })} />
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        <input type="checkbox" checked={a.included} onChange={() => b.setAddons((prev) => prev.map((x, k) => (k === i ? { ...x, included: !x.included } : x)))} className="w-4 h-4 accent-[var(--color-primary)]" aria-label={t('Inclus : {desc}', { desc: t(a.desc) })} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AddonsTable b={b} />
         </div>
       </div>
       <p className="label-caps mt-6 mb-2">{t('Calendrier des paiements')}</p>
-      <div className="flex gap-1.5 mb-3">
-        <ToggleChip active={b.payMode === 'std'} onClick={() => b.setPayMode('std')}>
-          {t('Standard de la compagnie')}
-        </ToggleChip>
-        <ToggleChip active={b.payMode === 'autre'} onClick={() => b.setPayMode('autre')}>
-          {t('Autre (30 / 70)')}
-        </ToggleChip>
+      <div className="flex flex-wrap gap-1.5 mb-3" role="radiogroup" aria-label={t('Calendrier des paiements')}>
+        {b.scheduleOptions.map((s) => (
+          <ToggleChip key={s.id} active={b.scheduleId === s.id} onClick={() => b.setScheduleId(s.id)}>
+            {t(s.name)}
+            {s.id === b.defaultScheduleId && <span className="text-2xs opacity-70"> · {t('par défaut')}</span>}
+          </ToggleChip>
+        ))}
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {b.schedule.map((step, i) => (
@@ -155,11 +124,23 @@ function TierOptions({ b }: { b: Builder }) {
         {b.tiers.map((tier, i) => {
           const on = b.tier === tier.id
           return (
-            <div key={tier.id} className={cn('flex items-center gap-3 px-3 py-2', on && 'bg-primary-wash')}>
+            <div key={tier.id} className={cn('flex items-start gap-3 px-3 py-2', on && 'bg-primary-wash')}>
               <input type="radio" name="tier" checked={on} onChange={() => b.setTier(tier.id)} className="w-4 h-4 accent-[var(--color-primary)]" aria-label={t(tier.label)} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-ink">{t(tier.label)}</p>
                 <p className="text-2xs text-ink-mute truncate">{t(tier.detail)}</p>
+                <span className="mt-1 flex items-center gap-1.5">
+                  <PlayCircle className={cn('w-3.5 h-3.5 shrink-0', tierVideo(tier) ? 'text-primary-press' : 'text-ink-faint')} />
+                  <input
+                    type="url"
+                    value={tier.video ?? ''}
+                    placeholder={tierCatalogueVideo(tier.id) ?? t('Lien vidéo (facultatif)')}
+                    onChange={(e) => b.setTiers((prev) => prev.map((x, k) => (k === i ? { ...x, video: e.target.value.trim() || undefined } : x)))}
+                    className="flex-1 min-w-0 h-7 px-2 rounded-md border border-hairline-input text-2xs focus:outline-none focus:border-primary"
+                    aria-label={t('Lien vidéo · {desc}', { desc: t(tier.label) })}
+                    title={tier.video ? t('Lien propre à cette soumission') : t('Vide : vidéo du catalogue')}
+                  />
+                </span>
               </div>
               <div className="relative">
                 <input
@@ -176,7 +157,74 @@ function TierOptions({ b }: { b: Builder }) {
           )
         })}
       </div>
-      <p className="text-2xs text-ink-mute mt-1">{t('Le client choisit son option dans le portail; l’option cochée ici est celle du total affiché.')}</p>
+      <p className="text-2xs text-ink-mute mt-1">{t('Le client choisit son option dans le portail; l’option cochée ici est celle du total affiché.')} {t('Vidéo : laissez vide pour utiliser celle du catalogue.')}</p>
+    </div>
+  )
+}
+
+type AddonMode = 'inclus' | 'ajout' | 'option'
+const modeOf = (a: QuoteAddon): AddonMode => (a.optional ? 'option' : a.included ? 'inclus' : 'ajout')
+const withMode = (a: QuoteAddon, m: AddonMode): QuoteAddon => ({ ...a, included: m === 'inclus', optional: m === 'option', chosen: m === 'option' ? !!a.chosen : undefined })
+
+/**
+ * Add-ons: included at no charge, paid add-on, or client option (Gouttières: Fascia and Soffite, which
+ * the client can toggle in the portal; a chosen option joins the price and the work order).
+ */
+function AddonsTable({ b }: { b: Builder }) {
+  const patch = (i: number, fn: (a: QuoteAddon) => QuoteAddon) => b.setAddons((prev) => prev.map((x, k) => (k === i ? fn(x) : x)))
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="label-caps">{t('Ajouts')}</p>
+        <button className="btn btn-xs btn-ghost" onClick={() => b.setAddons((prev) => [...prev, { id: 'n' + Date.now(), desc: 'Nouvelle ligne', price: 0, included: false }])}>
+          <Plus className="w-3.5 h-3.5" />
+          {t('Ajouter')}
+        </button>
+      </div>
+      {b.addons.length === 0 ? (
+        <p className="text-xs text-ink-mute">{t('Aucun ajout.')}</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-hairline">
+          <table className="w-full min-w-[520px] text-sm">
+            <thead className="bg-sand/60">
+              <tr>
+                <th className="th">{t('Description')}</th>
+                <th className="th text-right">{t('Prix $')}</th>
+                <th className="th">{t('Type')}</th>
+                <th className="th text-center">{t('Choisi')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline">
+              {b.addons.map((a, i) => {
+                const mode = modeOf(a)
+                return (
+                  <tr key={a.id}>
+                    <td className="px-4 py-2 text-ink-secondary">{t(a.desc)}</td>
+                    <td className="px-4 py-2 text-right">
+                      <input type="number" value={a.price} onChange={(e) => patch(i, (x) => ({ ...x, price: Number(e.target.value) }))} className="w-24 h-8 px-2 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary" aria-label={t('Prix {desc}', { desc: t(a.desc) })} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <select value={mode} onChange={(e) => patch(i, (x) => withMode(x, e.target.value as AddonMode))} className="form-input h-8 text-sm py-0" aria-label={t('Type : {desc}', { desc: t(a.desc) })}>
+                        <option value="inclus">{t('Inclus sans frais')}</option>
+                        <option value="ajout">{t('Ajout payant')}</option>
+                        <option value="option">{t('Option du client')}</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {mode === 'option' ? (
+                        <input type="checkbox" checked={!!a.chosen} onChange={() => patch(i, (x) => ({ ...x, chosen: !x.chosen }))} className="w-4 h-4 accent-[var(--color-primary)]" aria-label={t('Choisi : {desc}', { desc: t(a.desc) })} />
+                      ) : (
+                        <span className="text-ink-faint">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {b.addons.some((a) => a.optional) && <p className="text-2xs text-ink-mute mt-1">{t('Les options du client s’affichent dans le portail : le client les ajoute ou les retire et le total se met à jour.')}</p>}
     </div>
   )
 }

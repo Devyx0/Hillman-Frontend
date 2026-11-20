@@ -294,7 +294,7 @@ export const sales: Record<string, string> = {
   'Tout sélectionner': 'Select all',
   No: 'No.',
   Client: 'Client',
-  'Rep.': 'Rep',
+  'Repr.': 'Rep',
   Marge: 'Margin',
   'Sélectionner {no}': 'Select {no}',
   automatique: 'automatic',

@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FileQuestion, Phone } from 'lucide-react'
 import { CompanyLogo } from '../../components/ui'
 import { ErrorState } from '../../components/states'
-import { COMPANIES, clientById, companyById, fullName, type CompanyId } from '../../data/mock'
+import { COMPANIES, clientById, clientLang, companyById, fullName, type CompanyId } from '../../data/mock'
 import { quoteByNo, request, useStore, type QuoteRecord } from '../../data/store'
 import { COMPANY_PROFILES } from '../catalogue/data'
-import { t } from '../../i18n'
-import { LanguageSwitch } from '../../i18n/LanguageProvider'
+import { t, type Lang } from '../../i18n'
+import { LanguageSwitch, useLanguage } from '../../i18n/LanguageProvider'
 import { cn } from '../../lib/utils'
 
 type LoadState = 'loading' | 'error' | 'ready'
@@ -19,6 +19,7 @@ type LoadState = 'loading' | 'error' | 'ready'
  */
 export function usePortalQuote(no?: string) {
   useStore()
+  usePortalLanguage(no)
   const [params] = useSearchParams()
   const fail = params.get('demo') === 'erreur'
   const [state, setState] = useState<LoadState>('loading')
@@ -39,6 +40,51 @@ export function usePortalQuote(no?: string) {
   const quote = state === 'ready' ? quoteByNo(no) : undefined
   const client = quote ? clientById(quote.clientId) : undefined
   return { state, quote, client, retry }
+}
+
+// ── Portal language ──────────────────────────────────────────────────────────
+const STORAGE_KEY = 'hillman.lang'
+/** Quote links already opened in this session (their language was set once; the switch then rules). */
+const languageSet = new Set<string>()
+/** The staff UI language before the first portal link of the session switched it (see restoreStaffLanguage). */
+let staffLang: Lang | null = null
+
+/**
+ * The portal opens in the CLIENT's language (`clientLang(client)`), whatever the language of the
+ * device; the EN / FR switch in the header still works afterwards. The language the rep saved for the
+ * office app is kept in storage, so previewing a client's portal doesn't change the rep's own setting.
+ */
+function usePortalLanguage(no?: string) {
+  const { lang, setLang } = useLanguage()
+  const q = quoteByNo(no)
+  const want = q ? clientLang(clientById(q.clientId)) : undefined
+  useLayoutEffect(() => {
+    if (!no || !want || languageSet.has(no)) return
+    languageSet.add(no)
+    if (want === lang) return
+    let saved: string | null = null
+    try {
+      saved = localStorage.getItem(STORAGE_KEY)
+    } catch {
+      /* storage unavailable */
+    }
+    staffLang ??= lang
+    setLang(want)
+    try {
+      if (saved) localStorage.setItem(STORAGE_KEY, saved)
+    } catch {
+      /* storage unavailable */
+    }
+  }, [no, want, lang, setLang])
+}
+
+/** Back to the office app from the portal (tablet hand-back): restore the rep's own language. */
+export function useRestoreStaffLanguage() {
+  const { lang, setLang } = useLanguage()
+  return () => {
+    if (staffLang && staffLang !== lang) setLang(staffLang)
+    staffLang = null
+  }
 }
 
 /** Company identity for the portal (logo, phone, RBQ, address). */

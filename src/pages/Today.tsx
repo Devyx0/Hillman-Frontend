@@ -8,8 +8,8 @@ import { useAuth } from '../auth/AuthContext'
 import { firstName } from '../auth/session'
 import { useStore } from '../data/store'
 import { openCreate } from '../lib/create'
-import { APPOINTMENTS, LEADS, ME, QUOTES, REPS, clientById, companyById, fullName, repById } from '../data/mock'
-import { getLang, t, tx } from '../i18n'
+import { APPOINTMENTS, LEADS, ME, QUOTES, REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
+import { getLang, inLang, t, tx } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, formatHour, money } from '../lib/utils'
 
@@ -121,7 +121,7 @@ export default function Today() {
                     size="xs"
                     variant="quiet"
                     label={t('Rappel')}
-                    ctx={{ first: clientById(a.clientId)!.first, name: fullName(clientById(a.clientId)!), date: t("aujourd'hui à {time}", { time: formatHour(a.start) }) }}
+                    ctx={{ first: clientById(a.clientId)!.first, name: fullName(clientById(a.clientId)!), lang: clientLang(clientById(a.clientId)), date: inLang(clientLang(clientById(a.clientId)), () => t("aujourd'hui à {time}", { time: formatHour(a.start) })) }}
                   />
                 )}
               </li>
@@ -154,7 +154,7 @@ export default function Today() {
                   <button className="p-2 rounded-md text-ink-mute hover:bg-sand hover:text-ink" aria-label={t('Appeler')} onClick={() => toast(t('Appel vers {phone}', { phone: client.phone }))}>
                     <Phone className="w-4 h-4" />
                   </button>
-                  <MessageButton kind="sms" size="xs" variant="quiet" label={t('Texto')} ctx={{ first: client.first, name: fullName(client), quoteNo: q.no, company: companyById(q.company).name }} />
+                  <MessageButton kind="sms" size="xs" variant="quiet" label={t('Texto')} ctx={{ first: client.first, name: fullName(client), quoteNo: q.no, company: companyById(q.company).name, lang: clientLang(client) }} />
                 </li>
               )
             })}

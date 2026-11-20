@@ -1,11 +1,11 @@
 /** Paramètres → Numérotation (quote number prefix / next number) and Calendriers de paiement. */
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, CalendarClock, Hash, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, CalendarClock, Hash, Plus, Star, Trash2 } from 'lucide-react'
 import { Card, CompanyBadge, Field } from '../../../components/ui'
 import { Notice, confirmAction } from '../../../components/states'
 import { useAuth } from '../../../auth/AuthContext'
 import { COMPANIES, QUOTES, type CompanyId } from '../../../data/mock'
-import { NUMBERING, PAYMENT_SCHEDULES, saveNumbering, savePaymentSchedule, type PaymentStep } from '../../../data/settings'
+import { DEFAULT_PAYMENT_SCHEDULE, NUMBERING, PAYMENT_SCHEDULE_OPTIONS, saveNumbering, savePaymentSchedules, type PaymentSchedule, type PaymentStep } from '../../../data/settings'
 import { useStore } from '../../../data/store'
 import { toast } from '../../../lib/toast'
 import { cn, money, pct } from '../../../lib/utils'
@@ -73,21 +73,38 @@ function NumberingCard({ company }: { company: CompanyId }) {
 }
 
 // ── Payment schedules ───────────────────────────────────────────────────────
+const cloneList = (c: CompanyId) => PAYMENT_SCHEDULE_OPTIONS[c].map((x) => ({ ...x, steps: x.steps.map((st) => ({ ...st })) }))
+
+/**
+ * Paramètres → Calendriers de paiement: each company has one or more named schedules and one default
+ * (used by new quotes; the rep can pick another one on the quote, Prix tab).
+ */
 export function PaymentSchedulesTab() {
   useStore()
   const { user } = useAuth()
   const [company, setCompany] = useScopeCompany()
-  const [steps, setSteps] = useState<PaymentStep[]>(() => PAYMENT_SCHEDULES[company].map((s) => ({ ...s })))
+  const [list, setList] = useState<PaymentSchedule[]>(() => cloneList(company))
+  const [defaultId, setDefaultId] = useState(DEFAULT_PAYMENT_SCHEDULE[company])
+  const [selId, setSelId] = useState(DEFAULT_PAYMENT_SCHEDULE[company])
+  const sel = list.find((x) => x.id === selId) ?? list[0]
+  const steps = sel.steps
   const total = steps.reduce((n, s) => n + (Number(s.pct) || 0), 0)
-  const valid = Math.abs(total - 100) < 0.001 && steps.every((s) => s.label.trim() && s.pct > 0)
-  const dirty = JSON.stringify(steps) !== JSON.stringify(PAYMENT_SCHEDULES[company])
+  const stepsValid = (st: PaymentStep[]) => Math.abs(st.reduce((n, s) => n + (Number(s.pct) || 0), 0) - 100) < 0.001 && st.every((s) => s.label.trim() && s.pct > 0)
+  const valid = list.every((x) => x.name.trim() && stepsValid(x.steps))
+  const dirty = JSON.stringify(list) !== JSON.stringify(PAYMENT_SCHEDULE_OPTIONS[company]) || defaultId !== DEFAULT_PAYMENT_SCHEDULE[company]
   const example = 20000
 
+  const reset = (c: CompanyId) => {
+    setList(cloneList(c))
+    setDefaultId(DEFAULT_PAYMENT_SCHEDULE[c])
+    setSelId(DEFAULT_PAYMENT_SCHEDULE[c])
+  }
   const switchTo = async (c: CompanyId) => {
     if (dirty && !(await confirmAction({ title: t('Abandonner les modifications?') }))) return
     setCompany(c)
-    setSteps(PAYMENT_SCHEDULES[c].map((s) => ({ ...s })))
+    reset(c)
   }
+  const setSteps = (fn: (l: PaymentStep[]) => PaymentStep[]) => setList((all) => all.map((x) => (x.id === sel.id ? { ...x, steps: fn(x.steps) } : x)))
   const patch = (i: number, p: Partial<PaymentStep>) => setSteps((l) => l.map((s, k) => (k === i ? { ...s, ...p } : s)))
   const move = (i: number, dir: number) =>
     setSteps((l) => {
@@ -101,6 +118,17 @@ export function PaymentSchedulesTab() {
     if (!(await confirmAction({ title: t('Retirer l’étape « {name} »?', { name: t(steps[i].label) }), confirmLabel: t('Retirer'), danger: true }))) return
     setSteps((l) => l.filter((_, k) => k !== i))
   }
+  const addSchedule = () => {
+    const id = `${company}-${Date.now()}`
+    setList((all) => [...all, { id, name: t('Nouveau calendrier'), steps: [{ label: t('Fin des travaux'), pct: 100 }] }])
+    setSelId(id)
+  }
+  const removeSchedule = async () => {
+    if (sel.id === defaultId || list.length <= 1) return
+    if (!(await confirmAction({ title: t('Supprimer le calendrier « {name} »?', { name: t(sel.name) }), body: t('Les soumissions qui l’utilisent reprendront le calendrier par défaut.'), confirmLabel: t('Supprimer'), danger: true }))) return
+    setList((all) => all.filter((x) => x.id !== sel.id))
+    setSelId(defaultId)
+  }
 
   return (
     <div className="space-y-4">
@@ -108,10 +136,35 @@ export function PaymentSchedulesTab() {
         <Field label={t('Compagnie')}>
           <CompanySelect value={company} onChange={switchTo} />
         </Field>
-        <Intro>{t('Calendrier proposé par défaut sur les nouvelles soumissions. Le représentant peut l’ajuster sur une soumission.')}</Intro>
+        <Intro>{t('Calendriers offerts sur les soumissions de la compagnie. Celui par défaut s’applique aux nouvelles soumissions; le représentant peut en choisir un autre sur la soumission (onglet Prix).')}</Intro>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t('Calendriers de paiement')}>
+        {list.map((x) => (
+          <button key={x.id} role="tab" aria-selected={x.id === sel.id} onClick={() => setSelId(x.id)} className={cn('h-8 px-3 rounded-full text-xs font-semibold border inline-flex items-center gap-1.5', x.id === sel.id ? 'bg-ink text-white border-ink' : 'bg-white border-hairline-strong text-ink-secondary hover:bg-sand')}>
+            {x.id === defaultId && <Star className="w-3 h-3 fill-current" />}
+            {t(x.name) || '—'}
+          </button>
+        ))}
+        <button className="btn btn-xs btn-ghost" onClick={addSchedule}>
+          <Plus className="w-3.5 h-3.5" />
+          {t('Calendrier')}
+        </button>
       </div>
       <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
         <Card title={t('Étapes de paiement')} icon={CalendarClock} pad={false}>
+          <div className="flex flex-wrap items-end gap-3 px-4 py-3 border-b border-hairline">
+            <Field label={t('Nom du calendrier')} className="flex-1 min-w-[200px]">
+              <input className="form-input h-9" value={t(sel.name)} onChange={(e) => setList((all) => all.map((x) => (x.id === sel.id ? { ...x, name: e.target.value } : x)))} />
+            </Field>
+            <label className="flex items-center gap-2 text-sm h-9">
+              <input type="radio" name="default-schedule" checked={sel.id === defaultId} onChange={() => setDefaultId(sel.id)} className="w-4 h-4 accent-[var(--color-primary)]" />
+              {t('Par défaut pour les nouvelles soumissions')}
+            </label>
+            <button className="btn btn-sm btn-ghost" disabled={sel.id === defaultId || list.length <= 1} onClick={removeSchedule} title={sel.id === defaultId ? t('Le calendrier par défaut ne peut pas être supprimé') : undefined}>
+              <Trash2 className="w-4 h-4" />
+              {t('Supprimer')}
+            </button>
+          </div>
           <ul className="divide-y divide-hairline">
             {steps.map((s, i) => (
               <li key={i} className="flex items-center gap-2 px-4 py-2.5">
@@ -138,22 +191,22 @@ export function PaymentSchedulesTab() {
               <Plus className="w-4 h-4" />
               {t('Étape')}
             </button>
-            <span className={cn('ml-auto text-sm font-semibold tnum', valid ? 'text-tone-good-ink' : 'text-tone-critical-ink')}>{t('Total : {n}', { n: pct(total, 1) })}</span>
+            <span className={cn('ml-auto text-sm font-semibold tnum', stepsValid(steps) ? 'text-tone-good-ink' : 'text-tone-critical-ink')}>{t('Total : {n}', { n: pct(total, 1) })}</span>
           </div>
           {!valid && (
             <div className="px-4 pb-3 bg-sand/40">
-              <Notice tone="critical">{Math.abs(total - 100) >= 0.001 ? t('Le total doit faire 100 % (actuellement {n}).', { n: pct(total, 1) }) : t('Chaque étape doit avoir un nom et un pourcentage.')}</Notice>
+              <Notice tone="critical">{!stepsValid(steps) && Math.abs(total - 100) >= 0.001 ? t('Le total doit faire 100 % (actuellement {n}).', { n: pct(total, 1) }) : t('Chaque calendrier doit avoir un nom, et chaque étape un nom et un pourcentage, pour un total de 100 %.')}</Notice>
             </div>
           )}
           <div className="flex justify-end gap-2 p-3 border-t border-hairline">
-            <button className="btn btn-sm btn-ghost" disabled={!dirty} onClick={() => setSteps(PAYMENT_SCHEDULES[company].map((s) => ({ ...s })))}>
+            <button className="btn btn-sm btn-ghost" disabled={!dirty} onClick={() => reset(company)}>
               {t('Annuler')}
             </button>
             <button
               className="btn btn-sm btn-primary"
               disabled={!dirty || !valid}
               onClick={() => {
-                savePaymentSchedule(company, steps)
+                savePaymentSchedules(company, list, defaultId)
                 logChange(user?.name ?? '—', 'parametres', 'A modifié le calendrier de paiement ({name})', { name: COMPANIES.find((c) => c.id === company)!.name })
                 toast(t('Calendrier de paiement enregistré'))
               }}

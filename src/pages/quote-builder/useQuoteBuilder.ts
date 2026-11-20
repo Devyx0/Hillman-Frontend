@@ -1,31 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import type { MessageCtx, MessageKind } from '../../components/messaging'
-import { APPOINTMENTS, clientById, companyById, fullName, repById, type Client, type MaterialLine } from '../../data/mock'
-import { PAYMENT_SCHEDULES } from '../../data/settings'
+import { APPOINTMENTS, clientById, clientLang, companyById, fullName, repById, type Client, type MaterialLine } from '../../data/mock'
+import { PAYMENT_SCHEDULE_OPTIONS, defaultPaymentSchedule, paymentScheduleById } from '../../data/settings'
 import { updateQuote, useStore, type QuoteRecord } from '../../data/store'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { GST, QST, money, pct } from '../../lib/utils'
 import {
   BUILDER_SECTIONS,
-  CAA_RATE,
   CATALOG_EXTRAS,
   SAMPLE_AI_DESCRIPTION,
   SECTIONS_BY_COMPANY,
   TARGET_MARGINS,
+  beforeCaa,
   clauseValues,
-  costsWithTier,
+  depositStep,
   draftPricing,
+  draftSchedule,
+  formGutterLines,
   getDraft,
   gutterHasTiers,
-  gutterLines,
   gutterTotals,
   lineSell,
   missingPhotos,
+  pricedAddons,
   quoteDefaults,
   saveDraft,
   syncQuoteAmounts,
+  withGutterCosts,
   type GutterForm,
   type QuoteDraft,
   type SectionId,
@@ -71,11 +74,14 @@ export function useQuoteBuilder(quote: QuoteRecord) {
   const hasSection = (id: SectionId) => sections.some((s) => s.id === id)
 
   // ── Draft (persisted per quote) ──
-  const [draft, setDraft] = useState<QuoteDraft>(() => getDraft(quote))
+  const [draft, setDraftRaw] = useState<QuoteDraft>(() => getDraft(quote))
+  /** Every change goes through `withGutterCosts`: Gouttières quantities follow the form, tier, add-ons and overrides. */
+  const setDraft = (v: Updater<QuoteDraft>) => setDraftRaw((d) => withGutterCosts(quote, typeof v === 'function' ? v(d) : v))
   const set =
     <K extends keyof QuoteDraft>(key: K) =>
     (v: Updater<QuoteDraft[K]>) =>
       setDraft((d) => ({ ...d, [key]: typeof v === 'function' ? (v as (p: QuoteDraft[K]) => QuoteDraft[K])(d[key]) : v }))
+  /** Price-tab add-ons: a chosen optional add-on also changes the work order (handled by withGutterCosts). */
   const first = useRef(true)
   useEffect(() => {
     saveDraft(quote.id, draft)
@@ -100,7 +106,7 @@ export function useQuoteBuilder(quote: QuoteRecord) {
   const [actualsOpen, setActualsOpen] = useState(false)
   const [targetTotal, setTargetTotal] = useState('')
 
-  const { dims, checked, expertises, costs, price, discount, addons, comments, payMode, warranties, note, attachments, actuals } = draft
+  const { dims, checked, expertises, costs, price, discount, addons, comments, warranties, note, attachments, actuals } = draft
 
   // ── Totals (one source: draftPricing — see the amount rule in data/quote-builder.ts) ──
   const pricing = draftPricing(quote, draft)
@@ -110,26 +116,41 @@ export function useQuoteBuilder(quote: QuoteRecord) {
   const profit = pricing.profit
   const marginPct = pricing.margin
   const suggested = lineSell(costs)
-  const paidAddons = addons.filter((a) => !a.included && a.price > 0)
+  const paidAddons = pricedAddons(addons)
   const labour = costs.find((l) => /main/i.test(l.cat))
   const labourMargin = labour && labour.sell ? ((labour.sell - labour.cost) / labour.sell) * 100 : 100
   const finalAmount = actuals.final || subtotal
   const actualCosts = actuals.invoices.reduce((n, i) => n + (Number(i.amount) || 0), 0) + actuals.conteneurs + actuals.salaires + actuals.frais
   const actualProfit = finalAmount - actualCosts
   const actualMargin = finalAmount ? (actualProfit / finalAmount) * 100 : 0
-  const schedule = payMode === 'std' ? PAYMENT_SCHEDULES[quote.company] : [
-    { label: 'Dépôt', pct: 30 },
-    { label: 'Fin des travaux', pct: 70 },
-  ]
+  // Payment schedule: the one picked on the quote, else the company default (Paramètres → Calendriers de paiement).
+  const scheduleOptions = PAYMENT_SCHEDULE_OPTIONS[quote.company]
+  const scheduleId = paymentScheduleById(quote.company, draft.scheduleId).id
+  const defaultScheduleId = defaultPaymentSchedule(quote.company).id
+  const schedule = draftSchedule(quote.company, draft, total)
+  const deposit = depositStep(schedule)
+  // Gouttières: quantities from the form alone, to show which rows the rep overrode.
+  const formLines = quote.company === 'sg' ? formGutterLines(quote, draft) : []
   const missing = missingPhotos(draft)
   const values = clauseValues(draft)
 
   // ── Setters ──
   const setGutter = (g: GutterForm) => {
-    setDraft((d) => ({ ...d, gutter: g, costs: tiered ? gutterLines(g, d.tier) : d.costs }))
+    setDraft((d) => ({ ...d, gutter: g }))
     if (g.size !== quote.gutterSize) updateQuote(quote.id, { gutterSize: g.size })
   }
-  const setTier = (tier: TierId) => setDraft((d) => ({ ...d, tier, costs: costsWithTier(d.costs, tier, gutterTotals(d.gutter).gutter) }))
+  const setTier = (tier: TierId) => setDraft((d) => ({ ...d, tier }))
+  /** Quantités: override a form-derived quantity (same value as the form = no override). */
+  const setQty = (item: string, qty: number) =>
+    setDraft((d) => {
+      const next = { ...d.qtyOverrides }
+      const derived = formGutterLines(quote, d).find((l) => l.item === item)?.qty
+      if (derived === qty) delete next[item]
+      else next[item] = qty
+      return { ...d, qtyOverrides: next }
+    })
+  /** "Rétablir les valeurs du formulaire": drop every manual override. */
+  const resetQuantities = () => setDraft((d) => ({ ...d, qtyOverrides: {} }))
   const setRepId = (id: string) => updateQuote(quote.id, { repId: id })
 
   // ── Actions ──
@@ -155,7 +176,7 @@ export function useQuoteBuilder(quote: QuoteRecord) {
       return
     }
     let beforeTax = target / (1 + GST + QST)
-    if (quote.company === 'sg' && draft.caa) beforeTax = beforeTax / (1 - CAA_RATE)
+    if (quote.company === 'sg' && draft.caa) beforeTax = beforeCaa(beforeTax)
     const next = Math.round((beforeTax - optionsTotal + discount) * 100) / 100
     set('price')(next)
     toast(t('Prix calculé : {price} pour un total de {total}', { price: money(next), total: money(target) }))
@@ -219,7 +240,7 @@ export function useQuoteBuilder(quote: QuoteRecord) {
     }, 1300)
   }
 
-  const msgCtx: MessageCtx & { amount: string } = { name: fullName(client), first: client.first, quoteNo: quote.no, company: company.name, rep: rep.first, amount: money((total * (schedule[0]?.pct ?? 15)) / 100) }
+  const msgCtx: MessageCtx & { amount: string } = { name: fullName(client), first: client.first, quoteNo: quote.no, company: company.name, rep: rep.first, amount: money((total * (schedule[0]?.pct ?? 15)) / 100), lang: clientLang(client) }
   const appointments = APPOINTMENTS.filter((a) => a.quoteNo === quote.no || (isDemo && a.clientId === client.id))
   const costCats = [...new Set(costs.map((l) => l.cat))]
   const filteredScope = scope.map((s) => ({ ...s, lines: s.lines.filter((l) => !scopeQuery || t(l).toLowerCase().includes(scopeQuery.toLowerCase())) })).filter((s) => s.lines.length)
@@ -245,7 +266,8 @@ export function useQuoteBuilder(quote: QuoteRecord) {
     workKind: draft.workKind, setWorkKind: set('workKind'), dims, setDims: set('dims'), roofNote: draft.roofNote, setRoofNote: set('roofNote'),
     checked, setChecked: set('checked'), openGroups, setOpenGroups, scopeQuery, setScopeQuery, templateMenu, setTemplateMenu,
     expertises, setExpertises: set('expertises'), costs, setCosts: set('costs'), price, setPrice: set('price'), discount, setDiscount: set('discount'),
-    addons, setAddons: set('addons'), comments, setComments: set('comments'), payMode, setPayMode: set('payMode'),
+    addons, setAddons: set('addons'), comments, setComments: set('comments'),
+    scheduleOptions, scheduleId, defaultScheduleId, setScheduleId: set('scheduleId'), deposit, formLines, setQty, resetQuantities, qtyOverrides: draft.qtyOverrides,
     warranties, setWarranties: set('warranties'), note, setNote: set('note'), rewriting,
     gutter: draft.gutter, setGutter, tier: draft.tier, setTier, tiers: draft.tiers, setTiers: set('tiers'), caa: draft.caa, setCaa: set('caa'), caaNo: draft.caaNo, setCaaNo: set('caaNo'),
     description: draft.description, setDescription: set('description'), renoArea: draft.renoArea, setRenoArea: set('renoArea'), renoDays: draft.renoDays, setRenoDays: set('renoDays'),

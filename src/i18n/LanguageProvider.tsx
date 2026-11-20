@@ -2,7 +2,7 @@ import { createContext, Fragment, useContext, useState, type ReactNode } from 'r
 import { cn } from '../lib/utils'
 import { getLang, setLang as storeLang, type Lang } from './index'
 
-const LanguageContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({ lang: 'en', setLang: () => {} })
+const LanguageContext = createContext<{ lang: Lang; setLang: (l: Lang) => void }>({ lang: 'fr', setLang: () => {} })
 
 /**
  * Holds the active language. Children are re-mounted when it changes so every

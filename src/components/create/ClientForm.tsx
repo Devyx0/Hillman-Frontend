@@ -9,7 +9,7 @@ import { registerClientCompany } from '../../data/clients'
 import { COMPANIES, companyById, type Client, type CompanyId } from '../../data/mock'
 import { PRIVACY, activeSources } from '../../data/settings'
 import { addClient, findDuplicateClients, useStore } from '../../data/store'
-import { t } from '../../i18n'
+import { langName, t, type Lang } from '../../i18n'
 import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
 import { cn } from '../../lib/utils'
@@ -52,6 +52,8 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
     type: 'Résidentiel',
     source: prefill.source ?? sources[0] ?? 'Autre',
     consentSms: false,
+    // Language for everything sent to the client (portal, PDF, emails, texts). French by default.
+    language: 'fr' as Lang,
   })
   const [tried, setTried] = useState(false)
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((prev) => ({ ...prev, [k]: v }))
@@ -85,6 +87,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
       type: f.type,
       source: f.source,
       consentSms: f.consentSms,
+      language: f.language,
     })
     registerClientCompany(c.id, company)
     toast(t('Client créé : {name}', { name: `${c.first} ${c.last}`.trim() }))
@@ -157,6 +160,18 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
             <input className="form-input uppercase" value={f.postal} onChange={(e) => set('postal', e.target.value)} placeholder="G1H 3K7" aria-invalid={tried && !!errors.postal} />
             {err(errors.postal)}
           </Field>
+          <fieldset className="sm:col-span-2 flex flex-col gap-1 min-w-0">
+            <legend className="label-caps mb-1">{t('Langue de communication')}</legend>
+            <div className="flex flex-wrap gap-2">
+              {(['fr', 'en'] as const).map((l) => (
+                <label key={l} className={cn('h-9 px-3 rounded-md border inline-flex items-center gap-2 text-sm cursor-pointer', f.language === l ? 'border-primary bg-primary-wash text-ink font-semibold' : 'border-hairline-input text-ink-secondary hover:bg-sand')}>
+                  <input type="radio" name="client-language" value={l} checked={f.language === l} onChange={() => set('language', l)} className="accent-[var(--color-primary)]" />
+                  {langName(l)}
+                </label>
+              ))}
+            </div>
+            <span className="text-2xs text-ink-mute">{t('Portail, soumissions, courriels et textos seront envoyés dans cette langue.')}</span>
+          </fieldset>
           <Field label={t('Source')} className="sm:col-span-2">
             <select className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
               {!sources.includes(f.source) && <option value={f.source}>{t(f.source)}</option>}

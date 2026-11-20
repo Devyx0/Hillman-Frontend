@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, BadgePercent, CalendarClock, CalendarPlus, Check, ChevronDown, Download, FileX, Hammer, Lock, Mail, MessageSquare, PenLine, Phone, Tablet, Wallet, X } from 'lucide-react'
+import { ArrowRight, BadgePercent, CalendarClock, CalendarPlus, Check, ChevronDown, Download, FileX, Hammer, Lock, Mail, MessageSquare, PenLine, Phone, Plus, Tablet, Wallet, X } from 'lucide-react'
 import { RepAvatar } from '../components/ui'
 import { Notice } from '../components/states'
 import { companyById, fullName, repById, type Client } from '../data/mock'
@@ -10,9 +10,12 @@ import { toast } from '../lib/toast'
 import { cn, money } from '../lib/utils'
 import { locale, t } from '../i18n'
 import { PortalSection, SignaturePad, TermsAccordion } from './portal/parts'
+import { CAA_LABEL, tierVideo } from '../data/quote-builder'
 import {
-  CAA_RATE,
   SIGNED_STATUSES,
+  chosenOptions,
+  depositStep,
+  setAddonChoice,
   canCancel,
   cancellationDeadline,
   paymentSchedule,
@@ -27,8 +30,8 @@ import {
   validUntil,
   type Pricing,
 } from './portal/pricing'
-import { PortalError, PortalFooter, PortalHeader, PortalNotFound, PortalSkeleton, formatSignedAt, usePortalQuote } from './portal/shell'
-import { PaymentList, PriceTable } from './portal/blocks'
+import { PortalError, PortalFooter, PortalHeader, PortalNotFound, PortalSkeleton, formatSignedAt, usePortalQuote, useRestoreStaffLanguage } from './portal/shell'
+import { PaymentList, PriceTable, VideoLink } from './portal/blocks'
 
 type Step = 'handoff' | 'review' | 'sign' | 'refuse'
 
@@ -171,20 +174,17 @@ function PortalQuote({ q, client, tablet }: { q: QuoteRecord; client: Client; ta
                 {pricing.tiers.map((tier) => {
                   const on = pricing.tier?.id === tier.id
                   return (
-                    <button
-                      key={tier.id}
-                      role="radio"
-                      aria-checked={on}
-                      onClick={() => setChoice(q, { tier: tier.id })}
-                      className={cn('text-left rounded-xl border p-3.5 transition-colors', on ? 'border-primary bg-primary-wash ring-1 ring-primary' : 'border-hairline-strong bg-white hover:bg-sand')}
-                    >
-                      <span className="flex items-start justify-between gap-2">
-                        <span className={cn('font-semibold', big ? 'text-md' : 'text-sm')}>{t(tier.label)}</span>
-                        <span className={cn('w-5 h-5 rounded-full border flex items-center justify-center shrink-0', on ? 'bg-primary border-primary text-white' : 'border-hairline-strong')}>{on && <Check className="w-3 h-3" />}</span>
-                      </span>
-                      <span className="block text-xs text-ink-mute mt-1">{t(tier.detail)}</span>
-                      <span className="block text-sm font-semibold tnum mt-2">{tier.price ? `+ ${money(tier.price)}` : t('Inclus')}</span>
-                    </button>
+                    <div key={tier.id} className={cn('rounded-xl border transition-colors flex flex-col', on ? 'border-primary bg-primary-wash ring-1 ring-primary' : 'border-hairline-strong bg-white hover:bg-sand')}>
+                      <button role="radio" aria-checked={on} onClick={() => setChoice(q, { tier: tier.id })} className="text-left p-3.5 pb-2 flex-1">
+                        <span className="flex items-start justify-between gap-2">
+                          <span className={cn('font-semibold', big ? 'text-md' : 'text-sm')}>{t(tier.label)}</span>
+                          <span className={cn('w-5 h-5 rounded-full border flex items-center justify-center shrink-0', on ? 'bg-primary border-primary text-white' : 'border-hairline-strong')}>{on && <Check className="w-3 h-3" />}</span>
+                        </span>
+                        <span className="block text-xs text-ink-mute mt-1">{t(tier.detail)}</span>
+                        <span className="block text-sm font-semibold tnum mt-2">{tier.price ? `+ ${money(tier.price)}` : t('Inclus')}</span>
+                      </button>
+                      {tierVideo(tier) && <VideoLink url={tierVideo(tier)!} title={t(tier.label)} className="px-3.5 pb-3" />}
+                    </div>
                   )
                 })}
               </div>
@@ -194,10 +194,10 @@ function PortalQuote({ q, client, tablet }: { q: QuoteRecord; client: Client; ta
                   <span className="min-w-0">
                     <span className={cn('flex items-center gap-1.5 font-semibold', big ? 'text-md' : 'text-sm')}>
                       <BadgePercent className="w-4 h-4 text-tone-good" />
-                      {t('Membre CAA')}
+                      {t(CAA_LABEL)}
                     </span>
                     <span className="block text-xs text-ink-mute mt-0.5">
-                      {t('Rabais de {n} % sur le prix avant taxes pour les membres CAA-Québec. La carte de membre valide sera vérifiée le jour des travaux.', { n: CAA_RATE * 100 })}
+                      {t('Rabais de 3 % sur le prix avant taxes (maximum 100 $) pour les membres CAA-Québec. Les taxes sont calculées sur le prix réduit. La carte de membre valide sera vérifiée le jour des travaux.')}
                     </span>
                   </span>
                   {choices.caa && <span className="ml-auto text-sm font-semibold tnum text-tone-good-ink whitespace-nowrap">− {money(pricing.caaDiscount)}</span>}
@@ -208,6 +208,33 @@ function PortalQuote({ q, client, tablet }: { q: QuoteRecord; client: Client; ta
                     <input value={choices.caaNo ?? ''} onChange={(e) => setChoice(q, { caaNo: e.target.value })} inputMode="numeric" className="form-input max-w-xs" />
                   </label>
                 )}
+              </div>
+            </PortalSection>
+          )}
+
+          {choices.options.length > 0 && (
+            <PortalSection title={t('Ajouts optionnels')} kicker={t('Options')}>
+              <p className="text-sm text-ink-mute -mt-2 mb-4">{t('Ajoutez ou retirez ces travaux : le prix total se met à jour.')}</p>
+              <div className="grid sm:grid-cols-2 gap-2.5">
+                {choices.options.map((a) => (
+                  <button
+                    key={a.id}
+                    role="switch"
+                    aria-checked={!!a.chosen}
+                    onClick={() => setAddonChoice(q.id, a.id, !a.chosen)}
+                    className={cn('text-left rounded-xl border p-3.5 transition-colors', a.chosen ? 'border-primary bg-primary-wash ring-1 ring-primary' : 'border-hairline-strong bg-white hover:bg-sand')}
+                  >
+                    <span className="flex items-start justify-between gap-2">
+                      <span className={cn('font-semibold', big ? 'text-md' : 'text-sm')}>{t(a.desc)}</span>
+                      <span className={cn('w-5 h-5 rounded-md border flex items-center justify-center shrink-0', a.chosen ? 'bg-primary border-primary text-white' : 'border-hairline-strong')}>{a.chosen ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-ink-mute" />}</span>
+                    </span>
+                    <span className="block text-xs text-ink-mute mt-1">{t(a.addonId === 'soffit' ? 'Soffite ventilé en aluminium sur toute la longueur des gouttières' : a.addonId === 'fascia' ? 'Fascia recouvert d’aluminium agencé sur toute la longueur des gouttières' : a.desc)}</span>
+                    <span className="block text-sm font-semibold tnum mt-2">
+                      + {money(a.price)}
+                      {a.chosen && <span className="ml-2 text-2xs font-semibold text-tone-good-ink">{t('Ajouté')}</span>}
+                    </span>
+                  </button>
+                ))}
               </div>
             </PortalSection>
           )}
@@ -351,6 +378,7 @@ function PortalQuote({ q, client, tablet }: { q: QuoteRecord; client: Client; ta
             <div className="bg-white rounded-2xl shadow-elevated p-5">
               <p className="label-caps">{t('Total')}</p>
               <p className="text-3xl font-semibold tnum tracking-tight mt-1">{money(pricing.total)}</p>
+              {pricing.caaDiscount > 0 && <p className="text-xs font-semibold text-tone-good-ink tnum">{t('Rabais CAA inclus : −{amount}', { amount: money(pricing.caaDiscount) })}</p>}
               <p className="text-xs text-ink-mute">{t("taxes incluses · valide jusqu'au {date}", { date: validUntil(q).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) })}</p>
               {step !== 'sign' && (
                 <button onClick={() => goTo('sign', 'signer')} className="btn btn-lg btn-primary w-full mt-5">
@@ -376,6 +404,7 @@ function PortalQuote({ q, client, tablet }: { q: QuoteRecord; client: Client; ta
             <div className="min-w-0">
               <p className="text-2xs text-ink-mute">{t('Total · taxes incluses')}</p>
               <p className="text-lg font-semibold tnum leading-tight">{money(pricing.total)}</p>
+              {pricing.caaDiscount > 0 && <p className="text-2xs font-semibold text-tone-good-ink tnum">{t('Rabais CAA inclus : −{amount}', { amount: money(pricing.caaDiscount) })}</p>}
               {step === 'review' && (
                 <button onClick={() => goTo('refuse', 'refuser')} className="text-2xs text-ink-mute underline underline-offset-2">
                   {t('Refuser')}
@@ -478,6 +507,7 @@ function HandOffPanel({ q, client, onStart }: { q: QuoteRecord; client: Client; 
 
 /** Tablet mode, after signing: give the device back to the rep. */
 function HandBackPanel({ q, client, total }: { q: QuoteRecord; client: Client; total: number }) {
+  const restore = useRestoreStaffLanguage()
   const sig = signatureOf(q, fullName(client))
   const at = formatSignedAt(sig.at, locale())
   const rep = repById(q.repId)
@@ -495,7 +525,7 @@ function HandBackPanel({ q, client, total }: { q: QuoteRecord; client: Client; t
         <p className="text-white/70 mt-2">{t('{rep}, la soumission {no} est signée ({total}) et le suivi automatique est arrêté.', { rep: rep?.first ?? '', no: q.no, total: money(total) })}</p>
         <p className="text-white/60 text-sm mt-1">{t('Signé par {name} le {date} à {time}', { name: sig.name, date: at.date, time: at.time })}</p>
         <div className="flex flex-wrap justify-center gap-2 mt-6">
-          <Link to={`/soumissions/${q.id}`} className="btn btn-md bg-white text-ink hover:bg-white/90">
+          <Link to={`/soumissions/${q.id}`} onClick={restore} className="btn btn-md bg-white text-ink hover:bg-white/90">
             {t('Retour à la soumission')}
           </Link>
           <Link to={`/portail/${q.no}/copie-signee`} className="btn btn-md bg-white/15 text-white hover:bg-white/25">
@@ -514,7 +544,9 @@ function AcceptedPanel({ q, client, pricing }: { q: QuoteRecord; client: Client;
   const at = formatSignedAt(sig.at, locale())
   const rep = repById(q.repId)
   const coordinator = repById('hpe')
-  const deposit = paymentSchedule(q, pricing.total)[0]
+  const schedule = paymentSchedule(q, pricing.total)
+  const deposit = depositStep(schedule)
+  const options = chosenOptions(q)
   const cancellable = canCancel(q)
   const deadline = q.signature ? cancellationDeadline(q.signature.at) : null
 
@@ -544,6 +576,23 @@ function AcceptedPanel({ q, client, pricing }: { q: QuoteRecord; client: Client;
           ))}
         </dl>
 
+        {options.length > 0 && (
+          <div className="mt-4 max-w-md mx-auto text-left rounded-xl border border-hairline px-4 py-3 text-sm">
+            <p className="label-caps mb-1.5">{t('Options choisies')}</p>
+            <ul className="space-y-1">
+              {options.map((o) => (
+                <li key={o.label} className="flex justify-between gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-tone-good" />
+                    {t(o.label)}
+                  </span>
+                  <span className="tnum font-semibold">{o.price ? `+ ${money(o.price)}` : t('Inclus')}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="flex flex-wrap justify-center gap-2 mt-6">
           <Link to={`/portail/${q.no}/copie-signee`} className="btn btn-md btn-primary">
             <Download className="w-4 h-4" />
@@ -563,11 +612,21 @@ function AcceptedPanel({ q, client, pricing }: { q: QuoteRecord; client: Client;
       <section className="bg-white rounded-2xl shadow-card p-5 md:p-7">
         <h2 className="text-xl md:text-2xl font-semibold tracking-tight mb-4">{t('Prochaines étapes')}</h2>
         <ol className="space-y-4">
-          <NextStep icon={Wallet} title={t('Dépôt de {amount}', { amount: money(deposit.amount) })}>
-            {t('{pct} % du total, payable à la signature. Les instructions de paiement (virement Interac, chèque ou carte) sont dans le courriel de confirmation.', { pct: deposit.pct })}
-          </NextStep>
+          {deposit ? (
+            <NextStep icon={Wallet} title={t('Dépôt de {amount}', { amount: money(deposit.amount) })}>
+              {t('{pct} % du total, payable à la signature. Les instructions de paiement (virement Interac, chèque ou carte) sont dans le courriel de confirmation.', { pct: deposit.pct })}
+            </NextStep>
+          ) : (
+            <NextStep icon={Wallet} title={t('Aucun dépôt à payer')}>
+              {schedule.length === 1
+                ? t('Le total de {amount} est payable à la fin des travaux. Les instructions de paiement (virement Interac, chèque ou carte) sont dans le courriel de confirmation.', { amount: money(schedule[0].amount) })
+                : t('Les paiements suivent le calendrier de la soumission. Les instructions de paiement sont dans le courriel de confirmation.')}
+            </NextStep>
+          )}
           <NextStep icon={CalendarClock} title={t('Planification des travaux')}>
-            {t('{name} communiquera avec vous dans les 2 jours ouvrables suivant la réception du dépôt pour fixer la date des travaux.', { name: coordinator?.first ?? '' })}
+            {deposit
+              ? t('{name} communiquera avec vous dans les 2 jours ouvrables suivant la réception du dépôt pour fixer la date des travaux.', { name: coordinator?.first ?? '' })
+              : t('{name} communiquera avec vous dans les 2 jours ouvrables pour fixer la date des travaux.', { name: coordinator?.first ?? '' })}
           </NextStep>
           <NextStep icon={Hammer} title={t('Réalisation')}>
             {t('Les dates peuvent être déplacées en raison de la météo; nous vous avisons la veille. {rep} reste votre contact pour toute question.', { rep: rep?.first ?? '' })}

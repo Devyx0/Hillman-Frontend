@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { BellRing, ChevronDown, LoaderCircle, Mail, MessageSquare, Repeat, Send, Sparkles, Zap } from 'lucide-react'
-import { t } from '../i18n'
+import { BellRing, ChevronDown, Languages, LoaderCircle, Mail, MessageSquare, Repeat, Send, Sparkles, Zap } from 'lucide-react'
+import { inLang, langName, t, type Lang } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { Drawer, Field, type Icon } from './ui'
@@ -15,7 +15,15 @@ export interface MessageCtx {
   company?: string
   quoteNo?: string
   date?: string
+  /**
+   * The client's language (`clientLang(client)`): templates, subjects and AI rewrites are drafted in
+   * it, whatever the rep's UI language. Default French.
+   */
+  lang?: Lang
 }
+
+/** Language a draft is written in: the client's, French by default. */
+const draftLang = (c: MessageCtx): Lang => c.lang ?? 'fr'
 
 /** Mockup: `$d`. */
 export const MESSAGE_KINDS: Record<MessageKind, { label: string; icon: Icon; hint: string }> = {
@@ -27,7 +35,7 @@ export const MESSAGE_KINDS: Record<MessageKind, { label: string; icon: Icon; hin
 
 const signature = (c: MessageCtx) => `${c.rep ?? 'Jean-Pierre'}\n${c.company ?? 'Toitures Hillman'}`
 
-/** Template variables (call-time only: `date` default goes through `t()`). */
+/** Template variables (call-time only: `date` default goes through `t()`, so call inside `inLang`). */
 const vars = (c: MessageCtx) => ({
   first: c.first ?? '',
   rep: c.rep ?? 'Jean-Pierre',
@@ -37,22 +45,31 @@ const vars = (c: MessageCtx) => ({
   signature: signature(c),
 })
 
-/** Mockup: `fd`. */
-export const TEMPLATES: { id: string; name: string; kinds: MessageKind[]; text: (c: MessageCtx) => string }[] = [
+/**
+ * Mockup: `fd`. `name` is shown in the rep's UI language; `text` and `subject` are drafts, written in
+ * the client's language (`ctx.lang`) — use `draftText()` / `draftSubject()`.
+ */
+export const TEMPLATES: { id: string; name: string; kinds: MessageKind[]; text: (c: MessageCtx) => string; subject?: (c: MessageCtx) => string }[] = [
   { id: 'suivi-sms', name: 'Suivi de soumission', kinds: ['sms'], text: (c) => t("Bonjour {first}, c'est {rep} de {company}. Avez-vous bien reçu la soumission {quoteNo}? Je reste disponible pour vos questions.", vars(c)) },
   { id: 'dispo-sms', name: 'Proposer une visite', kinds: ['sms'], text: (c) => t('Bonjour {first}, je peux passer revoir les travaux avec vous cette semaine. Est-ce que mardi ou jeudi vous conviendrait? {rep}, {company}', vars(c)) },
-  { id: 'envoi-email', name: 'Envoi de soumission', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nVoici votre soumission {quoteNo}. Vous pouvez la consulter et l'accepter en ligne avec le lien ci-dessous.\n\nMerci,\n{signature}", vars(c)) },
-  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6, J+12, J+20)', kinds: ['email'], text: (c) => t("Bonjour {first},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission {quoteNo}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n{signature}", vars(c)) },
+  { id: 'envoi-email', name: 'Envoi de soumission', kinds: ['email'], subject: (c) => (c.quoteNo ? t('Soumission {quoteNo} — {company}', vars(c)) : t('Votre soumission — {company}', vars(c))), text: (c) => t("Bonjour {first},\n\nVoici votre soumission {quoteNo}. Vous pouvez la consulter et l'accepter en ligne avec le lien ci-dessous.\n\nMerci,\n{signature}", vars(c)) },
+  { id: 'suivi-email', name: 'Suivi de soumission (courriel J+6, J+12, J+20)', kinds: ['email'], subject: (c) => (c.quoteNo ? t('Suivi de votre soumission {quoteNo}', vars(c)) : t('Suivi de votre soumission')), text: (c) => t("Bonjour {first},\n\nNous sommes très heureux de l'intérêt que vous avez porté à notre entreprise. Nous faisons un suivi sur votre dossier et aimerions savoir si vous avez des questions ou des commentaires sur la soumission {quoteNo}.\n\nPour accepter la soumission, utilisez simplement le lien ci-dessous.\n\n{signature}", vars(c)) },
   { id: 'rappel-rdv', name: 'Rappel de rendez-vous', kinds: ['reminder'], text: (c) => t('Rappel : {rep} de {company} sera chez vous {date}. Répondez C pour confirmer ou R pour reporter.', vars(c)) },
 ]
 
-/** Stand-in for the AI rewrite the backend will provide (mockup: `N3`). */
-function improveWithAI(text: string) {
-  return text
-    .replace(t('Avez-vous bien reçu'), t("Je voulais m'assurer que vous avez bien reçu"))
-    .replace(t('Je reste disponible pour vos questions.'), t("Si vous avez des questions sur les matériaux ou l'échéancier, je peux passer vous voir cette semaine."))
-    .replace(t('Nous sommes très heureux'), t('Merci encore, nous sommes très heureux'))
-}
+/** A template's message, in the client's language. */
+export const draftText = (tpl: (typeof TEMPLATES)[number] | undefined, c: MessageCtx) => (tpl ? inLang(draftLang(c), () => tpl.text(c)) : '')
+/** A template's email subject, in the client's language. */
+export const draftSubject = (tpl: (typeof TEMPLATES)[number] | undefined, c: MessageCtx) => (tpl?.subject ? inLang(draftLang(c), () => tpl.subject!(c)) : '')
+
+/** Stand-in for the AI rewrite the backend will provide (mockup: `N3`). Rewrites in the client's language. */
+const improveWithAI = (text: string, lang: Lang) =>
+  inLang(lang, () =>
+    text
+      .replace(t('Avez-vous bien reçu'), t("Je voulais m'assurer que vous avez bien reçu"))
+      .replace(t('Je reste disponible pour vos questions.'), t("Si vous avez des questions sur les matériaux ou l'échéancier, je peux passer vous voir cette semaine."))
+      .replace(t('Nous sommes très heureux'), t('Merci encore, nous sommes très heureux')),
+  )
 
 /** Matches the default sequence in `FOLLOW_UP_SEQUENCES` (client decision: J+6, J+12, J+20 by email and text). */
 const SEQUENCE_STEPS: { d: string; icon: Icon; t: string; s: string }[] = [
@@ -64,7 +81,9 @@ const SEQUENCE_STEPS: { d: string; icon: Icon; t: string; s: string }[] = [
 /** Compose drawer for texto / courriel / relance / rappel (mockup: `Pi`). */
 export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null; ctx: MessageCtx; onClose: () => void }) {
   const [text, setText] = useState('')
+  const [subject, setSubject] = useState('')
   const [templateId, setTemplateId] = useState('')
+  const lang = draftLang(ctx)
   const [improving, setImproving] = useState(false)
   const meta = kind ? MESSAGE_KINDS[kind] : null
   const templates = TEMPLATES.filter((t) => kind && t.kinds.includes(kind))
@@ -73,18 +92,20 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
     if (!kind || kind === 'sequence') return
     const first = TEMPLATES.find((t) => t.kinds.includes(kind))
     setTemplateId(first?.id ?? '')
-    setText(first?.text(ctx) ?? '')
+    setText(draftText(first, ctx))
+    setSubject(draftSubject(first, ctx))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind])
 
   const close = () => {
     setText('')
+    setSubject('')
     onClose()
   }
   const improve = () => {
     setImproving(true)
     window.setTimeout(() => {
-      setText((t) => improveWithAI(t))
+      setText((prev) => improveWithAI(prev, lang))
       setImproving(false)
     }, 600)
   }
@@ -115,6 +136,10 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
               </>
             ) : null}
           </p>
+          <p className="-mt-3 flex items-center gap-1.5 text-2xs text-ink-mute" data-client-lang={lang}>
+            <Languages className="w-3.5 h-3.5" />
+            {t('Langue du client : {lang}', { lang: langName(lang) })}
+          </p>
           {kind === 'sequence' ? (
             <div className="rounded-lg border border-hairline divide-y divide-hairline">
               {SEQUENCE_STEPS.map((s) => (
@@ -138,7 +163,10 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
                     onChange={(e) => {
                       setTemplateId(e.target.value)
                       const tpl = TEMPLATES.find((x) => x.id === e.target.value)
-                      if (tpl) setText(tpl.text(ctx))
+                      if (tpl) {
+                        setText(draftText(tpl, ctx))
+                        setSubject(draftSubject(tpl, ctx))
+                      }
                     }}
                     className="form-input"
                   >
@@ -154,9 +182,14 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
                   {t("Améliorer avec l'IA")}
                 </button>
               </div>
+              {kind === 'email' && (
+                <Field label={t('Objet')}>
+                  <input value={subject} onChange={(e) => setSubject(e.target.value)} className="form-input" lang={lang === 'en' ? 'en-CA' : 'fr-CA'} />
+                </Field>
+              )}
               <Field label={t('Message')}>
                 <div className="relative">
-                  <textarea value={text} onChange={(e) => setText(e.target.value)} rows={kind === 'email' ? 10 : 5} className="form-input h-auto py-2.5 leading-relaxed" />
+                  <textarea value={text} onChange={(e) => setText(e.target.value)} lang={lang === 'en' ? 'en-CA' : 'fr-CA'} rows={kind === 'email' ? 10 : 5} className="form-input h-auto py-2.5 leading-relaxed" />
                   {improving && (
                     <div className="absolute inset-0 bg-white/70 rounded-md flex items-center justify-center gap-2 text-sm text-ink-mute">
                       <LoaderCircle className="w-4 h-4 animate-spin" />

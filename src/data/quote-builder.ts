@@ -51,8 +51,24 @@ import { locale, t } from '../i18n'
 import { GST, QST } from '../lib/utils'
 import { MATERIAL_LINES, QUOTES, TODAY, type CompanyId, type MaterialLine, type Quote, type ScopeSection } from './mock'
 import { ROOF_DEFAULT_SCOPE, ROOF_SCOPE_SECTIONS } from './roofing-clauses'
-import { COST_ITEMS, costItemById, scopeFor, templateById as catalogueTemplateById } from '../pages/catalogue/data'
+import { COST_ITEMS, costItemById, scopeFor, templateById as catalogueTemplateById, tierCatalogueVideo } from '../pages/catalogue/data'
 import { addQuote, commit, quoteById, updateQuote, type QuoteRecord } from './store'
+import { paymentScheduleById, depositStep, type PaymentStep } from './settings'
+import {
+  ADDON_RATE,
+  GUTTER_SEEDS,
+  TIER_PRICE_FACTOR,
+  gutterKind,
+  gutterLines,
+  gutterTotals,
+  type GutterAddonId,
+  type GutterFace,
+  type GutterForm,
+  type GutterKind,
+  type TierId,
+} from './gutter-quantities'
+
+export { gutterKind, gutterLines, gutterTotals, type GutterAddonId, type GutterFace, type GutterForm, type GutterKind, type TierId }
 
 /** Target margin, in % (mockup: `jn`). Toitures value; see `TARGET_MARGINS` for each company. */
 export const TARGET_MARGIN = 32
@@ -115,7 +131,7 @@ export const BUILDER_SECTIONS_SHORT: SectionId[] = ['infos', 'obligations', 'cou
 
 export const GUTTER_SCOPE: ScopeSection[] = [
   { name: 'Démantèlement', lines: ['Enlever les gouttières existantes (E.G.E)', 'Enlever les descentes existantes', 'Disposer des rebuts'] },
-  { name: 'Gouttières', lines: ['Gouttières aluminium 5 po sans joint, formées sur place', 'Gouttières aluminium 6 po Modèle Distinction', 'Gouttières acier', 'Crochets vissés Suprême aux 24 po'] },
+  { name: 'Gouttières', lines: ['Gouttières aluminium 5 po sans joint, formées sur place', 'Gouttières aluminium 6 po modèle Distinction', 'Gouttières acier', 'Crochets vissés Suprême aux 24 po'] },
   { name: 'Descentes', lines: ['Descentes 2 × 3 po', 'Descentes 3 × 4 po', 'Coudes A75 / B75', 'Rallonges de descente'] },
   { name: 'Protège-gouttières', lines: ['T-Rex M-5200 (crochet continu)', 'T-Rex XL M-5800 (crochet continu)', 'DoublePro D-11500 microfiltrant', 'Pare-feuilles 5300 zip'] },
   { name: 'Soffite / fascia', lines: ['Fascia aluminium agencé', 'Soffite ventilé', 'J de soffite'] },
@@ -227,8 +243,19 @@ export interface QuoteAddon {
   id: string
   desc: string
   price: number
+  /** Included at no charge (shown, not priced). */
   included: boolean
+  /** Offered to the client as an option (portal toggle); priced only when `chosen`. */
+  optional?: boolean
+  chosen?: boolean
+  /** Gouttières add-on whose quantities join the work order when chosen (fascia, soffit). */
+  addonId?: GutterAddonId
 }
+
+/** Add-ons in the price: paid extras, and the client's chosen options. */
+export const pricedAddons = (addons: QuoteAddon[]) => addons.filter((a) => (a.optional ? !!a.chosen : !a.included) && a.price > 0)
+/** Gouttières add-ons whose quantities are in the work order. */
+export const chosenGutterAddons = (addons: QuoteAddon[]): GutterAddonId[] => addons.filter((a) => a.addonId && a.optional && a.chosen).map((a) => a.addonId!)
 
 interface QuoteDefaults {
   scope: ScopeSection[]
@@ -236,6 +263,17 @@ interface QuoteDefaults {
   price: number
   costs: MaterialLine[]
   addons: QuoteAddon[]
+}
+
+/**
+ * Gouttières optional add-ons, next to the protection options: the client can add Fascia and Soffite in
+ * the portal. ("Crochets espacés" is no longer an add-on: it is the "Crochet standard" protection option.)
+ */
+function gutterAddons(prices: Record<GutterAddonId, number>): QuoteAddon[] {
+  return [
+    { id: 'g3', desc: 'Fascia', price: prices.fascia, included: false, optional: true, chosen: false, addonId: 'fascia' },
+    { id: 'g4', desc: 'Soffite', price: prices.soffit, included: false, optional: true, chosen: false, addonId: 'soffit' },
+  ]
 }
 
 /**
@@ -259,17 +297,16 @@ export function quoteDefaults(q: Quote): QuoteDefaults {
     }
   }
   if (q.company === 'sg') {
-    const addon = Math.round((q.amount * 0.28) / 5) * 5
+    // Seeded quotes: form, tier and add-on prices from GUTTER_SEEDS (data/mock.ts); costs derive from the form.
+    const seed = GUTTER_SEEDS.get(q.id)
+    const kind = gutterKind(q.workType)
+    const costs = seed ? gutterLines(seed.form, { kind: seed.kind, tier: seed.tier }) : fitLines(GUTTER_COST_LINES, q.cost, q.amount)
     return {
       scope: GUTTER_SCOPE,
       checked: GUTTER_DEFAULT_SCOPE,
-      costs: fitLines(GUTTER_COST_LINES, q.cost, q.amount),
-      price: q.amount - addon,
-      addons: [
-        { id: 'g1', desc: 'Crochets espacés', price: 0, included: true },
-        { id: 'g2', desc: 'ZONE DÉGAGÉE — T-Rex XL M-5800 (crochet continu)', price: addon, included: false },
-        { id: 'g3', desc: 'Fascia', price: 0, included: true },
-      ],
+      costs,
+      price: seed ? seed.base : q.amount,
+      addons: kind === 'gutter' ? gutterAddons(seed?.addonPrices ?? { fascia: 0, soffit: 0 }) : [],
     }
   }
   return {
@@ -485,43 +522,28 @@ export interface RoofDims {
   avantToits: string
 }
 
-export interface GutterFace {
-  id: string
-  /** French label ("Façade avant"…) or typed by the rep. */
-  label: string
-  /** Gutter length, linear feet. */
-  gutter: number
-  /** Number of downspouts on this side. */
-  downspouts: number
-  /** Downspout length each, feet. */
-  downLen: number
-}
-
-export interface GutterForm {
-  /** Model: 5 po standard or 6 po Distinction (plan item G1). */
-  size: 5 | 6
-  material: 'Aluminium' | 'Acier'
-  color: string
-  storeys: number
-  roof: string
-  ladders: number
-  /** Remove existing gutters (E.G.E). */
-  removal: boolean
-  faces: GutterFace[]
-  note: string
-}
-
-/** Gouttières protection tiers (plan: "crochet standard, crochet continu, 5000, 1800"). Ids shared with the portal. */
-export type TierId = 'standard' | 'continu' | 'pg5000' | 'pg1800'
+/** Gouttières protection option on a quote (plan: "crochet standard, crochet continu, 5000, 1800"). */
 export interface GutterTier {
   id: TierId
   label: string
   detail: string
   /** Price added to the base price, before taxes. */
   price: number
+  /** Video link for this quote; empty = the catalogue's video for the option (`tierVideo`). */
+  video?: string
 }
-/** CAA-Québec member discount on the price before taxes (same rate as the portal). */
-export const CAA_RATE = 0.1
+/** Video shown for a protection option: the quote's own link, else the catalogue default. */
+export const tierVideo = (tier: Pick<GutterTier, 'id' | 'video'>): string | undefined => tier.video?.trim() || tierCatalogueVideo(tier.id)
+
+/** CAA-Québec member discount: 3 % of the price before taxes, at most 100 $ (Signature Gouttières). */
+export const CAA_RATE = 0.03
+export const CAA_CAP = 100
+/** CAA discount on a pre-tax subtotal — the ONLY place it is computed (builder, PDF, portal, sidebar). */
+export const caaDiscount = (preTax: number) => Math.min(CAA_CAP, Math.round(Math.max(0, preTax) * CAA_RATE * 100) / 100)
+/** Pre-tax subtotal before the CAA discount that leaves `afterCaa` (inverse of `caaDiscount`). */
+export const beforeCaa = (afterCaa: number) => (afterCaa / (1 - CAA_RATE) * CAA_RATE <= CAA_CAP ? afterCaa / (1 - CAA_RATE) : afterCaa + CAA_CAP)
+/** French label of the CAA option (literal so the dictionaries carry the exact wording). */
+export const CAA_LABEL = 'Membre CAA-Québec (−3 %, max 100 $)'
 export const DEFAULT_TIER: TierId = 'continu'
 /** Gouttières quotes that get protection options (not cleaning or soffit-only jobs). Same rule as the portal. */
 export const gutterHasTiers = (q: Pick<Quote, 'company' | 'workType'>) => q.company === 'sg' && !/Nettoyage|Soffite/.test(q.workType)
@@ -570,7 +592,10 @@ export interface QuoteDraft {
   discount: number
   addons: QuoteAddon[]
   comments: string
-  payMode: 'std' | 'autre'
+  /** Payment schedule picked on the quote (Paramètres → Calendriers de paiement); none = company default. */
+  scheduleId?: string
+  /** Gouttières: quantities the rep typed over the form-derived ones, by French item name. */
+  qtyOverrides: Record<string, number>
   warranties: Record<string, string>
   note: string
   attachments: Attachment[]
@@ -668,50 +693,24 @@ export function templateById(id?: string): StartTemplate | undefined {
 }
 
 // ── Gutter quantities (the crew's work order) ────────────────────────────────────────
-export const gutterTotals = (g: GutterForm) => ({
-  gutter: g.faces.reduce((n, f) => n + (Number(f.gutter) || 0), 0),
-  downspouts: g.faces.reduce((n, f) => n + (Number(f.downspouts) || 0), 0),
-  downFeet: g.faces.reduce((n, f) => n + (Number(f.downspouts) || 0) * (Number(f.downLen) || 0), 0),
-})
-
-const PROTECTION_LINES: Record<Exclude<TierId, 'standard'>, Omit<MaterialLine, 'qty'>> = {
-  continu: { cat: 'Protège-gouttières', item: 'T-Rex XL M-5800', unit: 'pi', cost: 2.9, sell: 5 },
-  pg5000: { cat: 'Protège-gouttières', item: 'Protège-gouttières 5000 (grillage aluminium)', unit: 'pi', cost: 4.4, sell: 8 },
-  pg1800: { cat: 'Protège-gouttières', item: 'Protège-gouttières 1800 (microfiltrant)', unit: 'pi', cost: 6.2, sell: 11.5 },
+/** Quantities derived from the draft's gutter form, tier and chosen add-ons — before the rep's overrides. */
+export function formGutterLines(q: Pick<Quote, 'company' | 'workType'>, d: Pick<QuoteDraft, 'gutter' | 'tier' | 'tiers' | 'addons'>): MaterialLine[] {
+  const kind = gutterKind(q.workType)
+  const tiered = kind === 'gutter' && d.tiers.length > 0
+  return gutterLines(d.gutter, { kind, tier: tiered ? d.tier : undefined, addons: kind === 'gutter' ? chosenGutterAddons(d.addons) : [] })
 }
 
-/** Quantities list computed from the gutter form and the chosen protection tier. */
-export function gutterLines(g: GutterForm, tier: TierId | undefined): MaterialLine[] {
-  const { gutter, downspouts, downFeet } = gutterTotals(g)
-  const six = g.size === 6
-  const steel = g.material === 'Acier'
-  const lines: MaterialLine[] = []
-  if (g.removal && gutter) lines.push({ cat: 'Services', item: 'E.G.E — Enlever gouttières existantes', qty: gutter, unit: 'pi', cost: 0.9, sell: 1.75 })
-  if (gutter)
-    lines.push(
-      steel
-        ? { cat: 'Gouttières', item: 'Gouttières acier', qty: gutter, unit: 'pi', cost: 13, sell: 20 }
-        : six
-          ? { cat: 'Gouttières', item: 'Modèle Distinction 6 po avec crochet', qty: gutter, unit: 'pi', cost: 8.1, sell: 12.5 }
-          : { cat: 'Gouttières', item: 'Gouttières 5 po (pi lin.)', qty: gutter, unit: 'pi', cost: 6.2, sell: 10.5 },
-    )
-  if (downFeet) lines.push(six ? { cat: 'Descentes', item: 'Tuyaux 3 × 4 (descente)', qty: downFeet, unit: 'pi', cost: 6.4, sell: 10 } : { cat: 'Descentes', item: 'Tuyaux 2 × 3 (descente)', qty: downFeet, unit: 'pi', cost: 5.8, sell: 10 })
-  if (downspouts) lines.push(six ? { cat: 'Descentes', item: 'Coude A 3 × 4', qty: downspouts * 3, unit: 'unité', cost: 5.2, sell: 10 } : { cat: 'Descentes', item: 'Coudes A75 / B75', qty: downspouts * 3, unit: 'unité', cost: 4.5, sell: 9.5 })
-  if (tier && tier !== 'standard' && gutter) lines.push({ ...PROTECTION_LINES[tier], qty: gutter })
-  if (gutter) lines.push({ cat: "Main-d'œuvre", item: 'Ferblantiers (2)', qty: Math.max(2, Math.ceil(gutter / 16 + downspouts * 0.5 + (g.storeys - 1) * 1.5)), unit: 'h', cost: 58, sell: 85 })
-  return lines
-}
+/** Apply the rep's quantity overrides (by item) to derived lines. */
+export const applyOverrides = (lines: MaterialLine[], overrides: Record<string, number>) => lines.map((l) => (l.item in overrides ? { ...l, qty: overrides[l.item] } : l))
 
-/** Swap the protection line of a quantities list for another tier (keeps the other quantities). */
-export function costsWithTier(costs: MaterialLine[], tier: TierId, feet: number): MaterialLine[] {
-  const prev = costs.find((l) => l.cat === 'Protège-gouttières')
-  const next = costs.filter((l) => l.cat !== 'Protège-gouttières')
-  const qty = prev?.qty || feet
-  if (tier !== 'standard' && qty) {
-    const at = next.findIndex((l) => /Main-d/.test(l.cat))
-    next.splice(at < 0 ? next.length : at, 0, { ...PROTECTION_LINES[tier], qty })
-  }
-  return next
+/**
+ * Gouttières: the draft with its cost lines re-derived from the form (+ overrides). Every change to the
+ * form, tier, add-ons or overrides goes through this, so Quantités, cost, margin and the work order follow.
+ * Other companies: unchanged.
+ */
+export function withGutterCosts<D extends QuoteDraft>(q: Pick<Quote, 'company' | 'workType'>, d: D): D {
+  if (q.company !== 'sg') return d
+  return { ...d, costs: applyOverrides(formGutterLines(q, d), d.qtyOverrides ?? {}) }
 }
 
 /** Default tiers. Seeded quotes: "Crochet continu" = the mockup's T-Rex add-on (already in the amount). */
@@ -719,9 +718,15 @@ function defaultTiers(continu: number): GutterTier[] {
   return [
     { id: 'standard', label: 'Crochet standard', detail: 'Crochets vissés Suprême aux 24 po', price: 0 },
     { id: 'continu', label: 'Crochet continu', detail: 'T-Rex XL M-5800 · résiste au poids de la neige et de la glace', price: continu },
-    { id: 'pg5000', label: 'Protège-gouttières 5000', detail: 'Grillage aluminium · bloque feuilles et débris', price: round5(continu * 1.6) },
-    { id: 'pg1800', label: 'Protège-gouttières 1800', detail: 'Microfiltrant · bloque aussi les aiguilles de pin', price: round5(continu * 2.3) },
+    { id: 'pg5000', label: 'Protège-gouttières 5000', detail: 'Grillage aluminium · bloque feuilles et débris', price: round5(continu * TIER_PRICE_FACTOR.pg5000) },
+    { id: 'pg1800', label: 'Protège-gouttières 1800', detail: 'Microfiltrant · bloque aussi les aiguilles de pin', price: round5(continu * TIER_PRICE_FACTOR.pg1800) },
   ]
+}
+
+/** Tiers of a seeded quote: the chosen tier at the price included in its amount, the others in proportion. */
+function seededTiers(tier: TierId, price: number): GutterTier[] {
+  const factor = TIER_PRICE_FACTOR[tier] || 1
+  return defaultTiers(round5(price / factor)).map((x) => (x.id === tier ? { ...x, price } : x))
 }
 
 // ── Required photos per job type (PDF item 8) ────────────────────────────────────────
@@ -879,23 +884,21 @@ function createDraft(q: QuoteRecord): QuoteDraft {
   let tier: TierId = tpl?.tier ?? DEFAULT_TIER
 
   if (q.company === 'sg') {
-    if (tiered) {
-      const g2 = addons.find((a) => a.id === 'g2')
-      addons = addons.filter((a) => a.id !== 'g2')
-      if (fresh) {
-        const ft = gutterTotals(gutter).gutter
-        tiers = defaultTiers(round5(ft * 5))
-        costs = gutterLines(gutter, tier)
-        price = round5(lineSell(costs.filter((l) => l.cat !== 'Protège-gouttières')))
-      } else {
-        tiers = defaultTiers(g2?.price ?? 0)
-        tier = DEFAULT_TIER
+    // Quantities always derive from the gutter form (see withGutterCosts); `costs` is recomputed below.
+    const seed = GUTTER_SEEDS.get(q.id)
+    if (seed && !fresh) {
+      Object.assign(gutter, structuredClone(seed.form), { note: gutter.note })
+      if (tiered && seed.tier) {
+        tier = seed.tier
+        tiers = seededTiers(seed.tier, seed.tierPrice)
       }
-    } else if (fresh) {
-      costs = tpl?.costs?.map((l) => ({ ...l })) ?? []
-      addons = addons.filter((a) => a.id !== 'g2')
-      price = suggestedPrice(costs, q.company)
+    } else if (tiered) {
+      const ft = gutterTotals(gutter).gutter
+      tiers = defaultTiers(round5(ft * 5))
+      if (fresh) addons = gutterAddons({ fascia: round5(ft * ADDON_RATE.fascia), soffit: round5(ft * ADDON_RATE.soffit) })
     }
+    costs = formGutterLines(q, { gutter, tier, tiers, addons })
+    if (fresh) price = tiered ? round5(lineSell(costs.filter((l) => l.cat !== 'Protège-gouttières'))) : suggestedPrice(costs, q.company)
   } else if (fresh) {
     costs = tpl?.costs?.map((l) => ({ ...l })) ?? []
     price = suggestedPrice(costs, q.company)
@@ -914,7 +917,8 @@ function createDraft(q: QuoteRecord): QuoteDraft {
     discount: 0,
     addons,
     comments: '',
-    payMode: 'std',
+    scheduleId: undefined,
+    qtyOverrides: {},
     warranties: { ...WARRANTY_DEFAULTS[q.company], ...tpl?.warranties },
     note: isDemo ? t(SAMPLE_VISIT_NOTES) : q.company === 'toit' && tpl?.notes ? t(tpl.notes) : '',
     attachments:
@@ -950,7 +954,9 @@ export interface QuotePricing {
   tiers?: GutterTier[]
   tier?: GutterTier
   caaDiscount: number
-  /** Selling price before taxes = `quote.amount`. */
+  /** Pre-tax subtotal before the CAA discount. */
+  before: number
+  /** Selling price before taxes = `quote.amount` (after the CAA discount). */
   subtotal: number
   gst: number
   qst: number
@@ -966,20 +972,20 @@ export interface QuotePricing {
 export function draftPricing(q: Pick<Quote, 'company' | 'workType'>, d: QuoteDraft): QuotePricing {
   const tiered = gutterHasTiers(q) && d.tiers.length > 0
   const tier = tiered ? d.tiers.find((x) => x.id === d.tier) : undefined
-  const paid = d.addons.filter((a) => !a.included && a.price > 0)
+  const paid = pricedAddons(d.addons)
   const lines: PriceLine[] = [{ label: q.company === 'toit' && !q.workType.startsWith('Réparation') ? 'Réfection complète de la toiture' : '{item}', item: q.workType, amount: d.price }]
   if (tier?.price) lines.push({ label: 'Protection · {item}', item: tier.label, amount: tier.price })
   for (const a of paid) lines.push({ label: 'Ajout · {item}', item: a.desc, amount: a.price })
   if (d.discount) lines.push({ label: 'Escompte', amount: -d.discount })
   const before = Math.max(0, lines.reduce((n, l) => n + l.amount, 0))
-  const caaDiscount = q.company === 'sg' && d.caa ? cents(before * CAA_RATE) : 0
-  if (caaDiscount) lines.push({ label: 'Rabais membre CAA ({n} %)', amount: -caaDiscount })
-  const subtotal = cents(before - caaDiscount)
+  const caa = q.company === 'sg' && d.caa ? caaDiscount(before) : 0
+  if (caa) lines.push({ label: 'Rabais membre CAA (−3 %, max 100 $)', amount: -caa })
+  const subtotal = cents(before - caa)
   const gst = subtotal * GST
   const qst = subtotal * QST
   const cost = lineCost(d.costs)
   const profit = subtotal - cost
-  return { lines, tiers: tiered ? d.tiers : undefined, tier, caaDiscount, subtotal, gst, qst, total: subtotal + gst + qst, cost, profit, margin: subtotal ? (profit / subtotal) * 100 : 0 }
+  return { lines, tiers: tiered ? d.tiers : undefined, tier, caaDiscount: caa, before, subtotal, gst, qst, total: subtotal + gst + qst, cost, profit, margin: subtotal ? (profit / subtotal) * 100 : 0 }
 }
 
 /** Pricing of a store quote (portal, PDF, lists). Call while rendering. */
@@ -1001,15 +1007,37 @@ export function syncQuoteAmounts(id: string) {
  * The client's choice of protection tier / CAA membership (portal or builder). Updates the draft,
  * the work order quantities and `quote.amount`.
  */
-export function setGutterChoice(id: string, choice: { tier?: TierId; caa?: boolean; caaNo?: string }) {
+export function setGutterChoice(id: string, choice: { tier?: TierId; caa?: boolean; caaNo?: string; addons?: Record<string, boolean> }) {
   const q = quoteById(id)
   if (!q) return
   const d = getDraft(q)
-  const next: QuoteDraft = { ...d, ...choice }
-  if (choice.tier && choice.tier !== d.tier) next.costs = costsWithTier(d.costs, choice.tier, gutterTotals(d.gutter).gutter)
-  DRAFTS.set(id, next)
+  const { addons: picks, ...rest } = choice
+  const addons = picks ? d.addons.map((a) => (a.optional && a.id in picks ? { ...a, chosen: picks[a.id] } : a)) : d.addons
+  DRAFTS.set(id, withGutterCosts(q, { ...d, ...rest, addons }))
   syncQuoteAmounts(id)
   commit()
+}
+
+/** The client's choice of an optional add-on (Fascia, Soffite) — portal or builder. */
+export const setAddonChoice = (id: string, addonId: string, chosen: boolean) => setGutterChoice(id, { addons: { [addonId]: chosen } })
+
+// ── Payment schedule of a quote ───────────────────────────────────────────────────────
+export interface ScheduleStep extends PaymentStep {
+  amount: number
+}
+/** Steps of the schedule picked on the draft (or the company default), with amounts on `total`. */
+export function draftSchedule(company: CompanyId, d: Pick<QuoteDraft, 'scheduleId'>, total: number): ScheduleStep[] {
+  return paymentScheduleById(company, d.scheduleId).steps.map((s) => ({ ...s, amount: (total * s.pct) / 100 }))
+}
+/** Schedule of a store quote (portal, PDF, signed copy). Call while rendering. */
+export const quoteSchedule = (q: QuoteRecord, total = quotePricing(q).total) => draftSchedule(q.company, getDraft(q), total)
+export { depositStep }
+
+/** Options the client has chosen (signed summary, signed copy): protection tier and add-ons (French labels). */
+export function chosenOptions(q: QuoteRecord): { label: string; price: number }[] {
+  const p = quotePricing(q)
+  const d = getDraft(q)
+  return [...(p.tier ? [{ label: p.tier.label, price: p.tier.price }] : []), ...d.addons.filter((a) => a.optional && a.chosen).map((a) => ({ label: a.desc, price: a.price }))]
 }
 
 /** Scope lines of a quote as ticked in the builder, tokens filled in (French; translate with `t` before filling for display). */
@@ -1043,7 +1071,7 @@ export function clauseValues(d: QuoteDraft): Record<string, string> {
     pi_descentes: fmt(g.downFeet),
     nb_coudes: fmt(g.downspouts * 3),
     pi_protege: fmt(g.gutter),
-    pi_soffite: '',
+    pi_soffite: chosenGutterAddons(d.addons).includes('soffit') ? fmt(g.gutter) : '',
     pi_fascia: fmt(g.gutter),
     couleur: t(d.gutter.color),
   }
@@ -1067,6 +1095,8 @@ export function gutterClauses(d: QuoteDraft, tiered: boolean): string[] {
     tiered && d.tier === 'continu' ? find(/T-Rex XL M-5800/) : undefined,
     tiered && d.tier === 'pg1800' ? find(/DoublePro/) : undefined,
     tiered && d.tier === 'pg5000' ? 'Protège-gouttières 5000 (grillage aluminium) sur {pi_protege} pi lin.' : undefined,
+    chosenGutterAddons(d.addons).includes('fascia') ? find(/^Fascia/) : undefined,
+    chosenGutterAddons(d.addons).includes('soffit') ? find(/^Soffite/) : undefined,
     find(/^Couleur/),
   ]
   return out.filter((l): l is string => !!l)

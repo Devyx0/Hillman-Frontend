@@ -3,19 +3,18 @@
  * (`quotePricing`, `setGutterChoice`, `quoteScope` in data/quote-builder.ts) so the portal can never
  * disagree with the builder (PDF 3.2). Only the drawn signature image is kept here, for the session.
  */
-import { CAA_RATE, fillClause, getDraft, quotePricing, quoteScope, setGutterChoice, type PriceLine, type QuotePricing, type TierId } from '../../data/quote-builder'
-import { PAYMENT_SCHEDULES } from '../../data/settings'
+import { CAA_RATE, chosenOptions, depositStep, fillClause, getDraft, quotePricing, quoteSchedule, quoteScope, setAddonChoice, setGutterChoice, type PriceLine, type QuotePricing, type TierId } from '../../data/quote-builder'
 import type { QuoteRecord } from '../../data/store'
 import { t } from '../../i18n'
 
-export { CAA_RATE, type PriceLine, type TierId }
-export type Pricing = Pick<QuotePricing, 'lines' | 'tiers' | 'tier' | 'caaDiscount' | 'subtotal' | 'gst' | 'qst' | 'total'>
+export { CAA_RATE, chosenOptions, depositStep, setAddonChoice, type PriceLine, type TierId }
+export type Pricing = Pick<QuotePricing, 'lines' | 'tiers' | 'tier' | 'caaDiscount' | 'before' | 'subtotal' | 'gst' | 'qst' | 'total'>
 
 /** Days the consumer has to cancel after signing (art. 58 LPC). */
 export const CANCELLATION_DAYS = 10
 
 /** Label of a priced line in the current language. */
-export const lineLabel = (l: PriceLine) => t(l.label, { item: l.item ? t(l.item) : '', n: CAA_RATE * 100 })
+export const lineLabel = (l: PriceLine) => t(l.label, { item: l.item ? t(l.item) : '' })
 
 /** Same breakdown as the builder (header, Prix, PDF). */
 export const portalPricing = (q: QuoteRecord): Pricing => quotePricing(q)
@@ -23,7 +22,7 @@ export const portalPricing = (q: QuoteRecord): Pricing => quotePricing(q)
 /** The client's protection tier / CAA choice: saved on the quote's draft and its amount. */
 export const choicesOf = (q: QuoteRecord) => {
   const d = getDraft(q)
-  return { tier: d.tier, caa: d.caa, caaNo: d.caaNo }
+  return { tier: d.tier, caa: d.caa, caaNo: d.caaNo, options: d.addons.filter((a) => a.optional && a.price > 0) }
 }
 export const setChoice = (q: QuoteRecord, patch: { tier?: TierId; caa?: boolean; caaNo?: string }) => setGutterChoice(q.id, patch)
 
@@ -64,8 +63,8 @@ export function renoBudget(q: QuoteRecord, subtotal: number): { cat: string; amo
 /** Rénovations: the project description written by the rep in the builder, if any. */
 export const renoDescription = (q: QuoteRecord) => getDraft(q).description.trim()
 
-/** Payment schedule of the quote's company, with amounts on the total. */
-export const paymentSchedule = (q: QuoteRecord, total: number) => PAYMENT_SCHEDULES[q.company].map((s) => ({ ...s, amount: (total * s.pct) / 100 }))
+/** Payment schedule picked on the quote (or the company default), with amounts on the total. */
+export const paymentSchedule = (q: QuoteRecord, total: number) => quoteSchedule(q, total)
 
 /** Statuses meaning the quote is accepted (signed online or at the office). */
 export const SIGNED_STATUSES = ['Signé', 'Payé', 'Terminé']

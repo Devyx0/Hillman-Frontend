@@ -8,7 +8,7 @@ import { Ban, Bell, BellOff, CalendarClock, CalendarPlus, Clock, FilePenLine, In
 import { MessageButton, type MessageCtx } from '../../components/messaging'
 import { Drawer, Field, RepAvatar } from '../../components/ui'
 import { ComingSoon, Notice, confirmAction } from '../../components/states'
-import { CLIENTS, QUOTES, clientById, companyById, fullName, repById, type Quote, type Rep } from '../../data/mock'
+import { CLIENTS, QUOTES, clientById, clientLang, companyById, fullName, repById, type Quote, type Rep } from '../../data/mock'
 import { addAppointment, removeAppointment, updateAppointment } from '../../data/store'
 import { dayDate, dayFromIso, hourFromIso, isoAt, repConflicts, type AppointmentRecord } from '../../data/crews'
 import { useAuth } from '../../auth/AuthContext'
@@ -16,7 +16,7 @@ import { toast } from '../../lib/toast'
 import { cn, formatHour, money } from '../../lib/utils'
 import { DAY_END, DAY_NAMES, DAY_START, TODAY_INDEX, capitalize, type CalEvent } from './calendar'
 import { Select } from '../../components/filters'
-import { locale, t } from '../../i18n'
+import { inLang, locale, t } from '../../i18n'
 
 /** "Mardi 20 octobre" for a day index. */
 export const longDay = (day: number) => capitalize(dayDate(day).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }))
@@ -49,7 +49,8 @@ export function AppointmentDrawer({ a, onClose, onEdit }: { a: CalEvent | null; 
     company: companyById(rep.company === 'all' ? 'toit' : rep.company).name,
     rep: rep.first,
     quoteNo: quote?.no,
-    date: t('{day} {d} oct. à {time}', { day: t(DAY_NAMES[dayDate(a.day).getDay()]), d: dayDate(a.day).getDate(), time: formatHour(a.start) }),
+    lang: clientLang(client),
+    date: inLang(clientLang(client), () => t('{day} {d} oct. à {time}', { day: t(DAY_NAMES[dayDate(a.day).getDay()]), d: dayDate(a.day).getDate(), time: formatHour(a.start) })),
   }
   const cancel = async () => {
     const ok = await confirmAction({
@@ -188,7 +189,7 @@ export interface AppointmentPrefill {
 
 export const APPOINTMENT_TYPES = ['Estimation', 'Inspection', 'Revoir le client', 'Signature', 'Autre']
 
-/** "Ville, Type de travaux" */
+/** "Ville, type de travaux" */
 function appointmentSubject(q: Quote) {
   const parts = q.workType.split('·').map((p) => p.trim())
   const work = q.company === 'toit' ? (parts[1] ?? parts[0]) : parts[0]
@@ -327,7 +328,7 @@ export function AppointmentForm({
           </p>
         )}
         <Field label={t('Sujet')}>
-          <input id="rdv-sujet" className="form-input" value={subject} placeholder={t('Ville, Type de travaux')} onChange={(ev) => setSubject(ev.target.value)} />
+          <input id="rdv-sujet" className="form-input" value={subject} placeholder={t('Ville, type de travaux')} onChange={(ev) => setSubject(ev.target.value)} />
         </Field>
         <Field label={t('Type')}>
           <Select value={type} onChange={setType} options={APPOINTMENT_TYPES.map((x) => ({ value: x, label: t(x) }))} />

@@ -8,7 +8,8 @@ import { HoverTip, useChangeStatus } from '../components/quote-status'
 import { ErrorState, Loading } from '../components/states'
 import { Page, PageHeader, RepAvatar } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
-import { REPS, companyById } from '../data/mock'
+import { REPS, clientById, clientLang, companyById } from '../data/mock'
+import { quoteByNo } from '../data/store'
 import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, QUOTE_COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type PipelineColumnId as ColumnId } from '../data/pipeline'
 import { request, useStore } from '../data/store'
 import { t } from '../i18n'
@@ -204,7 +205,7 @@ export default function Pipeline() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            setCompose({ kind: 'sms', ctx: { name: d.name, first: d.name.split(' ')[0], quoteNo: d.no === 'Lead' ? undefined : d.no, company: companyById(d.company).name } })
+                            setCompose({ kind: 'sms', ctx: { name: d.name, first: d.name.split(' ')[0], quoteNo: d.no === 'Lead' ? undefined : d.no, company: companyById(d.company).name, lang: clientLang(clientById(quoteByNo(d.no)?.clientId)) } })
                           }}
                           className="w-7 h-7 rounded-md bg-white shadow-card flex items-center justify-center text-ink-mute hover:text-primary-press"
                           aria-label={t('Texto')}

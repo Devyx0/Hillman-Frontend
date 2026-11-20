@@ -57,7 +57,7 @@ export const agenda: Record<string, string> = {
   'Créer un rendez-vous': 'Create an appointment',
   'Depuis {no}': 'From {no}',
   Sujet: 'Subject',
-  'Ville, Type de travaux': 'City, Type of work',
+  'Ville, type de travaux': 'City, type of work',
   'Date début': 'Start',
   'Date fin': 'End',
   Soumission: 'Quote',
@@ -194,7 +194,7 @@ export const agenda: Record<string, string> = {
   Cabanon: 'Shed',
 
   /* Cost items: names */
-  'Bardeau Architectural 30 pi²': 'Architectural shingle 30 sq ft',
+  'Bardeau architectural 30 pi²': 'Architectural shingle 30 sq ft',
   'Chapeau ± 22 pi lin.': 'Ridge cap ± 22 lin ft',
   'Départ Pro-Start GAF': 'GAF Pro-Start starter',
   'Membrane autocollante 3 × 60': 'Self-adhesive membrane 3 × 60',

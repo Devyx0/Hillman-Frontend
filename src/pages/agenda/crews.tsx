@@ -560,15 +560,18 @@ export function AbsencesPanel({ from, to, repIds, onOpen, onAdd }: { from: numbe
 /**
  * Quantities for the crew (no prices). For a job linked to a quote: the builder's quantities list
  * (`getDraft(q).costs`, the same list as the Quantités tab and the builder's Bon de travail,
- * computed from the gutter form by `gutterLines()`). Jobs without a quote fall back to an estimate
+ * computed live from the gutter form by `gutterLines()`). Jobs without a quote fall back to an estimate
  * parsed from the job description.
  */
-function workOrderLines(job: JobRecord) {
+export function workOrderLines(job: JobRecord) {
   const q = quoteByNo(job.quoteNo)
   if (q) {
+    // Same list as the builder's Quantités / Bon de travail: derived from the gutter form (+ tier, chosen
+    // add-ons, the rep's overrides) by withGutterCosts() in data/quote-builder.ts.
     const costs = getDraft(q).costs
     if (costs.length) return costs.map((l) => ({ item: t(l.item), qty: l.qty, unit: t(l.unit) }))
   }
+  if (job.company !== 'sg') return []
   const size = q?.gutterSize ?? 5
   const feet = Number(/(\d+)\s*pi/.exec(job.work)?.[1]) || Math.max(40, Math.round(job.amount / 22 / 5) * 5)
   const guard = /T-Rex|DoublePro|Pare-feuilles|5300/i.exec(job.work)?.[0]

@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, Ban, CalendarDays, Download, Eye, FilePenLine, FileText, History, House, Inbox, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag, UserX } from 'lucide-react'
+import { Archive, Ban, CalendarDays, Download, Eye, FilePenLine, FileText, History, House, Inbox, Languages, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag, UserX } from 'lucide-react'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
 import { ErrorState, SkeletonRows } from '../components/states'
 import { Badge, CompanyBadge, Drawer, Empty, Page, RepName, StatusBadge, Tabs } from '../components/ui'
 import { useApp } from '../context/AppContext'
 import { LOGICIA_TONE, logiciaForClient, type LogiciaQuote } from '../data/logicia'
-import { QUOTES, REPS, THREADS, clientById, companyById, fullName, repById, type Client, type Quote, type Thread } from '../data/mock'
+import { QUOTES, REPS, THREADS, clientById, clientLang, companyById, fullName, repById, type Client, type Quote, type Thread } from '../data/mock'
 import { isOptedOut } from '../data/settings'
-import { request, useStore } from '../data/store'
+import { request, updateClient, useStore } from '../data/store'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { GST, QST, money } from '../lib/utils'
-import { locale, t } from '../i18n'
+import { langName, locale, t, tIn, type Lang } from '../i18n'
 
 /** Statuses that count as an open quote (mockup: `x4`). */
 const OPEN_STATUSES = ['En soumission', 'À rappeler', 'Rappel courriel envoyé', 'Client va nous rappeler']
@@ -210,10 +210,14 @@ function ClientRecord({ client }: { client: Client }) {
   )
   const companies = [...new Set(quotes.map((q) => q.company))]
   const open = quotes.filter((q) => OPEN_STATUSES.includes(q.status))
-  const activeCompany = scope !== 'all' ? scope : (open[0]?.company ?? quotes[0]?.company ?? 'toit')
-  const companyRep = REPS.find((r) => r.company === activeCompany)
+  // The quote a message refers to decides which company (and rep) it is sent from.
+  const msgQuote = open.find((q) => scope === 'all' || q.company === scope) ?? quotes.find((q) => scope === 'all' || q.company === scope) ?? open[0] ?? quotes[0]
+  const activeCompany = msgQuote?.company ?? (scope !== 'all' ? scope : 'toit')
+  const companyRep = (msgQuote && repById(msgQuote.repId)) || REPS.find((r) => r.company === activeCompany)
   const owner = repById(open[0]?.repId ?? quotes[0]?.repId ?? 'jph')!
-  const ctx: MessageCtx = { name: fullName(client), first: client.first, quoteNo: open[0]?.no ?? quotes[0]?.no, company: companyById(activeCompany).name, rep: companyRep?.first ?? 'Jean-Pierre' }
+  // Everything sent to the client (texts, emails, drafts) is written in the client's language.
+  const lang = clientLang(client)
+  const ctx: MessageCtx = { name: fullName(client), first: client.first, quoteNo: msgQuote?.no, company: companyById(activeCompany).name, rep: companyRep?.first ?? 'Jean-Pierre', lang }
   const lifetime = isDemo ? 2700 : client.lifetime
 
   const thread = useMemo<Thread>(() => {
@@ -238,13 +242,13 @@ function ClientRecord({ client }: { client: Client }) {
               channel: 'email',
               at: q.date,
               by: repById(q.repId)!.name,
-              text: t('Bonjour {first}, voici votre soumission {no}. Vous pouvez la consulter et la signer en ligne.', { first: client.first, no: q.no }),
+              text: tIn(clientLang(client), 'Bonjour {first}, voici votre soumission {no}. Vous pouvez la consulter et la signer en ligne.', { first: client.first, no: q.no }),
               meta: t('Soumission {no}', { no: q.no }) + (q.views ? ' · ' + t('Ouverte {n} fois', { n: q.views }) : ''),
             },
           ]
         : [],
     }
-  }, [client, quotes])
+  }, [client, quotes, client.language]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const activity: TimelineItem[] = isDemo
     ? [
@@ -258,7 +262,7 @@ function ClientRecord({ client }: { client: Client }) {
         { icon: FilePenLine, title: t('G31877 · Payé · Signature Gouttières'), at: t('30 avr. 2021') },
       ]
     : quotes.slice(0, 5).map((q) => ({ icon: FilePenLine, title: `${q.no} · ${t(q.status)}`, at: q.date }))
-  const nextStep = isDemo ? { when: t('Mar. 20 oct. · 15 h 00'), what: t('Revoir le client') } : null
+  const nextStep = isDemo ? { when: t('Mar. 20 oct. · 15 h 00'), whenForClient: tIn(lang, 'Mar. 20 oct. · 15 h 00'), what: t('Revoir le client') } : null
   const address = `${client.no}, ${client.street}, ${client.city} ${client.postal}`
 
   return (
@@ -275,6 +279,12 @@ function ClientRecord({ client }: { client: Client }) {
               <CompanyBadge key={c} id={c} />
             ))}
             <span className="text-xs text-ink-mute">{t(client.type)}</span>
+            {lang === 'en' && (
+              <Badge tone="neutral">
+                <Languages className="w-3 h-3" />
+                {t('Communique en anglais')}
+              </Badge>
+            )}
             {optedOut && (
               <Badge tone="critical">
                 <Ban className="w-3 h-3" />
@@ -344,6 +354,25 @@ function ClientRecord({ client }: { client: Client }) {
               {
                 title: t('Détails'),
                 rows: [
+                  {
+                    icon: Languages,
+                    label: t('Langue de communication'),
+                    value: (
+                      <select
+                        value={lang}
+                        onChange={(e) => {
+                          const next = e.target.value as Lang
+                          updateClient(client.id, { language: next })
+                          toast(t('Langue du client : {lang}', { lang: langName(next) }))
+                        }}
+                        className="form-input h-8 py-0 mt-0.5 text-sm"
+                        aria-label={t('Langue de communication')}
+                      >
+                        <option value="fr">{langName('fr')}</option>
+                        <option value="en">{langName('en')}</option>
+                      </select>
+                    ),
+                  },
                   { icon: Inbox, label: t('Source'), value: t(client.source) },
                   { icon: House, label: t('Propriété'), value: isDemo ? t('Maison 1998 · 2 étages') : t(client.type) },
                   {
@@ -383,7 +412,7 @@ function ClientRecord({ client }: { client: Client }) {
                 { value: 'fichiers', label: t('Fichiers') },
               ]}
             />
-            {tab === 'conversation' && <ThreadPanel thread={thread} phone={textPhone} />}
+            {tab === 'conversation' && <ThreadPanel key={lang} thread={thread} phone={textPhone} lang={lang} />}
             {tab === 'logicia' && <LogiciaHistory client={client} />}
             {tab === 'activite' && <Timeline items={activity} />}
             {tab === 'soumissions' && quotes.length === 0 && (
@@ -470,7 +499,7 @@ function ClientRecord({ client }: { client: Client }) {
                   {optedOut ? (
                     <MessageButton kind="email" ctx={ctx} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
                   ) : (
-                    <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.when }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                    <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.whenForClient }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
                   )}
                 </div>
               ) : (

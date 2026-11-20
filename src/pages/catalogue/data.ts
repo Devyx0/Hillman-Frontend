@@ -68,6 +68,8 @@ export interface CostItem {
   sell: number
   /** YouTube / Vimeo link shown to reps (installation, product demo). */
   video?: string
+  /** Gouttières protection option this item stands for (its video is the option's default on quotes). */
+  tier?: 'standard' | 'continu' | 'pg5000' | 'pg1800'
 }
 
 /** General category → category → items. */
@@ -76,7 +78,7 @@ export type CostCatalogue = Record<string, Record<string, CostItem[]>>
 export const COST_ITEMS: CostCatalogue = {
   'Toit en pente': {
     Bardeaux: [
-      { id: 'b1', name: 'Bardeau Architectural 30 pi²', unit: 'paq.', cost: 50, sell: 50 },
+      { id: 'b1', name: 'Bardeau architectural 30 pi²', unit: 'paq.', cost: 50, sell: 50 },
       { id: 'b2', name: 'Chapeau ± 22 pi lin.', unit: 'paq.', cost: 60, sell: 60 },
       { id: 'b3', name: 'CertainTeed Shadow Ridge', unit: 'paq.', cost: 52, sell: 52 },
       { id: 'b4', name: 'Landmark Pro', unit: 'paq.', cost: 55, sell: 55 },
@@ -121,6 +123,13 @@ export const COST_ITEMS: CostCatalogue = {
       { id: 'g5', name: 'T-REX 5200', unit: 'pi', cost: 4, sell: 4, video: 'https://vimeo.com/76979871' },
       { id: 'g6', name: 'T-REX 5800', unit: 'pi', cost: 5, sell: 5 },
       { id: 'g7', name: 'T-REX 11500 DL PRO', unit: 'pi', cost: 5, sell: 5 },
+    ],
+    // One item per protection option offered on Gouttières quotes; their videos are the quotes' defaults.
+    'Options de protection': [
+      { id: 'o1', name: 'Crochet standard (Suprême aux 24 po)', unit: 'pi', cost: 0.35, sell: 0.75, tier: 'standard', video: 'https://www.youtube.com/watch?v=Qm4xT7bL2pE' },
+      { id: 'o2', name: 'Crochet continu T-Rex XL M-5800', unit: 'pi', cost: 2.9, sell: 5, tier: 'continu', video: 'https://www.youtube.com/watch?v=8RkWz3nYc5A' },
+      { id: 'o3', name: 'Protège-gouttières 5000 (grillage aluminium)', unit: 'pi', cost: 4.4, sell: 8, tier: 'pg5000', video: 'https://vimeo.com/418273615' },
+      { id: 'o4', name: 'Protège-gouttières 1800 (microfiltrant)', unit: 'pi', cost: 6.2, sell: 11.5, tier: 'pg1800', video: 'https://www.youtube.com/watch?v=Jt6vH0sFq9M' },
     ],
   },
   Rénovation: {
@@ -299,6 +308,46 @@ export function addScopeSection(company: CompanyId, name: string) {
 export const allCostItems = () => Object.values(COST_ITEMS).flatMap((g) => Object.values(g).flat())
 export const costItemById = (id: string) => allCostItems().find((it) => it.id === id)
 /** Fixed company fees keep their price when a margin is applied. */
+/** Catalogue video of a Gouttières protection option (default of every quote; a quote can override it). */
+export const tierCatalogueVideo = (tier: string): string | undefined => allCostItems().find((it) => it.tier === tier)?.video
+
+/**
+ * Video per catalogue SECTION (general category → category), e.g. a "how we install" video for
+ * Toitures → Bardeaux. Key: `${general}::${category}`. Items can still have their own video.
+ */
+export const CATEGORY_VIDEOS: Record<string, string> = {
+  'Gouttières::Gouttières': 'https://www.youtube.com/watch?v=Zc3pN6vRk1U',
+}
+export const categoryVideo = (general: string, category: string): string | undefined => CATEGORY_VIDEOS[`${general}::${category}`]
+export function setCategoryVideo(general: string, category: string, url?: string) {
+  const key = `${general}::${category}`
+  if (url) CATEGORY_VIDEOS[key] = url
+  else delete CATEGORY_VIDEOS[key]
+  commit()
+}
+
+/** YouTube / Vimeo URL → embeddable URL, or undefined when the link isn't one of those. */
+export function videoEmbed(url?: string) {
+  if (!url) return undefined
+  try {
+    const u = new URL(url.trim())
+    const host = u.hostname.replace(/^www\.|^m\./, '')
+    if (host === 'youtube.com') {
+      const id = u.searchParams.get('v') ?? (/^\/(?:shorts|embed)\/([\w-]+)/.exec(u.pathname)?.[1] ?? '')
+      return id ? `https://www.youtube-nocookie.com/embed/${id}` : undefined
+    }
+    if (host === 'youtu.be') return `https://www.youtube-nocookie.com/embed/${u.pathname.slice(1)}`
+    if (host === 'vimeo.com') {
+      const id = /^\/(\d+)/.exec(u.pathname)?.[1]
+      return id ? `https://player.vimeo.com/video/${id}` : undefined
+    }
+    if (host === 'player.vimeo.com') return u.toString()
+  } catch {
+    /* not a URL */
+  }
+  return undefined
+}
+
 export const isFixedFee = (it: CostItem) => /Frais fixes/.test(it.name)
 
 export function updateCostItem(id: string, patch: Partial<CostItem>) {

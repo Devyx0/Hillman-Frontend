@@ -6,7 +6,7 @@ import { ComingSoon, SkeletonRows } from '../components/states'
 import { Avatar, Badge, CHANNEL_ICONS, CompanyBadge, Empty, StatusBadge, type Icon } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
-import { APPOINTMENTS, CLIENTS, LEADS, ME, QUOTES, THREADS, clientById, companyById, fullName, repById, type CompanyId, type Thread } from '../data/mock'
+import { APPOINTMENTS, CLIENTS, LEADS, ME, QUOTES, THREADS, clientById, clientLang, companyById, fullName, repById, type CompanyId, type Thread } from '../data/mock'
 import { SENT_LOG, type SentRecord } from '../data/quote-builder'
 import { isOptedOut } from '../data/settings'
 import { quoteById, request, useStore } from '../data/store'
@@ -198,17 +198,17 @@ interface SentEmail {
 
 /** Mockup: `wx`. */
 const SENT_EMAILS: SentEmail[] = [
-  { id: 'e1', type: 'Soumission', date: "Aujourd'hui 16 h 43", day: 'today', by: 'Pierre-Luc Cloutier', quoteNo: 'G64318', client: 'Patrick Boucher', email: 'p.boucher@videotron.ca', company: 'sg', subject: 'Soumission gouttière G64318', body: PLC_QUOTE_BODY, attach: 'Soumission G64318.pdf', opened: 1 },
-  { id: 'e2', type: 'Soumission', date: "Aujourd'hui 16 h 33", day: 'today', by: 'Pierre-Luc Cloutier', quoteNo: 'G64317', client: 'Mélanie Morin', email: 'melanie.morin@gmail.com', company: 'sg', subject: 'Soumission gouttière G64317', body: PLC_QUOTE_BODY, attach: 'Soumission G64317.pdf' },
-  { id: 'e3', type: 'Soumission', date: "Aujourd'hui 15 h 39", day: 'today', by: 'Hélène Petitpas', quoteNo: 'H64026', client: 'Pierre Simard', email: 'p.simard@outlook.com', company: 'toit', subject: 'Job : 2026-10-22', body: `Bonjour,\n\nConfirmation des travaux pour le jeudi 22 octobre.\nTimberline Charbon, bordure noire, ventilateur noir.\nRallonge arrière non incluse · OSB ½ à faire.\n\nHélène Petitpas\nToitures Hillman`, attach: 'Soumission H64026.pdf', opened: 2 },
-  { id: 'e4', type: 'Rappel', date: "Aujourd'hui 14 h 00", day: 'today', by: 'Automatique', quoteNo: 'G64251', client: 'Habitations Mica', email: 'f.helie@habitationsmica.com', company: 'sg', subject: 'Suivi soumission #G64251', body: AUTO_REMINDER_BODY },
-  { id: 'e5', type: 'Rappel', date: "Aujourd'hui 13 h 30", day: 'today', by: 'Automatique', quoteNo: 'H64263', client: 'Nathalie Morin', email: 'nathalie.morin@hotmail.com', company: 'toit', subject: 'Suivi soumission #H64263', body: AUTO_REMINDER_BODY, opened: 1 },
-  { id: 'e6', type: 'Rappel', date: "Aujourd'hui 13 h 00", day: 'today', by: 'Automatique', quoteNo: 'G64219', client: 'Denis Girard', email: 'denis.girard@live.ca', company: 'sg', subject: 'Suivi soumission #G64219', body: AUTO_REMINDER_BODY },
+  { id: 'e1', type: 'Soumission', date: "Aujourd'hui 16 h 43", day: 'today', by: 'Pierre-Luc Cloutier', quoteNo: 'G64318', client: 'Patrick Boucher', email: 'p.boucher@videotron.ca', company: 'sg', subject: 'Soumission gouttières G64318', body: PLC_QUOTE_BODY, attach: 'Soumission G64318.pdf', opened: 1 },
+  { id: 'e2', type: 'Soumission', date: "Aujourd'hui 16 h 33", day: 'today', by: 'Pierre-Luc Cloutier', quoteNo: 'G64317', client: 'Mélanie Morin', email: 'melanie.morin@gmail.com', company: 'sg', subject: 'Soumission gouttières G64317', body: PLC_QUOTE_BODY, attach: 'Soumission G64317.pdf' },
+  { id: 'e3', type: 'Soumission', date: "Aujourd'hui 15 h 39", day: 'today', by: 'Hélène Petitpas', quoteNo: 'H64026', client: 'Pierre Simard', email: 'p.simard@outlook.com', company: 'toit', subject: 'Confirmation des travaux du 22 octobre', body: `Bonjour,\n\nConfirmation des travaux pour le jeudi 22 octobre.\nTimberline Charbon, bordure noire, ventilateur noir.\nRallonge arrière non incluse · OSB ½ à faire.\n\nHélène Petitpas\nToitures Hillman`, attach: 'Soumission H64026.pdf', opened: 2 },
+  { id: 'e4', type: 'Rappel', date: "Aujourd'hui 14 h 00", day: 'today', by: 'Automatique', quoteNo: 'G64251', client: 'Habitations Mica', email: 'f.helie@habitationsmica.com', company: 'sg', subject: 'Suivi de votre soumission G64251', body: AUTO_REMINDER_BODY },
+  { id: 'e5', type: 'Rappel', date: "Aujourd'hui 13 h 30", day: 'today', by: 'Automatique', quoteNo: 'H64263', client: 'Nathalie Morin', email: 'nathalie.morin@hotmail.com', company: 'toit', subject: 'Suivi de votre soumission H64263', body: AUTO_REMINDER_BODY, opened: 1 },
+  { id: 'e6', type: 'Rappel', date: "Aujourd'hui 13 h 00", day: 'today', by: 'Automatique', quoteNo: 'G64219', client: 'Denis Girard', email: 'denis.girard@live.ca', company: 'sg', subject: 'Suivi de votre soumission G64219', body: AUTO_REMINDER_BODY },
   { id: 'e7', type: 'Soumission', date: 'Hier 17 h 12', day: 'yesterday', by: 'Jean-Pierre Hillman', quoteNo: 'H64320', quoteId: 'q64320', client: 'Isabelle Gagnon', email: 'isabelle.gagnon@videotron.ca', company: 'toit', subject: 'Soumission toiture H64320', body: `Bonjour Isabelle,\n\nVoici votre soumission. Vous pouvez la consulter et la signer en ligne avec le lien ci-dessous.\n\nJean-Pierre Hillman\nToitures Hillman · 418 576-1993`, attach: 'Soumission H64320.pdf · Garantie GAF System Plus.pdf', opened: 3 },
-  { id: 'e8', type: 'Soumission', date: 'Hier 15 h 05', day: 'yesterday', by: 'Dominic Plourde', quoteNo: 'G64310', client: 'Denis Girard', email: 'denis.girard@live.ca', company: 'sg', subject: 'Soumission gouttière G64310', body: `Bonjour, voici la soumission.\n\nMerci\nDominic Plourde\nSignature Gouttières`, attach: 'Soumission G64310.pdf', opened: 4 },
+  { id: 'e8', type: 'Soumission', date: 'Hier 15 h 05', day: 'yesterday', by: 'Dominic Plourde', quoteNo: 'G64310', client: 'Denis Girard', email: 'denis.girard@live.ca', company: 'sg', subject: 'Soumission gouttières G64310', body: `Bonjour, voici la soumission.\n\nMerci\nDominic Plourde\nSignature Gouttières`, attach: 'Soumission G64310.pdf', opened: 4 },
   { id: 'e9', type: 'Soumission', date: 'Lun. 19 h 02', day: 'week', by: 'Philippe Audet', quoteNo: 'R64288', client: 'Louis Bergeron', email: 'louis.bergeron@outlook.com', company: 'reno', subject: 'Soumission agrandissement R64288', body: `Bonjour M. Bergeron,\n\nVoici la soumission révisée pour le garage, incluant le revêtement. Au plaisir!\n\nPhilippe Audet\nRénovations Hillman`, attach: 'Soumission R64288.pdf', opened: 2 },
-  { id: 'e10', type: 'Rappel', date: 'Lun. 14 h 00', day: 'week', by: 'Automatique', quoteNo: 'H64252', client: 'Simon Leclerc', email: 'simon.leclerc@gmail.com', company: 'toit', subject: 'Suivi soumission #H64252', body: AUTO_REMINDER_BODY },
-  { id: 'e11', type: 'Rappel', date: 'Lun. 13 h 30', day: 'week', by: 'Automatique', quoteNo: 'G64236', client: 'Steve Dubé', email: 'steve.dube@videotron.ca', company: 'sg', subject: 'Suivi soumission #G64236', body: AUTO_REMINDER_BODY, opened: 1 },
+  { id: 'e10', type: 'Rappel', date: 'Lun. 14 h 00', day: 'week', by: 'Automatique', quoteNo: 'H64252', client: 'Simon Leclerc', email: 'simon.leclerc@gmail.com', company: 'toit', subject: 'Suivi de votre soumission H64252', body: AUTO_REMINDER_BODY },
+  { id: 'e11', type: 'Rappel', date: 'Lun. 13 h 30', day: 'week', by: 'Automatique', quoteNo: 'G64236', client: 'Steve Dubé', email: 'steve.dube@videotron.ca', company: 'sg', subject: 'Suivi de votre soumission G64236', body: AUTO_REMINDER_BODY, opened: 1 },
   { id: 'e12', type: 'Soumission', date: 'Sam. 10 h 18', day: 'week', by: 'Benoit Tondreau', quoteNo: 'G64300', client: 'Steve Dubé', email: 'steve.dube@videotron.ca', company: 'sg', subject: 'Soumission nettoyage G64300', body: `Bonjour, voici la soumission pour le nettoyage avant l'hiver.\n\nBenoit Tondreau\nSignature Gouttières`, attach: 'Soumission G64300.pdf' },
 ]
 
@@ -589,7 +589,7 @@ export default function Conversations() {
               <MessageBubble key={m.id} m={m} thread={active} onRetry={retry} />
             ))}
           </div>
-          <Composer key={active.id} thread={active} phone={threadPhone(active)} onSend={appendMessage} />
+          <Composer key={active.id} thread={active} phone={threadPhone(active)} lang={clientLang(active.clientId ? clientById(active.clientId) : undefined)} onSend={appendMessage} />
         </div>
       )}
 

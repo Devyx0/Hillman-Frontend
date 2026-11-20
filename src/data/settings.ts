@@ -73,28 +73,98 @@ export interface PaymentStep {
   label: string
   pct: number
 }
-export const PAYMENT_SCHEDULES: Record<CompanyId, PaymentStep[]> = {
+/** A named payment schedule. Each company has one or more; one is the default of new quotes. */
+export interface PaymentSchedule {
+  id: string
+  /** French name (translated with `t`), e.g. "100 % à la fin des travaux". */
+  name: string
+  steps: PaymentStep[]
+}
+
+const DEPOSIT_30_70: PaymentStep[] = [
+  { label: 'Dépôt à la signature', pct: 30 },
+  { label: 'Fin des travaux', pct: 70 },
+]
+
+/**
+ * Schedules each company offers on its quotes (Paramètres → Calendriers de paiement). The rep picks one
+ * on the quote (Prix); `DEFAULT_PAYMENT_SCHEDULE` is used when the quote doesn't pick one.
+ * Signature Gouttières: 100 % at the end of the work by default; 30 % deposit / 70 % end as an option.
+ */
+export const PAYMENT_SCHEDULE_OPTIONS: Record<CompanyId, PaymentSchedule[]> = {
   toit: [
-    { label: 'Dépôt à la signature', pct: 15 },
-    { label: 'Livraison des matériaux', pct: 35 },
-    { label: 'Mi-travaux', pct: 35 },
-    { label: 'Fin des travaux', pct: 15 },
+    {
+      id: 'toit-std',
+      name: 'Standard (15 / 35 / 35 / 15)',
+      steps: [
+        { label: 'Dépôt à la signature', pct: 15 },
+        { label: 'Livraison des matériaux', pct: 35 },
+        { label: 'Mi-travaux', pct: 35 },
+        { label: 'Fin des travaux', pct: 15 },
+      ],
+    },
+    { id: 'toit-30-70', name: 'Dépôt 30 % / fin des travaux 70 %', steps: DEPOSIT_30_70.map((s) => ({ ...s })) },
   ],
   sg: [
-    { label: 'Dépôt à la signature', pct: 30 },
-    { label: 'Fin des travaux', pct: 70 },
+    { id: 'sg-fin', name: '100 % à la fin des travaux', steps: [{ label: 'Fin des travaux', pct: 100 }] },
+    { id: 'sg-30-70', name: 'Dépôt 30 % / fin des travaux 70 %', steps: DEPOSIT_30_70.map((s) => ({ ...s })) },
   ],
   reno: [
-    { label: 'Dépôt à la signature', pct: 10 },
-    { label: 'Fondation et charpente', pct: 30 },
-    { label: 'Fermeture du bâtiment', pct: 30 },
-    { label: 'Finition intérieure', pct: 20 },
-    { label: 'Fin des travaux', pct: 10 },
+    {
+      id: 'reno-std',
+      name: 'Standard (10 / 30 / 30 / 20 / 10)',
+      steps: [
+        { label: 'Dépôt à la signature', pct: 10 },
+        { label: 'Fondation et charpente', pct: 30 },
+        { label: 'Fermeture du bâtiment', pct: 30 },
+        { label: 'Finition intérieure', pct: 20 },
+        { label: 'Fin des travaux', pct: 10 },
+      ],
+    },
+    { id: 'reno-30-70', name: 'Dépôt 30 % / fin des travaux 70 %', steps: DEPOSIT_30_70.map((s) => ({ ...s })) },
   ],
 }
-export function savePaymentSchedule(company: CompanyId, steps: PaymentStep[]) {
-  PAYMENT_SCHEDULES[company] = steps
+
+/** Id of the default schedule of each company. */
+export const DEFAULT_PAYMENT_SCHEDULE: Record<CompanyId, string> = { toit: 'toit-std', sg: 'sg-fin', reno: 'reno-std' }
+
+/** The company's default schedule. */
+export const defaultPaymentSchedule = (company: CompanyId): PaymentSchedule =>
+  PAYMENT_SCHEDULE_OPTIONS[company].find((s) => s.id === DEFAULT_PAYMENT_SCHEDULE[company]) ?? PAYMENT_SCHEDULE_OPTIONS[company][0]
+
+/** A schedule by id, or the company default when the id is unknown (e.g. deleted in the settings). */
+export const paymentScheduleById = (company: CompanyId, id?: string): PaymentSchedule =>
+  PAYMENT_SCHEDULE_OPTIONS[company].find((s) => s.id === id) ?? defaultPaymentSchedule(company)
+
+/** The first step when it is a deposit paid before the work (none for "100 % à la fin des travaux"). */
+export function depositStep<T extends PaymentStep>(steps: T[]): T | undefined {
+  const first = steps[0]
+  return steps.length > 1 && first && /dépôt|signature|deposit/i.test(first.label) ? first : undefined
+}
+
+/** Default steps per company (kept in sync with the default schedule; read-only view for older callers). */
+export const PAYMENT_SCHEDULES: Record<CompanyId, PaymentStep[]> = {
+  toit: defaultPaymentSchedule('toit').steps,
+  sg: defaultPaymentSchedule('sg').steps,
+  reno: defaultPaymentSchedule('reno').steps,
+}
+
+/** Save all schedules of a company and its default. */
+export function savePaymentSchedules(company: CompanyId, list: PaymentSchedule[], defaultId: string) {
+  PAYMENT_SCHEDULE_OPTIONS[company] = list.map((s) => ({ ...s, steps: s.steps.map((x) => ({ ...x })) }))
+  DEFAULT_PAYMENT_SCHEDULE[company] = list.some((s) => s.id === defaultId) ? defaultId : list[0].id
+  PAYMENT_SCHEDULES[company] = defaultPaymentSchedule(company).steps
   commit()
+}
+
+/** Replace the steps of the company's default schedule. */
+export function savePaymentSchedule(company: CompanyId, steps: PaymentStep[]) {
+  const def = defaultPaymentSchedule(company)
+  savePaymentSchedules(
+    company,
+    PAYMENT_SCHEDULE_OPTIONS[company].map((s) => (s.id === def.id ? { ...s, steps } : s)),
+    def.id,
+  )
 }
 
 // ── Follow-up sequences (per company) ───────────────────────────────────────

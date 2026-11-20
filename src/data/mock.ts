@@ -5,6 +5,7 @@
  *
  * NOTE: the order of PRNG calls matters — do not reorder generators.
  */
+import { GUTTER_SEEDS, seedGutterQuote } from './gutter-quantities'
 
 export type CompanyId = 'toit' | 'sg' | 'reno'
 
@@ -178,6 +179,9 @@ Object.assign(CLIENTS[0], {
   postal: 'G1H 3K7', since: '2019', source: 'Google', type: 'Résidentiel', consentSms: true,
 })
 
+// A few English-speaking clients, so client-language drafts, portal and PDF can be demoed.
+for (const i of [3, 11, 20]) CLIENTS[i].language = 'en'
+
 export const fullName = (c: { first: string; last: string }) => `${c.first} ${c.last}`
 export const clientById = (id?: string): Client | undefined => CLIENTS.find((c) => c.id === id)
 
@@ -248,6 +252,14 @@ Object.assign(QUOTES[0], {
   city: 'Charlesbourg', views: 3, lastViewed: '2026-10-20', hot: true, daysInStatus: 4,
   nextAction: 'Appeler — a ouvert 3 fois', nextActionDate: TODAY,
 })
+// Gouttières: every quote gets a gutter form whose derived quantities cost exactly `q.cost` (amounts unchanged),
+// so the list, the builder (Formulaire → Quantités), the PDF, the portal and the work order agree.
+for (const q of QUOTES) {
+  if (q.company !== 'sg') continue
+  const seed = seedGutterQuote(q)
+  q.cost = seed.cost
+  GUTTER_SEEDS.set(q.id, seed)
+}
 for (const q of QUOTES) {
   const c = clientById(q.clientId)!
   c.quotes++

@@ -8,9 +8,9 @@ import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, Thre
 import { ComingSoon, confirmAction } from '../components/states'
 import { CompanyBadge, Drawer, Empty, Page, RepAvatar, StatusBadge, Tabs } from '../components/ui'
 import { DEFAULT_LEAD_REP, LEAD_LOST, LEAD_PROFILES, LEAD_STAGES, LEAD_STATUS, channelStyle, leadById, leadStage, threadForLead } from '../data/leads'
-import { REPS, clientById, companyById, fullName, repById } from '../data/mock'
+import { REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
 import { addAppointment, quoteById, updateLead, useStore } from '../data/store'
-import { t } from '../i18n'
+import { t, tIn } from '../i18n'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
@@ -67,7 +67,9 @@ export default function LeadDetail() {
   const channel = channelStyle(lead.channel)
   const quote = quoteById(lead.quoteId)
   const client = clientById(lead.clientId)
-  const ctx: MessageCtx = { name: lead.name, first: lead.name.split(' ')[0], company: company.name, rep: rep.first }
+  // Drafts go out in the client's language once the lead is linked to a client; French otherwise.
+  const lang = clientLang(client)
+  const ctx: MessageCtx = { name: lead.name, first: lead.name.split(' ')[0], company: company.name, rep: rep.first, lang }
   const aiLead = !!profile // seeded mockup leads carry the AI-agent demo
 
   const activity: TimelineItem[] = [
@@ -245,7 +247,7 @@ export default function LeadDetail() {
                 { value: 'notes', label: t('Notes') },
               ]}
             />
-            {tab === 'conversation' && <ThreadPanel thread={thread} phone={lead.phone} />}
+            {tab === 'conversation' && <ThreadPanel thread={thread} phone={lead.phone} lang={lang} />}
             {tab === 'activite' && <Timeline items={activity} />}
             {tab === 'notes' && <Notes initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
           </>
@@ -284,7 +286,7 @@ export default function LeadDetail() {
                       <p className="text-xs text-ink-mute">{t('Estimation')} · {rep.first}</p>
                     </div>
                   </div>
-                  <MessageButton kind="reminder" ctx={{ ...ctx, date: t(lead.booked) }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                  <MessageButton kind="reminder" ctx={{ ...ctx, date: tIn(lang, lead.booked) }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
                   {quote && (
                     <button onClick={addVisit} className="btn btn-sm btn-ghost w-full">
                       <CalendarPlus className="w-4 h-4" />

@@ -22,7 +22,8 @@ function readLang(): Lang {
   } catch {
     /* storage unavailable */
   }
-  return 'en'
+  // French is the default language of the app (login included) until the user picks English.
+  return 'fr'
 }
 
 let lang: Lang = readLang()
@@ -78,6 +79,9 @@ export function tx(context: string, text: string, vars?: Record<string, string |
   }
   return t(text, vars)
 }
+
+/** Name of a language, in the current UI language ("Français" / "Anglais", "French" / "English"). */
+export const langName = (l: Lang) => tx('langue', l === 'en' ? 'Anglais' : 'Français')
 
 export function t(text: string, vars?: Record<string, string | number>): string {
   let out = text

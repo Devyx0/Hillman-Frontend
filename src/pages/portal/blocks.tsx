@@ -1,7 +1,10 @@
+import { useEffect, useState } from 'react'
+import { ExternalLink, PlayCircle, X } from 'lucide-react'
 import { t } from '../../i18n'
 import { cn, money } from '../../lib/utils'
+import { videoEmbed } from '../catalogue/data'
 import type { QuoteRecord } from '../../data/store'
-import { lineLabel, paymentSchedule, type Pricing } from './pricing'
+import { depositStep, lineLabel, paymentSchedule, type Pricing } from './pricing'
 
 /** Price lines + taxes + total — same total as the quote builder. */
 export function PriceTable({ pricing, big }: { pricing: Pricing; big?: boolean }) {
@@ -39,16 +42,69 @@ export function PriceTable({ pricing, big }: { pricing: Pricing; big?: boolean }
 
 /** Payment schedule of the company (settings), with amounts. */
 export function PaymentList({ q, total }: { q: QuoteRecord; total: number }) {
+  const steps = paymentSchedule(q, total)
   return (
     <ol className="space-y-2.5">
-      {paymentSchedule(q, total).map((s, i) => (
+      {steps.map((s, i) => (
         <li key={i} className="flex items-center gap-3">
           <span className="w-10 h-7 rounded-md flex items-center justify-center text-xs font-bold tnum bg-sand text-ink-secondary shrink-0">{t('{n} %', { n: s.pct })}</span>
           <span className="flex-1 text-sm text-ink-secondary">{t(s.label)}</span>
           <span className="text-sm font-semibold tnum">{money(s.amount)}</span>
         </li>
       ))}
+      {!depositStep(steps) && <li className="text-xs text-ink-mute">{t('Aucun dépôt à la signature.')}</li>}
     </ol>
+  )
+}
+
+/**
+ * "Regarder la vidéo" link of a product option: plays YouTube / Vimeo in a modal, other links open in a
+ * new tab.
+ */
+export function VideoLink({ url, title, className }: { url: string; title: string; className?: string }) {
+  const [open, setOpen] = useState(false)
+  const embed = videoEmbed(url)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+  const cls = cn('inline-flex items-center gap-1.5 text-xs font-semibold text-primary-press hover:underline', className)
+  if (!embed)
+    return (
+      <a href={url} target="_blank" rel="noreferrer noopener" className={cls}>
+        <PlayCircle className="w-4 h-4" />
+        {t('Regarder la vidéo')}
+        <ExternalLink className="w-3 h-3" />
+      </a>
+    )
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={cn(cls, 'text-left')}>
+        <PlayCircle className="w-4 h-4" />
+        {t('Regarder la vidéo')}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title} onClick={() => setOpen(false)}>
+          <div className="w-full max-w-3xl bg-white rounded-2xl overflow-hidden shadow-elevated" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-hairline">
+              <p className="text-sm font-semibold truncate">{title}</p>
+              <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Fermer')}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="aspect-video bg-ink">
+              <iframe src={embed} title={title} className="w-full h-full" allow="accelerometer; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+            </div>
+            <a href={url} target="_blank" rel="noreferrer noopener" className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-primary-press hover:underline">
+              <ExternalLink className="w-3.5 h-3.5" />
+              {t('Ouvrir dans un nouvel onglet')}
+            </a>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

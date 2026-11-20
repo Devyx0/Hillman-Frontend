@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ClipboardList, Plus, Printer, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { ClipboardList, Plus, Printer, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { CompanyLogo, Drawer, Field } from '../../components/ui'
 import { BuilderSection, ToggleChip } from '../../components/quote-shared'
 import { fullName } from '../../data/mock'
-import { fillClause, gutterClauses, gutterLines, gutterTotals, type GutterFace, type GutterForm } from '../../data/quote-builder'
+import { fillClause, gutterClauses, gutterTotals, type GutterFace, type GutterForm } from '../../data/quote-builder'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, money, num } from '../../lib/utils'
@@ -266,28 +266,32 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
 }
 
 /**
- * Gouttières: quantities list computed from the form and tier. It is the crew's work order, so it
- * carries no selling prices; costs show only with the `quotes.costs` permission.
+ * Gouttières: quantities computed live from the form, the chosen tier and add-ons (no manual
+ * recalculation). The rep can still type over a quantity; overridden rows are flagged and
+ * "Rétablir les valeurs du formulaire" drops the overrides. It is the crew's work order, so it carries
+ * no selling prices; costs show only with the `quotes.costs` permission.
  */
 export function QuantitesSection({ b }: { b: Builder }) {
   const [orderOpen, setOrderOpen] = useState(false)
   const { costs, canCosts } = b
+  const overridden = Object.keys(b.qtyOverrides ?? {}).filter((k) => costs.some((l) => l.item === k))
+  const formQty = (item: string) => b.formLines.find((l) => l.item === item)?.qty
   return (
     <BuilderSection
       id="quantites"
       title={t('Quantités')}
       actions={
         <>
-          {b.tiered && (
+          {overridden.length > 0 && (
             <button
               className="btn btn-sm btn-ghost"
               onClick={() => {
-                b.setCosts(gutterLines(b.gutter, b.tier))
-                toast(t('Quantités recalculées depuis le formulaire'))
+                b.resetQuantities()
+                toast(t('Quantités rétablies selon le formulaire'))
               }}
             >
-              <RefreshCw className="w-4 h-4" />
-              {t('Recalculer')}
+              <RotateCcw className="w-4 h-4" />
+              {t('Rétablir les valeurs du formulaire')}
             </button>
           )}
           <button className="btn btn-sm btn-secondary" onClick={() => setOrderOpen(true)}>
@@ -312,31 +316,42 @@ export function QuantitesSection({ b }: { b: Builder }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {costs.map((l, i) => (
-                <tr key={i}>
-                  <td className="py-1.5 pr-2 text-ink-secondary">
-                    {t(l.item)} <span className="text-2xs text-ink-faint">· {t(l.cat)}</span>
-                  </td>
-                  <td className="py-1.5 text-right">
-                    <span className="inline-flex items-center gap-1.5">
-                      <input type="number" min={0} value={l.qty} onChange={(e) => b.setCosts((prev) => prev.map((x, k) => (k === i ? { ...x, qty: Number(e.target.value) } : x)))} className="w-20 h-8 px-2 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary" aria-label={t('Quantité {item}', { item: t(l.item) })} />
-                      <span className="text-2xs text-ink-mute w-10 text-left">{t(l.unit)}</span>
-                    </span>
-                  </td>
-                  {canCosts && <td className="py-1.5 text-right tnum text-ink-mute">{money(l.cost)}</td>}
-                  {canCosts && <td className="py-1.5 text-right tnum font-semibold">{money(l.qty * l.cost, false)}</td>}
-                  <td className="py-1.5 pl-1 text-right">
-                    <button onClick={() => b.setCosts((prev) => prev.filter((_, k) => k !== i))} className="p-1.5 rounded-md text-ink-faint hover:text-tone-critical-ink hover:bg-tone-critical-soft" aria-label={t('Retirer {item}', { item: t(l.item) })}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {costs.map((l) => {
+                const manual = l.item in (b.qtyOverrides ?? {})
+                const fromForm = formQty(l.item)
+                return (
+                  <tr key={l.item} className={cn(manual && 'bg-tone-warn-soft/40')}>
+                    <td className="py-1.5 pr-2 text-ink-secondary">
+                      {t(l.item)} <span className="text-2xs text-ink-faint">· {t(l.cat)}</span>
+                      {manual && (
+                        <span className="block text-2xs text-tone-warn-ink">
+                          {t('Modifié à la main · formulaire : {n} {unit}', { n: num(fromForm ?? 0), unit: t(l.unit) })}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right">
+                      <span className="inline-flex items-center gap-1.5">
+                        <input type="number" min={0} value={l.qty} onChange={(e) => b.setQty(l.item, Number(e.target.value))} className={cn('w-20 h-8 px-2 rounded-md border text-right tnum text-sm focus:outline-none focus:border-primary', manual ? 'border-tone-warn' : 'border-hairline-input')} aria-label={t('Quantité {item}', { item: t(l.item) })} />
+                        <span className="text-2xs text-ink-mute w-10 text-left">{t(l.unit)}</span>
+                      </span>
+                    </td>
+                    {canCosts && <td className="py-1.5 text-right tnum text-ink-mute">{money(l.cost)}</td>}
+                    {canCosts && <td className="py-1.5 text-right tnum font-semibold">{money(l.qty * l.cost, false)}</td>}
+                    <td className="py-1.5 pl-1 text-right">
+                      <button onClick={() => b.setQty(l.item, 0)} disabled={l.qty === 0} className="p-1.5 rounded-md text-ink-faint hover:text-tone-critical-ink hover:bg-tone-critical-soft disabled:opacity-30" aria-label={t('Retirer {item}', { item: t(l.item) })} title={t('Mettre à 0')}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
-      <p className="text-xs text-ink-mute mt-3">{t('Cette liste devient le bon de travail de l’équipe — sans prix.')}</p>
+      <p className="text-xs text-ink-mute mt-3">
+        {t('Calculées automatiquement depuis le formulaire, l’option de protection et les ajouts choisis. Cette liste devient le bon de travail de l’équipe — sans prix.')}
+      </p>
       <WorkOrder b={b} open={orderOpen} onClose={() => setOrderOpen(false)} />
     </BuilderSection>
   )

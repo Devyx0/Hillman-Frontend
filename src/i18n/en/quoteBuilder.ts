@@ -21,7 +21,7 @@ export const quoteBuilder: Record<string, string> = {
   'Enlever les descentes existantes': 'Remove existing downspouts',
   'Disposer des rebuts': 'Dispose of debris',
   'Gouttières aluminium 5 po sans joint, formées sur place': '5 in seamless aluminum gutters, formed on site',
-  'Gouttières aluminium 6 po Modèle Distinction': '6 in aluminum gutters, Distinction model',
+  'Gouttières aluminium 6 po modèle Distinction': '6 in aluminum gutters, Distinction model',
   'Gouttières acier': 'Steel gutters',
   'Crochets vissés Suprême aux 24 po': 'Suprême screw-in hangers every 24 in',
   'Descentes 2 × 3 po': '2 × 3 in downspouts',

@@ -3,13 +3,14 @@ import { Check, Clock, Eye, Mail, MessageSquare, PenLine, Send, Tablet } from 'l
 import { useAuth } from '../../auth/AuthContext'
 import { Badge, CompanyLogo, Field } from '../../components/ui'
 import { confirmAction, Notice } from '../../components/states'
-import { fullName, repById } from '../../data/mock'
-import { CONSUMER_RESOLUTION_TEXT, CONTRACT_CLAUSES, SENT_LOG, fillClause, gutterClauses, isSeededQuote, logSent } from '../../data/quote-builder'
+import { clientLang, fullName, repById } from '../../data/mock'
+import { CONSUMER_RESOLUTION_TEXT, CONTRACT_CLAUSES, SENT_LOG, fillClause, gutterClauses, isSeededQuote, logSent, tierVideo } from '../../data/quote-builder'
 import { isOptedOut } from '../../data/settings'
 import { changeQuoteStatus } from '../../data/store'
-import { locale, t } from '../../i18n'
+import { inLang, langName, locale, t, tIn } from '../../i18n'
+import { ClientLangProvider, useClientLang } from '../../i18n/ClientLang'
 import { toast } from '../../lib/toast'
-import { cn, money } from '../../lib/utils'
+import { cn, money, pct } from '../../lib/utils'
 import { BuilderSection, ToggleChip } from '../../components/quote-shared'
 import type { Builder } from './useQuoteBuilder'
 
@@ -23,12 +24,28 @@ function printedScope(b: Builder): string[] {
   return order.map((l) => fillClause(t(l), b.values))
 }
 
-/** Two-page PDF preview of the quote. Totals come from the same pricing as the header and Prix. */
+/** Email subject of a quote, in the client's language: "Soumission gouttières G64317" / "Gutter quote G64317". */
+function quoteSubject(company: 'toit' | 'sg' | 'reno', no: string) {
+  return company === 'sg' ? t('Soumission gouttières {no}', { no }) : company === 'toit' ? t('Soumission toiture {no}', { no }) : t('Soumission rénovation {no}', { no })
+}
+
+/**
+ * Two-page PDF preview of the quote, in the CLIENT's language (whatever the rep's UI language).
+ * Totals come from the same pricing as the header and Prix.
+ */
 function PdfPreview({ b }: { b: Builder }) {
+  const { fmt } = useClientLang()
+  // Everything below is evaluated in the client's language (t, money, dates).
+  // Called as a plain function (no hooks inside) so its t()/money() calls run in the client's language.
+  return fmt(() => pdfPages(b))
+}
+
+function pdfPages(b: Builder) {
   const { quote, client, company, pricing } = b
   const lines = printedScope(b)
   const exclusions = b.scope.find((s) => s.name === 'Exclusions')?.lines.filter((l) => b.checked.has(l)) ?? []
-  const label = (l: { label: string; item?: string }) => t(l.label, { item: l.item ? t(l.item) : '', n: 10 })
+  const label = (l: { label: string; item?: string }) => t(l.label, { item: l.item ? t(l.item) : '' })
+  const options = b.addons.filter((a) => a.optional)
   return (
     <div className="rounded-lg bg-stone p-3">
       <div className="bg-white rounded shadow-card p-4 text-[11px] leading-snug text-ink-secondary space-y-3 aspect-[8.5/11] overflow-hidden">
@@ -78,12 +95,36 @@ function PdfPreview({ b }: { b: Builder }) {
         {pricing.tiers && (
           <div>
             <p className="bg-sand font-bold px-2 py-0.5 uppercase">{t('Options de protection')}</p>
-            {pricing.tiers.map((x) => (
-              <p key={x.id} className={cn('flex justify-between gap-2 mt-0.5', x.id === b.tier && 'font-bold text-ink')}>
+            {pricing.tiers.map((x) => {
+              const video = tierVideo(x)
+              return (
+                <p key={x.id} className={cn('flex justify-between gap-2 mt-0.5', x.id === b.tier && 'font-bold text-ink')}>
+                  <span className="truncate">
+                    {x.id === b.tier ? '☑' : '☐'} {t(x.label)}
+                    {video && (
+                      <>
+                        {' · '}
+                        <a href={video} target="_blank" rel="noreferrer noopener" className="text-primary-press underline font-normal">
+                          {t('Vidéo')}
+                        </a>
+                      </>
+                    )}
+                  </span>
+                  <span className="tnum">{x.price ? '+ ' + money(x.price) : t('Inclus')}</span>
+                </p>
+              )
+            })}
+          </div>
+        )}
+        {options.length > 0 && (
+          <div>
+            <p className="bg-sand font-bold px-2 py-0.5 uppercase">{t('Ajouts optionnels')}</p>
+            {options.map((a) => (
+              <p key={a.id} className={cn('flex justify-between gap-2 mt-0.5', a.chosen && 'font-bold text-ink')}>
                 <span className="truncate">
-                  {x.id === b.tier ? '☑' : '☐'} {t(x.label)}
+                  {a.chosen ? '☑' : '☐'} {t(a.desc)}
                 </span>
-                <span className="tnum">{x.price ? '+ ' + money(x.price) : t('Inclus')}</span>
+                <span className="tnum">+ {money(a.price)}</span>
               </p>
             ))}
           </div>
@@ -130,11 +171,12 @@ function PdfPreview({ b }: { b: Builder }) {
           {b.schedule.map((s, i) => (
             <li key={i} className="flex justify-between">
               <span>
-                {t(s.label)} ({s.pct} %)
+                {t(s.label)} ({pct(s.pct)})
               </span>
-              <span>{money((b.total * s.pct) / 100)}</span>
+              <span>{money(s.amount)}</span>
             </li>
           ))}
+          {!b.deposit && <li className="text-ink-mute">{t('Aucun dépôt à la signature.')}</li>}
         </ul>
         <p className="bg-ink text-white font-bold px-2 py-0.5 uppercase">{t('Garanties')}</p>
         <ul className="space-y-0.5">
@@ -165,16 +207,17 @@ export function EnvoiSection({ b }: { b: Builder }) {
   const { user } = useAuth()
   const { quote, client, company, sendVia, pdfShow } = b
   const rep = repById(quote.repId) ?? b.rep
-  const kindLabel = t(quote.company === 'sg' ? 'gouttière' : quote.company === 'toit' ? 'toiture' : 'rénovation')
+  const lang = clientLang(client)
   const signed = !!quote.signature || ['Signé', 'Payé', 'Terminé'].includes(quote.status)
   const sent = quote.status !== 'En cours'
   const phone = client.mobile || client.phone
   const optedOut = isOptedOut(client.mobile) || isOptedOut(client.phone)
   const smsOn = sendVia.sms && !optedOut && !!phone
   const [to, setTo] = useState(client.email)
-  const [subject, setSubject] = useState(() => t('Soumission {kind} {no}', { kind: kindLabel, no: quote.no }))
+  // Drafts in the CLIENT's language (French by default), not the rep's UI language.
+  const [subject, setSubject] = useState(() => inLang(lang, () => quoteSubject(quote.company, quote.no)))
   const [message, setMessage] = useState(() =>
-    t('Bonjour {first},\n\nVoici votre soumission. Vous pouvez la consulter et la signer en ligne avec le lien ci-dessous.\n\n{rep}\n{company} · {phone}', { first: client.first, rep: rep.name, company: company.name, phone: company.phone }),
+    tIn(lang, 'Bonjour {first},\n\nVoici votre soumission. Vous pouvez la consulter et la signer en ligne avec le lien ci-dessous.\n\n{rep}\n{company} · {phone}', { first: client.first, rep: rep.name, company: company.name, phone: company.phone }),
   )
   const log = SENT_LOG.filter((r) => r.quoteId === quote.id)
   const seededRows = isSeededQuote(quote.id) && quote.views > 0
@@ -215,7 +258,10 @@ export function EnvoiSection({ b }: { b: Builder }) {
               </label>
             )}
           </div>
-          <PdfPreview b={b} />
+          <ClientLangProvider lang={lang}>
+            <PdfPreview b={b} />
+          </ClientLangProvider>
+          <p className="text-2xs text-ink-mute">{t('PDF, courriel et texto dans la langue du client : {lang}.', { lang: langName(lang) })}</p>
         </div>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-2">
@@ -313,7 +359,7 @@ export function EnvoiSection({ b }: { b: Builder }) {
                           <Badge tone="neutral">{t('Soumission')}</Badge>
                         </td>
                         <td className="py-1.5 pr-2 text-ink-secondary whitespace-nowrap">{rep.first}</td>
-                        <td className="py-1.5 text-ink-secondary truncate max-w-[180px]">{t('Soumission {kind} {no}', { kind: kindLabel, no: quote.no })}</td>
+                        <td className="py-1.5 text-ink-secondary truncate max-w-[180px]">{inLang(lang, () => quoteSubject(quote.company, quote.no))}</td>
                       </tr>
                     )}
                   </tbody>

@@ -7,7 +7,7 @@ import { SkeletonRows } from '../components/states'
 import { Avatar, CompanyBadge, Empty, Page, PageHeader } from '../components/ui'
 import { useApp } from '../context/AppContext'
 import { CLIENT_COMPANIES, TOTAL_CLIENTS, companiesServing, relativeDay } from '../data/clients'
-import { CLIENTS, COMPANIES, fullName, type CompanyId } from '../data/mock'
+import { CLIENTS, COMPANIES, clientLang, fullName, type CompanyId } from '../data/mock'
 import { request, useStore } from '../data/store'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
@@ -136,6 +136,11 @@ export default function Clients() {
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar name={fullName(c)} size="sm" />
                       <span className="text-sm font-semibold text-ink truncate">{fullName(c)}</span>
+                      {clientLang(c) === 'en' && (
+                        <span className="badge bg-sand text-ink-mute uppercase shrink-0" title={t('Communique en anglais')}>
+                          {t('EN')}
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="td tnum">{c.mobile ?? c.phone}</td>

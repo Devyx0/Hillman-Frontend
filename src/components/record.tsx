@@ -5,12 +5,12 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Ban, Bot, Check, Clock, Copy, Eye, FileText, LoaderCircle, Mail, MessageSquare, Paperclip, PhoneIncoming, PhoneOutgoing, Play, RefreshCw, Send, ShieldCheck, Sparkles, StickyNote, Trash2, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Ban, Bot, Check, Clock, Copy, Eye, FileText, Languages, LoaderCircle, Mail, MessageSquare, Paperclip, PhoneIncoming, PhoneOutgoing, Play, RefreshCw, Send, ShieldCheck, Sparkles, StickyNote, Trash2, TriangleAlert } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { ME, companyById, type Message, type Thread } from '../data/mock'
 import { isOptedOut, optOut } from '../data/settings'
 import { request, useStore } from '../data/store'
-import { t } from '../i18n'
+import { langName, t, tIn, type Lang } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { ComingSoon, Notice, confirmAction } from './states'
@@ -232,9 +232,11 @@ const COMPOSER_MODES: { v: ComposerMode; l: string; i: Icon }[] = [
 
 /**
  * Reply composer with AI suggestion, templates and internal notes (mockup: `G0`). `phone` is the
- * contact's texting number: texts are blocked when it replied STOP.
+ * contact's texting number: texts are blocked when it replied STOP. `lang` is the client's language
+ * (`clientLang(client)`, French by default): quick replies and AI drafts are written in it, while
+ * the composer's own labels follow the rep's UI language. Internal notes are not client-facing.
  */
-export function Composer({ thread, onSend, suggestion, phone }: { thread: Thread; onSend: (m: ChatMessage) => void; suggestion?: string; phone?: string }) {
+export function Composer({ thread, onSend, suggestion, phone, lang = 'fr' }: { thread: Thread; onSend: (m: ChatMessage) => void; suggestion?: string; phone?: string; lang?: Lang }) {
   useStore() // opt-out list changes
   const { user } = useAuth()
   const optedOut = isOptedOut(phone)
@@ -243,12 +245,12 @@ export function Composer({ thread, onSend, suggestion, phone }: { thread: Thread
   const [text, setText] = useState('')
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [drafting, setDrafting] = useState(false)
-  const hint = suggestion ?? (AI_SUGGESTIONS[thread.id] ? t(AI_SUGGESTIONS[thread.id]) : undefined)
+  const hint = suggestion ?? (AI_SUGGESTIONS[thread.id] ? tIn(lang, AI_SUGGESTIONS[thread.id]) : undefined)
 
   const draft = () => {
     setDrafting(true)
     window.setTimeout(() => {
-      setText(hint ?? t('Bonjour {name}, merci pour votre message! Je vous reviens dans la journée avec les détails.', { name: thread.name.split(' ')[0] }))
+      setText(hint ?? tIn(lang, 'Bonjour {name}, merci pour votre message! Je vous reviens dans la journée avec les détails.', { name: thread.name.split(' ')[0] }))
       setDrafting(false)
     }, 700)
   }
@@ -268,8 +270,15 @@ export function Composer({ thread, onSend, suggestion, phone }: { thread: Thread
             {t(o.l)}
           </button>
         ))}
-        <span className="ml-auto text-2xs text-ink-mute hidden sm:inline">
+        <span className="ml-auto text-2xs text-ink-mute hidden sm:inline-flex items-center gap-1" data-client-lang={lang}>
           {t('De : {company} · {phone}', { company: companyById(thread.company).name, phone: companyById(thread.company).phone })}
+          {mode !== 'note' && (
+            <>
+              {' · '}
+              <Languages className="w-3 h-3" />
+              {t('Langue du client : {lang}', { lang: langName(lang) })}
+            </>
+          )}
         </span>
       </div>
       {smsBlocked && (
@@ -311,13 +320,13 @@ export function Composer({ thread, onSend, suggestion, phone }: { thread: Thread
                     <button
                       key={qr.name}
                       onClick={() => {
-                        setText(t(qr.text))
+                        setText(mode === 'note' ? t(qr.text) : tIn(lang, qr.text))
                         setTemplatesOpen(false)
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-sand"
                     >
                       <span className="block text-sm font-medium text-ink">{t(qr.name)}</span>
-                      <span className="block text-2xs text-ink-mute truncate">{t(qr.text)}</span>
+                      <span className="block text-2xs text-ink-mute truncate">{mode === 'note' ? t(qr.text) : tIn(lang, qr.text)}</span>
                     </button>
                   ))}
                 </div>
@@ -459,8 +468,11 @@ export function SideCard({ title, action, children }: { title: ReactNode; action
   )
 }
 
-/** Scrollable thread + composer (mockup: `Q0`). `phone` enables STOP handling and failed-text states. */
-export function ThreadPanel({ thread, suggestion, phone }: { thread: Thread; suggestion?: string; phone?: string }) {
+/**
+ * Scrollable thread + composer (mockup: `Q0`). `phone` enables STOP handling and failed-text states;
+ * `lang` is the client's language for drafts (French by default).
+ */
+export function ThreadPanel({ thread, suggestion, phone, lang }: { thread: Thread; suggestion?: string; phone?: string; lang?: Lang }) {
   const [messages, setMessages] = useState<ChatMessage[]>(thread.messages)
   const scroller = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -487,7 +499,7 @@ export function ThreadPanel({ thread, suggestion, phone }: { thread: Thread; sug
           <MessageBubble key={m.id} m={m} thread={thread} onRetry={(x) => deliver(x, phone, patch)} />
         ))}
       </div>
-      <Composer thread={thread} suggestion={suggestion} phone={phone} onSend={send} />
+      <Composer thread={thread} suggestion={suggestion} phone={phone} lang={lang} onSend={send} />
     </div>
   )
 }

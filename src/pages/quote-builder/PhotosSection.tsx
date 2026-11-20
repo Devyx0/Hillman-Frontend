@@ -8,8 +8,8 @@ import { BuilderSection } from '../../components/quote-shared'
 import { AnnotationEditor } from './AnnotationEditor'
 import type { Builder } from './useQuoteBuilder'
 
-/** Read an image file and shrink it to at most 1600 px (keeps the session light, like the upload will). */
-function readImage(file: File): Promise<string> {
+/** Read an image file and shrink it to at most 1600 px (keeps the session light, like the upload will). Also used by the crew job page. */
+export function readImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = () => reject(reader.error)

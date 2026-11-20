@@ -83,7 +83,7 @@ export function findDuplicateClients(c: Partial<Pick<Client, 'first' | 'last' | 
 
 let clientSeq = 66800
 export function addClient(input: Omit<Client, 'id' | 'tags' | 'lifetime' | 'quotes' | 'lastActivity' | 'since'> & Partial<Client>): Client {
-  const client: Client = { tags: [], lifetime: 0, quotes: 0, lastActivity: TODAY, since: TODAY.slice(0, 4), ...input, id: input.id ?? 'c' + clientSeq++ }
+  const client: Client = { tags: [], lifetime: 0, quotes: 0, lastActivity: TODAY, since: TODAY.slice(0, 4), ...input, language: input.language ?? 'fr', id: input.id ?? 'c' + clientSeq++ }
   CLIENTS.unshift(client)
   commit()
   return client

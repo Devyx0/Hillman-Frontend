@@ -10,7 +10,7 @@ import { followUpState, statusDetail, useChangeStatus } from '../components/quot
 import { ErrorState, SkeletonRows, confirmAction } from '../components/states'
 import { CompanyBadge, Empty, Page, PageHeader, RepAvatar, Stat, StatusBadge, Tabs } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
-import { COMPANIES, QUOTES, REPS, SOURCES, TODAY, clientById, companyById, fullName, repById } from '../data/mock'
+import { COMPANIES, QUOTES, REPS, SOURCES, TODAY, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
 import { internalNote, marginPct, shortDate } from '../data/quote-builder'
 import { STATUS_DEFS } from '../data/settings'
 import { removeQuotes, request, setFollowUpPaused, useStore, type QuoteStatusRecord } from '../data/store'
@@ -218,7 +218,7 @@ export default function Quotes() {
   const allSelected = page.length > 0 && page.every((q) => selected.has(q.id))
   const ctxFor = (q: Q): MessageCtx => {
     const c = clientById(q.clientId)
-    return { name: clientName(q), first: c?.first, quoteNo: q.no, company: companyById(q.company).name, rep: repById(q.repId)?.first }
+    return { name: clientName(q), first: c?.first, quoteNo: q.no, company: companyById(q.company).name, rep: repById(q.repId)?.first, lang: clientLang(c) }
   }
   const clearFilters = () => {
     setStatuses([])
@@ -450,7 +450,7 @@ export default function Quotes() {
                   {sortHead('date', t('No'))}
                   {sortHead('client', t('Client'))}
                   {group && <th className="th px-2.5">{t('Compagnie')}</th>}
-                  <th className="th px-2.5">{t('Rep.')}</th>
+                  <th className="th px-2.5">{t('Repr.')}</th>
                   {sortHead('amount', t('Montant'), 'text-right')}
                   {costs && sortHead('margin', t('Marge'), 'text-right')}
                   {sortHead('status', t('Statut'))}

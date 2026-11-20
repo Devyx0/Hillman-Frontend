@@ -11,6 +11,18 @@ export function SummaryRail({ b }: { b: Builder }) {
     <aside className="xl:sticky xl:top-24 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto nav-scroll space-y-4 xl:pb-2">
       <div className="bg-white rounded-xl shadow-card overflow-hidden">
         <div className="p-5 space-y-2 text-sm">
+          {b.pricing.caaDiscount > 0 && (
+            <>
+              <div className="flex items-center justify-between text-ink-mute">
+                <span>{t('Avant rabais')}</span>
+                <span className="tnum">{money(b.pricing.before)}</span>
+              </div>
+              <div className="flex items-center justify-between text-tone-good-ink">
+                <span>{t('Rabais membre CAA (−3 %, max 100 $)')}</span>
+                <span className="tnum">−{money(b.pricing.caaDiscount)}</span>
+              </div>
+            </>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-ink-mute">{t('Sous-total')}</span>
             <span className="tnum font-semibold">{money(b.subtotal)}</span>
@@ -67,11 +79,21 @@ export function SummaryRail({ b }: { b: Builder }) {
         </p>
         <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
           {b.schedule.map((s, i) => (
-            <div key={i} className={cn(i === 0 ? 'bg-primary' : 'bg-stone')} style={{ width: `${s.pct}%` }} />
+            <div key={i} className={cn(i === 0 && b.deposit ? 'bg-primary' : 'bg-stone')} style={{ width: `${s.pct}%` }} />
           ))}
         </div>
         <p className="text-xs text-ink-secondary mt-2">
-          {t('Mise de fond :')} <b className="tnum text-ink">{money((b.total * (b.schedule[0]?.pct ?? 0)) / 100, false)}</b>
+          {b.deposit ? (
+            <>
+              {t('Mise de fond :')} <b className="tnum text-ink">{money(b.deposit.amount, false)}</b>
+            </>
+          ) : b.schedule.length === 1 ? (
+            <>
+              {t('Aucun dépôt · {label} :', { label: t(b.schedule[0].label).toLowerCase() })} <b className="tnum text-ink">{money(b.schedule[0].amount, false)}</b>
+            </>
+          ) : (
+            t('Aucun dépôt à la signature')
+          )}
         </p>
       </div>
     </aside>
