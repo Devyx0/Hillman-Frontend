@@ -1,3 +1,9 @@
+import { authEn } from './auth'
+import { createEn } from './create'
+import { quoteFlowEn } from './quoteFlow'
+import { portalFlowEn } from './portalFlow'
+import { calendarEn } from './calendar'
+import { settingsEn } from './settings'
 import { agenda } from './agenda'
 import { clients } from './clients'
 import { quoteBuilder } from './quoteBuilder'
@@ -31,5 +37,21 @@ const shared: Record<string, string> = {
   'plural::Rendez-vous': 'Appointments',
 }
 
+/** Strings used by shared foundation files (store, states, settings data). */
+const foundation: Record<string, string> = {
+  'Chargement…': 'Loading…',
+  'Impossible de charger les données': "Couldn't load the data",
+  'Vérifiez votre connexion et réessayez.': 'Check your connection and try again.',
+  Réessayer: 'Try again',
+  'Accès non autorisé': 'No access',
+  "Votre rôle ne donne pas accès à cette section. Demandez l'accès à un administrateur.": "Your role doesn't give access to this section. Ask an administrator for access.",
+  Annuler: 'Cancel',
+  Confirmer: 'Confirm',
+  'Janvier 2027': 'January 2027',
+  'Courriel ou mot de passe incorrect.': 'Incorrect email or password.',
+  "Ce compte n'est pas encore activé. Utilisez le lien reçu par courriel.": "This account isn't activated yet. Use the link you received by email.",
+  'Ce compte est désactivé. Contactez un administrateur.': 'This account is deactivated. Contact an administrator.',
+}
+
 /** All English translations, keyed by the French source string. */
-export const en: Record<string, string> = { ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...shared }
+export const en: Record<string, string> = { ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...authEn, ...createEn, ...quoteFlowEn, ...portalFlowEn, ...calendarEn, ...settingsEn, ...foundation, ...shared }

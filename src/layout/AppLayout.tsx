@@ -7,6 +7,9 @@ import { CLIENTS, COMPANIES, LEADS, ME, QUOTES, THREADS, clientById, fullName, t
 import { t } from '../i18n'
 import { LanguageSwitch } from '../i18n/LanguageProvider'
 import { onToast, toast } from '../lib/toast'
+import { openCreate } from '../lib/create'
+import CreateHost from '../components/create/CreateHost'
+import { ConfirmHost } from '../components/states'
 import { cn, money, normalize } from '../lib/utils'
 
 interface NavEntry {
@@ -147,8 +150,9 @@ function NewMenu() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const items: { label: string; icon: Icon; go: () => void }[] = [
-    { label: t('Soumission'), icon: FileText, go: () => navigate('/soumissions/q64320') },
-    { label: t('Client'), icon: UserPlus, go: () => toast(t('Fiche client créée (démo)')) },
+    { label: t('Soumission'), icon: FileText, go: () => openCreate('quote') },
+    { label: t('Client'), icon: UserPlus, go: () => openCreate('client') },
+    { label: t('Lead'), icon: Inbox, go: () => openCreate('lead') },
     { label: t('Rendez-vous'), icon: CalendarPlus, go: () => navigate('/agenda') },
   ]
   return (
@@ -349,6 +353,8 @@ export default function AppLayout() {
         </footer>
       </div>
       <CommandPalette />
+      <CreateHost />
+      <ConfirmHost />
       <Toaster />
     </div>
   )
