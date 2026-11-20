@@ -85,7 +85,8 @@ function Header({ b }: { b: Builder }) {
             {quote.no}
             {(quote.version ?? 1) > 1 && ` · V${quote.version}`}
           </p>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-ink">{fullName(client)}</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-ink">{client.company ?? fullName(client)}</h1>
+          {client.company && <p className="text-sm text-ink-mute">{t('Contact : {name}', { name: fullName(client) })}</p>}
           <p className="text-md text-ink-secondary -mt-1">
             {t(quote.workType)} · <span className="tnum">{money(b.subtotal, false)}</span>
             <span className="text-ink-mute text-sm tnum"> · {t('{total} taxes incluses', { total: money(b.total) })}</span>

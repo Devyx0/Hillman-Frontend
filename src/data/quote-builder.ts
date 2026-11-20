@@ -53,6 +53,7 @@ import { MATERIAL_LINES, QUOTES, TODAY, type CompanyId, type MaterialLine, type 
 import { ROOF_DEFAULT_SCOPE, ROOF_SCOPE_SECTIONS } from './roofing-clauses'
 import { COST_ITEMS, costItemById, scopeFor, templateById as catalogueTemplateById, tierCatalogueVideo } from '../pages/catalogue/data'
 import { addQuote, commit, quoteById, updateQuote, type QuoteRecord } from './store'
+import { crewJobPhotos, crewJobQuote } from './crew-jobs'
 import { paymentScheduleById, depositStep, type PaymentStep } from './settings'
 import {
   ADDON_RATE,
@@ -573,6 +574,10 @@ export interface QuotePhoto {
   /** Seeded demo photo without an image. */
   placeholder?: boolean
   main?: boolean
+  /** Who took it: the estimator during the visit (default) or the field crew on the job. */
+  by?: 'estimateur' | 'equipe'
+  /** When a crew photo was taken (ISO). */
+  takenAt?: string
 }
 
 export interface Attachment {
@@ -597,7 +602,10 @@ export interface QuoteDraft {
   /** Gouttières: quantities the rep typed over the form-derived ones, by French item name. */
   qtyOverrides: Record<string, number>
   warranties: Record<string, string>
+  /** Internal note (rep and office only). Never shown to the crew. */
   note: string
+  /** Note for the crew, printed on the work order and shown in the crew view (French or as typed). */
+  crewNote: string
   attachments: Attachment[]
   actuals: Actuals
   gutter: GutterForm
@@ -741,6 +749,15 @@ export const missingPhotos = (d: QuoteDraft) => d.photos.filter((p) => p.require
 
 function seedPhotos(q: Quote, seeded: boolean): QuotePhoto[] {
   const req = requiredPhotos(q)
+  const crewJob = crewJobPhotos(q.no)
+  if (crewJob.length) {
+    // Quotes behind the crews' jobs: the estimator's annotated photos, then the other required ones (not taken).
+    const taken = new Set(crewJob.map((p) => p.label))
+    return [
+      ...crewJob.map((p) => ({ ...p, required: req.includes(p.label), by: 'estimateur' as const })),
+      ...req.filter((l) => !taken.has(l)).map((label, i) => ({ id: 'r' + i, label, required: true, placeholder: true })),
+    ]
+  }
   if (q.id === 'q64320') {
     // Demo: three façades still missing, so the send step shows the warning.
     const taken = ['Façade avant', 'Cheminée', 'Entretoit']
@@ -888,6 +905,8 @@ function createDraft(q: QuoteRecord): QuoteDraft {
     const seed = GUTTER_SEEDS.get(q.id)
     if (seed && !fresh) {
       Object.assign(gutter, structuredClone(seed.form), { note: gutter.note })
+      const crewJob = crewJobQuote(q.no)
+      if (crewJob?.color) Object.assign(gutter, { color: crewJob.color, downspoutColor: crewJob.downspoutColor })
       if (tiered && seed.tier) {
         tier = seed.tier
         tiers = seededTiers(seed.tier, seed.tierPrice)
@@ -938,6 +957,7 @@ function createDraft(q: QuoteRecord): QuoteDraft {
     renoArea: seeded ? '192' : '',
     renoDays: seeded ? '18' : '',
     photos: seedPhotos(q, seeded),
+    crewNote: crewJobQuote(q.no)?.crewNote ?? '',
   }
 }
 
@@ -1128,3 +1148,13 @@ export function logSent(r: Omit<SentRecord, 'id' | 'at'>) {
   commit()
 }
 
+
+// ── Colour line for work orders (crew view, builder, agenda) ─────────────────────────
+/**
+ * "Couleur : Blanc" — or "Gouttières : Blanc · Descentes : Brun commercial" when the downspouts differ.
+ * French; translate with `t()` at render (`colourLine(g, t)`).
+ */
+export function colourLine(g: Pick<GutterForm, 'color' | 'downspoutColor'>, tr: (s: string, v?: Record<string, string | number>) => string): string {
+  if (g.downspoutColor && g.downspoutColor !== g.color) return tr('Gouttières : {g} · Descentes : {d}', { g: tr(g.color), d: tr(g.downspoutColor) })
+  return tr('Couleur : {c}', { c: tr(g.color) })
+}

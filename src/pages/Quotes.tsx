@@ -44,7 +44,7 @@ const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 
 const clientName = (q: Q) => {
   const c = clientById(q.clientId)
-  return c ? fullName(c) : '—'
+  return c ? (c.company ?? fullName(c)) : '—'
 }
 
 /** Page numbers with gaps: 1 … 4 5 6 … 12. */

@@ -4,14 +4,15 @@
  */
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CalendarRange, Camera, ChevronLeft, ChevronRight, ClipboardList, CloudRain, Image as ImageIcon, LoaderCircle, MapPin, Package, Phone, StickyNote, Users, Wallet, X } from 'lucide-react'
+import { ArrowLeft, CalendarRange, Camera, ChevronLeft, ChevronRight, CircleCheck, ClipboardList, CloudRain, Hand, Image as ImageIcon, LoaderCircle, MapPin, Package, Palette, Phone, Star, StickyNote, Users, X } from 'lucide-react'
 import { Badge, Card, Page } from '../../components/ui'
 import { NoAccess } from '../../components/states'
-import { jobById, type JobRecord } from '../../data/crews'
+import { crewStartStatus, jobById, type JobRecord } from '../../data/crews'
 import { companyById, repById } from '../../data/mock'
 import { commit, quoteByNo, useStore } from '../../data/store'
-import { getDraft, saveDraft, type QuotePhoto } from '../../data/quote-builder'
-import { t } from '../../i18n'
+import { colourLine, getDraft, saveDraft, type QuotePhoto } from '../../data/quote-builder'
+import { AnnotatedPhoto, orderPhotos } from '../../components/AnnotatedPhoto'
+import { locale, t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn } from '../../lib/utils'
 import { dayRange } from '../agenda/crews'
@@ -25,7 +26,7 @@ function addJobPhoto(job: JobRecord, src: string) {
   const q = quoteByNo(job.quoteNo)
   if (!q) return
   const d = getDraft(q)
-  const photo: QuotePhoto = { id: 'c' + Date.now(), label: 'Photo de chantier', src }
+  const photo: QuotePhoto = { id: 'c' + Date.now(), label: "Photo de l'équipe", src, by: 'equipe', takenAt: new Date().toISOString() }
   saveDraft(q.id, { ...d, photos: [...d.photos, photo] })
   commit()
 }
@@ -50,7 +51,10 @@ function PhotoViewer({ photos, index, onIndex, onClose }: { photos: QuotePhoto[]
   return (
     <div className="fixed inset-0 z-[90] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label={t(p.label)}>
       <div className="flex items-center gap-3 px-4 h-14 text-white shrink-0">
-        <p className="flex-1 min-w-0 truncate text-sm font-semibold">{t(p.label)}</p>
+        <p className="flex-1 min-w-0 truncate text-sm font-semibold">
+          {t(p.label)}
+          <span className="ml-2 text-xs font-normal text-white/70">{p.by === 'equipe' ? t("Photo de l'équipe") : p.main ? t('Photo principale · estimateur') : t('Estimateur')}</span>
+        </p>
         <span className="text-xs text-white/70 tnum">
           {index + 1} / {photos.length}
         </span>
@@ -60,7 +64,7 @@ function PhotoViewer({ photos, index, onIndex, onClose }: { photos: QuotePhoto[]
       </div>
       <div className="relative flex-1 min-h-0 flex items-center justify-center">
         {src ? (
-          <img src={src} alt={t(p.label)} className="max-w-full max-h-full object-contain" />
+          <AnnotatedPhoto photo={p} fit="contain" className="max-w-full max-h-full" imgClassName="max-h-[calc(100dvh-5rem)] w-auto h-auto object-contain" />
         ) : (
           <div className="flex flex-col items-center gap-2 text-white/60 text-sm">
             <ImageIcon className="w-10 h-10" />
@@ -82,8 +86,40 @@ function PhotoViewer({ photos, index, onIndex, onClose }: { photos: QuotePhoto[]
   )
 }
 
+function PhotoTile({ p, onOpen, big }: { p: QuotePhoto; onOpen: () => void; big?: boolean }) {
+  const src = photoSrc(p)
+  return (
+    <button onClick={onOpen} className={cn('relative rounded-lg overflow-hidden bg-stone flex flex-col justify-end text-left', big ? 'aspect-[4/3] col-span-2 sm:col-span-3' : 'aspect-[4/3]')} aria-label={t('Agrandir {label}', { label: t(p.label) })}>
+      {src ? (
+        <AnnotatedPhoto photo={p} />
+      ) : (
+        <>
+          <div className="absolute inset-0 opacity-60" style={STRIPES} />
+          <ImageIcon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 text-ink-faint" />
+        </>
+      )}
+      <span className="absolute top-2 left-2 flex flex-wrap gap-1">
+        {p.main && (
+          <span className="badge bg-ink text-white">
+            <Star className="w-3 h-3 mr-1" />
+            {t('Photo principale')}
+          </span>
+        )}
+        {p.shapes?.length ? <span className="badge bg-primary text-white">{t('Annotée')}</span> : null}
+      </span>
+      <span className="relative bg-white/90 px-2.5 py-1.5 text-2xs font-semibold text-ink-secondary truncate">
+        {t(p.label)}
+        {p.by === 'equipe' && p.takenAt ? <span className="font-normal text-ink-mute"> · {new Date(p.takenAt).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</span> : null}
+      </span>
+    </button>
+  )
+}
+
 function PhotosCard({ job }: { job: JobRecord }) {
-  const photos = jobPhotos(job).filter((p) => photoSrc(p) || p.placeholder)
+  // Only photos that exist (not the empty slots of required photos the estimator didn't take).
+  const all = jobPhotos(job).filter((p) => photoSrc(p))
+  const { estimator, crew } = orderPhotos(all)
+  const photos = [...estimator, ...crew]
   const canAdd = !!quoteByNo(job.quoteNo)
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -118,29 +154,32 @@ function PhotosCard({ job }: { job: JobRecord }) {
       }
     >
       <input ref={input} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFile} />
-      {photos.length ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {photos.map((p, i) => {
-            const src = photoSrc(p)
-            return (
-              <button key={p.id} onClick={() => setOpen(i)} className="relative aspect-[4/3] rounded-lg overflow-hidden bg-stone flex flex-col justify-end text-left" aria-label={t('Agrandir {label}', { label: t(p.label) })}>
-                {src ? (
-                  <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <>
-                    <div className="absolute inset-0 opacity-60" style={STRIPES} />
-                    <ImageIcon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-7 h-7 text-ink-faint" />
-                  </>
-                )}
-                {p.shapes?.length ? <span className="absolute top-2 left-2 badge bg-primary text-white">{t('Annotée')}</span> : null}
-                <span className="relative bg-white/90 px-2.5 py-1.5 text-2xs font-semibold text-ink-secondary truncate">{t(p.label)}</span>
-              </button>
-            )
-          })}
-        </div>
-      ) : (
-        <p className="text-sm text-ink-mute">{t('Aucune photo pour ce chantier.')}</p>
-      )}
+      <div className="space-y-5">
+        <section>
+          <p className="label-caps mb-2">{t("Photos de l'estimateur (annotées lors de la visite)")}</p>
+          {estimator.length ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {estimator.map((p, i) => (
+                <PhotoTile key={p.id} p={p} big={i === 0 && !!p.main} onOpen={() => setOpen(i)} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-ink-mute">{t('Aucune photo de la visite.')}</p>
+          )}
+        </section>
+        <section>
+          <p className="label-caps mb-2">{t("Photos de l'équipe")}</p>
+          {crew.length ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {crew.map((p, i) => (
+                <PhotoTile key={p.id} p={p} onOpen={() => setOpen(estimator.length + i)} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-ink-mute">{t("Aucune photo prise par l'équipe pour l'instant.")}</p>
+          )}
+        </section>
+      </div>
       {open !== null && <PhotoViewer photos={photos} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </Card>
   )
@@ -170,7 +209,11 @@ export default function CrewJob() {
   const quote = quoteByNo(job.quoteNo)
   const rep = quote ? repById(quote.repId) : undefined
   const lines = workOrderLines(job)
-  const notes = job.notes || (quote && getDraft(quote).gutter.note) || t('Protéger l’aménagement paysager. Nettoyer les lieux à la fin des travaux.')
+  const draft = quote ? getDraft(quote) : undefined
+  // Only the note written FOR the crew (and the office's scheduling note) — internal sales notes never reach the crew.
+  const crewNote = draft?.crewNote ?? ''
+  const colour = job.company === 'sg' && draft ? colourLine(draft.gutter, t) : undefined
+  const start = crewStartStatus(job)
   const stage = crewStage(job.stage)
 
   return (
@@ -189,6 +232,12 @@ export default function CrewJob() {
         </div>
         <h1 className="text-2xl md:text-3xl font-semibold text-ink tracking-tight">{site.name}</h1>
         <p className="text-md text-ink-secondary">{t(job.work)}</p>
+        {colour && (
+          <p className="inline-flex items-center gap-1.5 rounded-md bg-sand px-2.5 py-1 text-sm font-semibold text-ink">
+            <Palette className="w-4 h-4 text-ink-mute" />
+            {colour}
+          </p>
+        )}
         <p className="flex items-center gap-1.5 text-sm text-ink-mute">
           <CalendarRange className="w-4 h-4 shrink-0" />
           {dayRange(job.startDay!, job.days)}
@@ -203,6 +252,12 @@ export default function CrewJob() {
             <MapPin className="w-4 h-4 text-ink-mute shrink-0 mt-0.5" />
             {site.address}
           </a>
+          {site.contact && (
+            <p className="text-ink-secondary">
+              {t('Contact sur place : {name}', { name: site.contact.name })}
+              {site.contact.role ? <span className="text-ink-mute"> · {t(site.contact.role)}</span> : null}
+            </p>
+          )}
           {site.phones.map((p) => (
             <a key={p} href={telHref(p)} className="flex items-center gap-2 font-semibold text-primary-press">
               <Phone className="w-4 h-4 shrink-0" />
@@ -220,6 +275,12 @@ export default function CrewJob() {
       </Card>
 
       <Card title={t('Bon de travail')} icon={ClipboardList} pad={false}>
+        {colour && (
+          <p className="px-5 py-3 border-b border-hairline flex items-center gap-2 text-sm font-semibold text-ink">
+            <Palette className="w-4 h-4 text-ink-mute shrink-0" />
+            {colour}
+          </p>
+        )}
         {lines.length ? (
           <table className="w-full text-sm">
             <thead className="bg-sand/60 text-left">
@@ -248,27 +309,48 @@ export default function CrewJob() {
             {t('Matériaux')}
             <Badge tone={MATERIAL_TONE[job.materials] ?? 'neutral'}>{t(job.materials)}</Badge>
           </p>
-          <p className={cn('flex items-start gap-2', !job.deposit && 'text-tone-warn-ink')}>
-            <Wallet className="w-4 h-4 shrink-0 mt-0.5" />
-            {job.deposit ? t('Dépôt reçu') : t('Dépôt non reçu — ne pas commencer sans l’accord du bureau')}
-          </p>
+          {start && (
+            <p className={cn('flex items-start gap-2', start === 'wait' ? 'text-tone-warn-ink font-semibold' : 'text-tone-good-ink')}>
+              {start === 'wait' ? <Hand className="w-4 h-4 shrink-0 mt-0.5" /> : <CircleCheck className="w-4 h-4 shrink-0 mt-0.5" />}
+              {start === 'wait' ? t('En attente du feu vert du bureau — ne pas commencer') : t('Feu vert du bureau : vous pouvez commencer')}
+            </p>
+          )}
           {job.weather && (
             <p className="flex items-center gap-2">
               <CloudRain className="w-4 h-4 text-ink-mute shrink-0" />
               {t(job.weather)}
             </p>
           )}
-          <p className="flex items-start gap-2 text-ink-secondary">
+          <div className="flex items-start gap-2 text-ink-secondary">
             <Users className="w-4 h-4 text-ink-mute shrink-0 mt-0.5" />
-            {t('Chef : {name}', { name: crew.lead })}
-            {crew.members.length > 1 ? ` · ${crew.members.filter((m) => m !== crew.lead).join(', ')}` : ''}
-          </p>
+            <div>
+              <p>
+                <span className="text-ink-mute">{t('Équipe :')}</span> {t(crew.name)}
+              </p>
+              <p>
+                <span className="text-ink-mute">{t("Chef d'équipe :")}</span> <span className="font-semibold text-ink">{crew.lead}</span>
+              </p>
+              {crew.members.filter((m) => m !== crew.lead).length > 0 && (
+                <p>
+                  <span className="text-ink-mute">{t('Membres :')}</span> {crew.members.filter((m) => m !== crew.lead).join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
           <p className="text-xs text-ink-mute">{t('Aucun prix sur ce document. Quantités à valider sur place.')}</p>
         </div>
       </Card>
 
-      <Card title={t('Notes')} icon={StickyNote}>
-        <p className="whitespace-pre-line text-sm text-ink-secondary">{notes}</p>
+      <Card title={t("Note pour l'équipe")} icon={StickyNote}>
+        <div className="space-y-3 text-sm">
+          {crewNote ? <p className="whitespace-pre-line text-ink">{t(crewNote)}</p> : <p className="text-ink-mute">{t("Aucune note de l'estimateur pour ce chantier.")}</p>}
+          {job.notes && (
+            <div className="rounded-lg bg-sand/70 px-3 py-2">
+              <p className="label-caps mb-0.5">{t('Note du bureau (planification)')}</p>
+              <p className="whitespace-pre-line text-ink-secondary">{t(job.notes)}</p>
+            </div>
+          )}
+        </div>
       </Card>
 
       <PhotosCard job={job} />

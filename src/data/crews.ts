@@ -7,7 +7,8 @@
  * 7 = dim. 25 oct.), the same convention as `Appointment.day` and `Job.startDay` in mock.ts.
  */
 import { APPOINTMENTS, CLIENTS, JOBS, QUOTES, type Appointment, type CompanyId, type Job, type Quote } from './mock'
-import { commit } from './store'
+import { commit, quoteByNo } from './store'
+import { depositStep, quoteSchedule } from './quote-builder'
 
 // ── Dates ───────────────────────────────────────────────────────────────────
 /** Day 0 of the mock calendar (Sunday 18 October 2026). */
@@ -348,3 +349,27 @@ export function firstFreeDay(crewId: string, days: number, from: number, exclude
   }
   return from
 }
+
+// ── Start status shown to the crew (no amounts, ever) ─────────────────────────────────
+/**
+ * Whether the job's quote uses a payment schedule with a deposit. Gutters (100 % at end of work) has none,
+ * so the crew and the work order never show a deposit state for it.
+ */
+export function jobHasDeposit(job: { quoteNo: string; company: string }): boolean {
+  const q = quoteByNo(job.quoteNo)
+  if (!q) return job.company !== 'sg'
+  return !!depositStep(quoteSchedule(q))
+}
+
+/**
+ * "Don't start" signal for the crew: only for jobs whose schedule has a deposit (Roofs 15 %, Reno 10 %),
+ * shown as a status — "Feu vert du bureau" / "En attente du feu vert du bureau" — never as an amount.
+ * `undefined` = nothing to show (Gutters, or no deposit on the schedule).
+ */
+export function crewStartStatus(job: { quoteNo: string; company: string; deposit: boolean }): 'go' | 'wait' | undefined {
+  if (!CREW_SEES_START_STATUS || !jobHasDeposit(job)) return undefined
+  return job.deposit ? 'go' : 'wait'
+}
+
+/** Open question for the client (Abeel): should crews see a start status at all? Flip to hide it everywhere. */
+export const CREW_SEES_START_STATUS = true

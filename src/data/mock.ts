@@ -5,7 +5,8 @@
  *
  * NOTE: the order of PRNG calls matters — do not reorder generators.
  */
-import { GUTTER_SEEDS, seedGutterQuote } from './gutter-quantities'
+import { GUTTER_SEEDS, costForFeet, seedGutterQuote } from './gutter-quantities'
+import { CREW_JOB_QUOTES } from './crew-jobs'
 
 export type CompanyId = 'toit' | 'sg' | 'reno'
 
@@ -252,6 +253,45 @@ Object.assign(QUOTES[0], {
   city: 'Charlesbourg', views: 3, lastViewed: '2026-10-20', hot: true, daysInStatus: 4,
   nextAction: 'Appeler — a ouvert 3 fois', nextActionDate: TODAY,
 })
+// Crews' jobs: every job (JOBS below) links to a real signed quote and client with a full address, so the crew
+// view, the work orders and the quote builder show the same site, colour, crew note and photos.
+for (const c of CREW_JOB_QUOTES) {
+  const existing = QUOTES.find((q) => q.no === c.no)
+  if (existing) {
+    // Already a generated quote (G64298, Mathieu Fournier): keep it, but size its gutter form to the job.
+    if (c.company === 'sg' && c.feet) existing.cost = costForFeet(existing, c.feet)
+    continue
+  }
+  const client: Client = {
+    id: 'c' + c.no.toLowerCase(),
+    first: c.client.first,
+    last: c.client.last,
+    company: c.client.company,
+    phone: c.client.phone,
+    mobile: c.client.mobile,
+    email: c.client.email,
+    no: c.client.no,
+    street: c.client.street,
+    city: c.client.city,
+    postal: c.client.postal,
+    since: c.date.slice(0, 4),
+    tags: [],
+    source: 'Référence',
+    lifetime: 0,
+    quotes: 0,
+    lastActivity: c.date,
+    consentSms: true,
+    type: c.client.type,
+  }
+  CLIENTS.push(client)
+  const id = 'q' + c.no.toLowerCase()
+  const cost = c.company === 'sg' ? costForFeet({ id, workType: c.workType }, c.feet ?? 100) : Math.round(c.amount * (c.company === 'toit' ? 0.68 : 0.74))
+  QUOTES.push({
+    id, no: c.no, clientId: client.id, company: c.company, repId: c.repId, status: c.status, date: c.date, amount: c.amount, cost,
+    source: client.source, workType: c.workType, city: client.city, views: 2, daysInStatus: 3, hot: false, nextActionDate: TODAY,
+  })
+}
+
 // Gouttières: every quote gets a gutter form whose derived quantities cost exactly `q.cost` (amounts unchanged),
 // so the list, the builder (Formulaire → Quantités), the PDF, the portal and the work order agree.
 for (const q of QUOTES) {
@@ -450,19 +490,19 @@ export interface Job {
 export const JOBS: Job[] = [
   { id: 'j1', quoteNo: 'H63907', client: 'R. Croteau', city: 'Charlesbourg', company: 'toit', crewId: 'ta', startDay: 0, days: 2, amount: 14000, stage: 'Terminé', work: 'Bardeaux · 22 carrés', materials: 'Livrés', deposit: true },
   { id: 'j2', quoteNo: 'H64026', client: 'P. Simard', city: 'Neufchâtel', company: 'toit', crewId: 'ta', startDay: 3, days: 2, amount: 14889, stage: 'Planifié', work: 'Timberline Charbon · OSB ½', materials: 'Livrés', deposit: true, weather: 'Pluie 60 % jeu.' },
-  { id: 'j3', quoteNo: 'H64272', client: 'H. Paré', city: 'Lac-Beauport', company: 'toit', crewId: 'tb', startDay: 2, days: 3, amount: 14000, stage: 'Planifié', work: 'Élastomère 2 couches', materials: 'Commandés', deposit: true },
+  { id: 'j3', quoteNo: 'H64174', client: 'H. Paré', city: 'Lac-Beauport', company: 'toit', crewId: 'tb', startDay: 2, days: 3, amount: 14000, stage: 'Planifié', work: 'Élastomère 2 couches', materials: 'Commandés', deposit: true },
   { id: 'j4', quoteNo: 'H63771', client: 'C. Grenier', city: 'Sillery', company: 'toit', crewId: 'tb', startDay: 6, days: 2, amount: 6500, stage: 'Planifié', work: 'Élastomère · réfection', materials: 'À commander', deposit: false },
   { id: 'j5', quoteNo: 'H63759', client: 'V. Beaudoin', city: 'Beauport', company: 'toit', crewId: 'ta', startDay: 7, days: 2, amount: 6000, stage: 'Planifié', work: 'Bardeaux · 9 carrés', materials: 'Commandés', deposit: true },
-  { id: 'j6', quoteNo: 'G64298', client: 'R. Blouin', city: 'Stoneham', company: 'sg', crewId: 'f1', startDay: 1, days: 1, amount: 402, stage: 'En cours', work: 'Nettoyage + vidange', materials: 'Livrés', deposit: false },
-  { id: 'j7', quoteNo: 'G64251', client: 'Habitations Mica', city: 'Lebourgneuf', company: 'sg', crewId: 'f1', startDay: 2, days: 2, amount: 4870, stage: 'Planifié', work: 'T-Rex XL M-5800 · 210 pi', materials: 'Livrés', deposit: true },
-  { id: 'j8', quoteNo: 'G64219', client: 'D. Duchesne', city: 'Beauport', company: 'sg', crewId: 'f2', startDay: 1, days: 1, amount: 2140, stage: 'En cours', work: 'T-Rex M-5200 · 120 pi', materials: 'Livrés', deposit: true },
-  { id: 'j9', quoteNo: 'G64196', client: 'A. Dumas', city: 'Lévis', company: 'sg', crewId: 'f2', startDay: 3, days: 1, amount: 1890, stage: 'Planifié', work: 'Gouttières 5" + coudes', materials: 'Livrés', deposit: true },
-  { id: 'j10', quoteNo: 'G64157', client: 'M. Michaud', city: 'Cap-Rouge', company: 'sg', crewId: 'f2', startDay: 4, days: 1, amount: 3260, stage: 'Planifié', work: 'DoublePro D-11500', materials: 'Commandés', deposit: true },
+  { id: 'j6', quoteNo: 'G64298', client: 'M. Fournier', city: 'Neufchâtel', company: 'sg', crewId: 'f1', startDay: 1, days: 1, amount: 450, stage: 'En cours', work: 'Pare-feuilles 5000 · 30 pi', materials: 'Livrés', deposit: false },
+  { id: 'j7', quoteNo: 'G64251', client: 'Habitations Mica', city: 'Lebourgneuf', company: 'sg', crewId: 'f1', startDay: 2, days: 2, amount: 4870, stage: 'Planifié', work: 'T-Rex XL M-5800 · 210 pi', materials: 'Livrés', deposit: false },
+  { id: 'j8', quoteNo: 'G64219', client: 'D. Duchesne', city: 'Beauport', company: 'sg', crewId: 'f2', startDay: 1, days: 1, amount: 2140, stage: 'En cours', work: 'T-Rex M-5200 · 120 pi', materials: 'Livrés', deposit: false },
+  { id: 'j9', quoteNo: 'G64196', client: 'A. Dumas', city: 'Lévis', company: 'sg', crewId: 'f2', startDay: 3, days: 1, amount: 1890, stage: 'Planifié', work: 'Gouttières 5" + coudes', materials: 'Livrés', deposit: false },
+  { id: 'j10', quoteNo: 'G64157', client: 'M. Michaud', city: 'Cap-Rouge', company: 'sg', crewId: 'f2', startDay: 4, days: 1, amount: 3260, stage: 'Planifié', work: 'DoublePro D-11500', materials: 'Commandés', deposit: false },
   { id: 'j11', quoteNo: 'R63978', client: 'M. Lavoie', city: 'Sillery', company: 'reno', crewId: 'm1', startDay: 0, days: 10, amount: 48200, stage: 'En cours', work: 'Garage + revêtement', materials: 'Livrés', deposit: true },
   { id: 'j12', quoteNo: 'G64312', client: 'F. Paradis', city: 'Charlesbourg', company: 'sg', days: 1, amount: 1540, stage: 'À planifier', work: 'T-Rex M-5200 · 90 pi', materials: 'À commander', deposit: false },
   { id: 'j13', quoteNo: 'H64305', client: 'A. Larouche', city: 'Lebourgneuf', company: 'toit', days: 2, amount: 16300, stage: 'À planifier', work: 'Bardeaux · 24 carrés', materials: 'À commander', deposit: true },
-  { id: 'j14', quoteNo: 'G64306', client: 'S. Corriveau', city: 'Limoilou', company: 'sg', days: 1, amount: 980, stage: 'À planifier', work: 'Pare-feuilles 5300 zip', materials: 'Livrés', deposit: false },
-  { id: 'j15', quoteNo: 'G64187', client: 'L. Caron', city: 'Sainte-Foy', company: 'sg', crewId: 'f1', startDay: -3, days: 1, amount: 2380, stage: 'Facturé', work: 'T-Rex 5800', materials: 'Livrés', deposit: true },
+  { id: 'j14', quoteNo: 'G64176', client: 'S. Corriveau', city: 'Limoilou', company: 'sg', days: 1, amount: 980, stage: 'À planifier', work: 'Pare-feuilles 5300 zip', materials: 'Livrés', deposit: false },
+  { id: 'j15', quoteNo: 'G64187', client: 'L. Caron', city: 'Sainte-Foy', company: 'sg', crewId: 'f1', startDay: -3, days: 1, amount: 2380, stage: 'Facturé', work: 'T-Rex 5800', materials: 'Livrés', deposit: false },
   { id: 'j16', quoteNo: 'H63840', client: 'G. Leclerc', city: 'Beauport', company: 'toit', crewId: 'tb', startDay: -4, days: 2, amount: 12750, stage: 'Payé', work: 'Bardeaux', materials: 'Livrés', deposit: true },
 ]
 

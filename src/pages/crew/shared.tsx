@@ -10,6 +10,7 @@ import { crewById, isScheduled, type Crew, type JobRecord } from '../../data/cre
 import { JOBS, clientById, fullName, type Client, type Tone } from '../../data/mock'
 import { quoteByNo } from '../../data/store'
 import { getDraft } from '../../data/quote-builder'
+import { crewJobQuote } from '../../data/crew-jobs'
 import { t } from '../../i18n'
 import { cn } from '../../lib/utils'
 import { TODAY_INDEX } from '../agenda/calendar'
@@ -45,18 +46,22 @@ export interface JobSite {
   address: string
   phones: string[]
   maps: string
+  /** Commercial client: the person to call on site (name and role), instead of a homeowner. */
+  contact?: { name: string; role?: string }
 }
 
 export function jobSite(job: JobRecord): JobSite {
   const quote = quoteByNo(job.quoteNo)
   const client = quote ? clientById(quote.clientId) : undefined
   const address = client ? `${client.no}, ${client.street}, ${client.city} ${client.postal}` : `${job.city}, QC`
+  const role = crewJobQuote(job.quoteNo)?.client.contactRole
   return {
     client,
     name: client ? (client.company ?? fullName(client)) : job.client,
     address,
-    phones: client ? [client.phone, client.mobile].filter((p): p is string => !!p) : [],
+    phones: client ? [client.mobile, client.phone].filter((p): p is string => !!p) : [],
     maps: `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`,
+    contact: client?.company ? { name: fullName(client), role } : undefined,
   }
 }
 
@@ -79,11 +84,13 @@ export function SiteActions({ site, className }: { site: JobSite; className?: st
         <Navigation className="w-4 h-4" />
         {t('Itinéraire')}
       </a>
-      {site.phones[0] && (
+      {site.phones[0] ? (
         <a href={telHref(site.phones[0])} className="btn btn-md btn-secondary flex-1 min-w-[9rem] justify-center">
           <Phone className="w-4 h-4" />
-          {t('Appeler le client')}
+          {site.contact ? t('Appeler le contact') : t('Appeler le client')}
         </a>
+      ) : (
+        <p className="text-xs text-ink-mute self-center">{t('Aucun téléphone au dossier : appelez le bureau.')}</p>
       )}
     </div>
   )

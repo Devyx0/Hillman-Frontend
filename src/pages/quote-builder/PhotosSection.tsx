@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import { AnnotatedPhoto } from '../../components/AnnotatedPhoto'
 import { Camera, CircleCheck, CircleDashed, Image as ImageIcon, PenLine, Star, Trash2, Upload } from 'lucide-react'
 import type { QuotePhoto } from '../../data/quote-builder'
 import { t } from '../../i18n'
@@ -38,7 +39,7 @@ function Tile({ photo, onAnnotate, onTake, onRemove }: { photo: QuotePhoto; onAn
   return (
     <figure className={cn('relative aspect-[4/3] rounded-lg overflow-hidden flex flex-col justify-end', has ? 'bg-stone' : 'border-2 border-dashed border-hairline-strong bg-white')}>
       {img ? (
-        <img src={img} alt={t(photo.label)} className="absolute inset-0 w-full h-full object-cover" />
+        <AnnotatedPhoto photo={photo} />
       ) : photo.placeholder ? (
         <>
           <div className="absolute inset-0 opacity-60" style={STRIPES} />
@@ -58,6 +59,7 @@ function Tile({ photo, onAnnotate, onTake, onRemove }: { photo: QuotePhoto; onAn
           </span>
         )}
         {photo.shapes?.length ? <span className="badge bg-primary text-white">{t('Annotée')}</span> : null}
+        {photo.by === 'equipe' && <span className="badge bg-data-4 text-data-4-ink">{t("Photo de l'équipe")}</span>}
         <span className="flex-1" />
         {has && (
           <button onClick={onAnnotate} className="h-7 px-2 rounded-md bg-white/95 text-ink text-2xs font-semibold inline-flex items-center gap-1 shadow-card hover:bg-white" aria-label={t('Annoter {label}', { label: t(photo.label) })}>

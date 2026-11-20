@@ -26,6 +26,8 @@ export interface GutterForm {
   size: 5 | 6
   material: 'Aluminium' | 'Acier'
   color: string
+  /** Downspout colour when different from the gutters (empty = same as the gutters). */
+  downspoutColor?: string
   storeys: number
   roof: string
   ladders: number
@@ -203,4 +205,15 @@ export function seedGutterQuote(q: { id: string; amount: number; cost: number; w
     addonPrices: { fascia: round5(best.feet * ADDON_RATE.fascia), soffit: round5(best.feet * ADDON_RATE.soffit) },
     cost: cents(best.cost),
   }
+}
+
+/**
+ * Cost of a Gouttières quote whose form has `feet` linear feet of gutters — used to seed demo quotes with
+ * a known length (e.g. a crew job "T-Rex XL · 210 pi") so `seedGutterQuote` lands on that exact form.
+ */
+export function costForFeet(q: { id: string; workType: string }, feet: number): number {
+  const kind = gutterKind(q.workType)
+  const storeys = 1 + (hash(q.id) % 2)
+  const tier = kind === 'gutter' ? tierForWork(q.workType) : undefined
+  return cents(linesCost(gutterLines(formForFeet(feet, storeys, kind), { kind, tier })))
 }

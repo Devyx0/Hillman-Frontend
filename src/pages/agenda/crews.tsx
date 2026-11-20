@@ -12,8 +12,11 @@ import { inScope, useApp } from '../../context/AppContext'
 import { useAuth } from '../../auth/AuthContext'
 import { APPOINTMENTS, clientById, companyById, fullName, repById, type Quote, type Tone } from '../../data/mock'
 import { quoteById, quoteByNo, useStore } from '../../data/store'
-import { getDraft } from '../../data/quote-builder'
+import { colourLine, getDraft } from '../../data/quote-builder'
+import { AnnotatedPhoto, orderPhotos } from '../../components/AnnotatedPhoto'
 import {
+  crewStartStatus,
+  jobHasDeposit,
   ABSENCES,
   ABSENCE_REASONS,
   CREWS,
@@ -99,7 +102,7 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
           <div>
             <p className="label-caps mb-1">{t('Équipe')}</p>
             <p className="font-semibold text-ink">{crew ? t(crew.name) : '—'}</p>
-            {crew && <p className="text-xs text-ink-mute">{t('Chef : {name}', { name: crew.lead })}</p>}
+            {crew && <p className="text-xs text-ink-mute">{t('Chef d’équipe : {name}', { name: crew.lead })}</p>}
           </div>
           <div>
             <p className="label-caps mb-1">{t('Ville')}</p>
@@ -112,10 +115,12 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
             <p className="label-caps mb-1">{t('Matériaux')}</p>
             <Badge tone={MATERIAL_TONE[job.materials] ?? 'neutral'}>{t(job.materials)}</Badge>
           </div>
-          <div>
-            <p className="label-caps mb-1">{t('Dépôt')}</p>
-            <Badge tone={job.deposit ? 'good' : 'warn'}>{job.deposit ? t('Reçu') : t('Non reçu')}</Badge>
-          </div>
+          {jobHasDeposit(job) && (
+            <div>
+              <p className="label-caps mb-1">{t('Dépôt')}</p>
+              <Badge tone={job.deposit ? 'good' : 'warn'}>{job.deposit ? t('Reçu') : t('Non reçu')}</Badge>
+            </div>
+          )}
           {job.weather && (
             <div className="col-span-2">
               <p className="label-caps mb-1">{t('Météo')}</p>
@@ -274,11 +279,16 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
           <Field label={t('Matériaux')}>
             <Select value={materials} onChange={setMaterials} options={MATERIAL_STATUSES.map((m) => ({ value: m, label: t(m) }))} />
           </Field>
-          <label className="flex items-center gap-2 text-sm text-ink-secondary">
-            <input type="checkbox" checked={deposit} onChange={(e) => setDeposit(e.target.checked)} className="accent-[var(--color-primary)]" />
-            {t('Dépôt reçu')}
-          </label>
-          {!deposit && <p className="text-xs text-tone-warn-ink -mt-2">{t('Le dépôt n’est pas encore reçu.')}</p>}
+          {/* Gutters: 100 % at the end of the work, no deposit to track. */}
+          {jobHasDeposit({ quoteNo: job?.quoteNo ?? quote!.no, company }) && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-ink-secondary">
+                <input type="checkbox" checked={deposit} onChange={(e) => setDeposit(e.target.checked)} className="accent-[var(--color-primary)]" />
+                {t('Dépôt reçu')}
+              </label>
+              {!deposit && <p className="text-xs text-tone-warn-ink -mt-2">{t('Le dépôt n’est pas encore reçu.')}</p>}
+            </>
+          )}
           <Field label={t('Notes pour l’équipe')}>
             <textarea rows={3} className="form-input h-auto py-2.5" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('Accès, stationnement, chien, code de porte…')} />
           </Field>
@@ -643,7 +653,8 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
         <section className="grid sm:grid-cols-2 gap-4">
           <div>
             <p className="label-caps mb-1">{t('Client')}</p>
-            <p className="font-semibold">{client ? fullName(client) : job.client}</p>
+            <p className="font-semibold">{client ? (client.company ?? fullName(client)) : job.client}</p>
+            {client?.company && <p className="text-ink-secondary">{t('Contact sur place : {name}', { name: fullName(client) })}</p>}
             <p className="flex items-center gap-1.5 text-ink-secondary">
               <MapPin className="w-3.5 h-3.5 text-ink-mute" />
               {client ? `${client.no}, ${client.street}, ${client.city} ${client.postal}` : `${job.city}, QC`}
@@ -661,7 +672,7 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
             <p className="font-semibold">{crew ? t(crew.name) : t('Équipe à confirmer')}</p>
             {crew && (
               <p className="text-ink-secondary">
-                {t('Chef : {name}', { name: crew.lead })} · {crew.members.filter((m) => m !== crew.lead).join(', ')}
+                {t('Chef d’équipe : {name}', { name: crew.lead })} · {crew.members.filter((m) => m !== crew.lead).join(', ')}
               </p>
             )}
             <p className="text-ink-secondary flex items-center gap-1.5">
@@ -672,7 +683,8 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
         </section>
         <section>
           <p className="label-caps mb-2">{t('Travaux')}</p>
-          <p className="font-semibold mb-2">{t(job.work)}</p>
+          <p className="font-semibold mb-1">{t(job.work)}</p>
+          {job.company === 'sg' && quote && <p className="font-semibold text-ink mb-2">{colourLine(getDraft(quoteById(quote.id)!).gutter, t)}</p>}
           <table className="w-full text-sm border border-hairline rounded-lg overflow-hidden">
             <thead className="bg-sand text-left">
               <tr>
@@ -704,10 +716,12 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
               <Package className="w-3.5 h-3.5 text-ink-mute" />
               {t(job.materials)}
             </p>
-            <p className="flex items-center gap-1.5 mt-1">
-              <Wallet className="w-3.5 h-3.5 text-ink-mute" />
-              {job.deposit ? t('Dépôt reçu') : t('Dépôt non reçu — ne pas commencer sans l’accord du bureau')}
-            </p>
+            {crewStartStatus(job) && (
+              <p className={cn('flex items-center gap-1.5 mt-1', crewStartStatus(job) === 'wait' ? 'text-tone-warn-ink font-semibold' : 'text-tone-good-ink')}>
+                <Wallet className="w-3.5 h-3.5" />
+                {crewStartStatus(job) === 'wait' ? t('En attente du feu vert du bureau — ne pas commencer') : t('Feu vert du bureau : vous pouvez commencer')}
+              </p>
+            )}
             {job.weather && (
               <p className="flex items-center gap-1.5 mt-1">
                 <CloudRain className="w-3.5 h-3.5 text-ink-mute" />
@@ -716,21 +730,41 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
             )}
           </div>
           <div>
-            <p className="label-caps mb-1">{t('Notes')}</p>
-            <p className="whitespace-pre-line text-ink-secondary">{job.notes || (quote && getDraft(quoteById(quote.id)!).gutter.note) || t('Protéger l’aménagement paysager. Nettoyer les lieux à la fin des travaux.')}</p>
+            <p className="label-caps mb-1">{t("Note pour l'équipe")}</p>
+            {/* Only the crew note and the office's scheduling note: internal sales notes never go on the work order. */}
+            <p className="whitespace-pre-line text-ink-secondary">{quote && getDraft(quoteById(quote.id)!).crewNote ? t(getDraft(quoteById(quote.id)!).crewNote) : t("Aucune note de l'estimateur pour ce chantier.")}</p>
+            {job.notes && <p className="whitespace-pre-line text-ink-secondary mt-1.5">{t(job.notes)}</p>}
           </div>
         </section>
         <section>
-          <p className="label-caps mb-2">{t('Photos')}</p>
-          <div className="grid grid-cols-3 gap-3">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className="aspect-[4/3] rounded-lg border border-dashed border-hairline-strong bg-sand/50 flex flex-col items-center justify-center gap-1 text-xs text-ink-mute">
-                <ImageIcon className="w-5 h-5" />
-                {t('Photo {n}', { n })}
+          <p className="label-caps mb-2">{t('Photos annotées')}</p>
+          {(() => {
+            const shots = quote ? orderPhotos(getDraft(quoteById(quote.id)!).photos.filter((p) => p.annotated || p.src)).estimator : []
+            return shots.length ? (
+              <div className="grid grid-cols-3 gap-3">
+                {shots.slice(0, 6).map((p) => (
+                  <figure key={p.id}>
+                    <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-stone">
+                      <AnnotatedPhoto photo={p} />
+                    </div>
+                    <figcaption className="text-2xs text-ink-mute mt-0.5 truncate">
+                      {t(p.label)}
+                      {p.main ? ` · ${t('Photo principale')}` : ''}
+                    </figcaption>
+                  </figure>
+                ))}
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-ink-mute mt-1.5">{t('Les photos annotées de la visite s’ajoutent ici.')}</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="aspect-[4/3] rounded-lg border border-dashed border-hairline-strong bg-sand/50 flex flex-col items-center justify-center gap-1 text-xs text-ink-mute">
+                    <ImageIcon className="w-5 h-5" />
+                    {t('Photo {n}', { n })}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </section>
         <section className="grid sm:grid-cols-2 gap-6 pt-6">
           <div className="border-t border-ink pt-1.5 text-xs text-ink-mute">{t('Travaux complétés — signature du chef d’équipe')}</div>

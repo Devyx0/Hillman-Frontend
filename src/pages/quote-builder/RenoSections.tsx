@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { CrewNoteField } from './CrewNoteField'
 import { GitBranch, LayoutList, List } from 'lucide-react'
 import { Badge, Field, StatusBadge } from '../../components/ui'
 import { BuilderSection, UnitField } from '../../components/quote-shared'
@@ -29,6 +30,7 @@ export function DescriptionSection({ b }: { b: Builder }) {
             placeholder={t('Décrivez le projet comme au client : besoins, pièces visées, matériaux, contraintes…')}
           />
         </Field>
+        <CrewNoteField b={b} />
         <div>
           <p className="label-caps mb-1.5">{t('Photos')}</p>
           <PhotoGrid b={b} />

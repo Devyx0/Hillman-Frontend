@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { AnnotatedPhoto } from '../../components/AnnotatedPhoto'
+import { CrewNoteField } from './CrewNoteField'
 import { ClipboardList, Plus, Printer, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { CompanyLogo, Drawer, Field } from '../../components/ui'
 import { BuilderSection, ToggleChip } from '../../components/quote-shared'
 import { fullName } from '../../data/mock'
-import { fillClause, gutterClauses, gutterTotals, type GutterFace, type GutterForm } from '../../data/quote-builder'
+import { colourLine, fillClause, gutterClauses, gutterTotals, type GutterFace, type GutterForm } from '../../data/quote-builder'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, money, num } from '../../lib/utils'
@@ -59,8 +61,18 @@ export function FormulaireSection({ b }: { b: Builder }) {
               ))}
             </div>
           </Field>
-          <Field label={t('Couleur')}>
+          <Field label={t('Couleur des gouttières')}>
             <select className="form-input" value={g.color} onChange={(e) => set({ color: e.target.value })}>
+              {COLORS.map((c) => (
+                <option key={c} value={c}>
+                  {t(c)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t('Couleur des descentes')}>
+            <select className="form-input" value={g.downspoutColor ?? ''} onChange={(e) => set({ downspoutColor: e.target.value || undefined })}>
+              <option value="">{t('Même couleur que les gouttières')}</option>
               {COLORS.map((c) => (
                 <option key={c} value={c}>
                   {t(c)}
@@ -140,7 +152,9 @@ export function FormulaireSection({ b }: { b: Builder }) {
           </div>
         </div>
 
-        <Field label={t('Note')}>
+        <CrewNoteField b={b} />
+
+        <Field label={t('Note interne (représentant et bureau)')}>
           <textarea className="form-input h-auto py-2" rows={2} value={g.note} onChange={(e) => set({ note: e.target.value })} />
         </Field>
 
@@ -186,9 +200,8 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
           </div>
           <div>
             <p className="label-caps">{t('Travaux')}</p>
-            <p className="text-ink-secondary">
-              {t('Gouttières {size} po · {material} · {color}', { size: gutter.size, material: t(gutter.material), color: t(gutter.color) })}
-            </p>
+            <p className="text-ink-secondary">{t('Gouttières {size} po · {material}', { size: gutter.size, material: t(gutter.material) })}</p>
+            <p className="font-semibold text-ink">{colourLine(gutter, t)}</p>
             <p className="text-ink-secondary">
               {t('{n} étages · {l} échelles · toit : {roof}', { n: gutter.storeys, l: gutter.ladders, roof: t(gutter.roof) })}
             </p>
@@ -225,10 +238,10 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
             ))}
           </ul>
         </div>
-        {gutter.note && (
+        {b.crewNote && (
           <div>
-            <p className="label-caps mb-1">{t('Note')}</p>
-            <p className="text-ink-secondary whitespace-pre-line">{gutter.note}</p>
+            <p className="label-caps mb-1">{t("Note pour l'équipe")}</p>
+            <p className="text-ink-secondary whitespace-pre-line">{t(b.crewNote)}</p>
           </div>
         )}
         {photos.length > 0 && (
@@ -237,7 +250,9 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
             <div className="grid grid-cols-3 gap-2">
               {photos.map((p) => (
                 <figure key={p.id}>
-                  <img src={p.annotated ?? p.src} alt={t(p.label)} className="rounded-md aspect-[4/3] object-cover w-full" />
+                  <div className="relative rounded-md aspect-[4/3] overflow-hidden bg-stone">
+                    <AnnotatedPhoto photo={p} />
+                  </div>
                   <figcaption className="text-2xs text-ink-mute mt-0.5 truncate">{t(p.label)}</figcaption>
                 </figure>
               ))}
