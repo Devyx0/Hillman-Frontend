@@ -1,4 +1,5 @@
 import { LEADS, QUOTES, clientById, fullName, type CompanyId } from './mock'
+import type { QuoteRecord } from './store'
 
 export type PipelineColumnId = 'lead' | 'visite' | 'soumission' | 'suivi' | 'signe' | 'annee' | 'refuse'
 
@@ -33,6 +34,12 @@ const STATUS_COLUMN: Record<string, PipelineColumnId> = {
   Refusé: 'refuse',
 }
 
+/** Column a quote status belongs to (undefined: not on the board, e.g. Payé, Terminé). */
+export const columnForStatus = (status: string): PipelineColumnId | undefined => STATUS_COLUMN[status]
+
+/** Columns a quote card can be dropped in (lead / visit columns are for leads only). */
+export const QUOTE_COLUMNS: PipelineColumnId[] = ['soumission', 'suivi', 'signe', 'annee', 'refuse']
+
 /** Column → status label applied when a card is moved there (mockup: `O3`). */
 export const COLUMN_STATUS: Record<PipelineColumnId, string> = {
   lead: 'Nouveau lead',
@@ -65,12 +72,16 @@ export interface Deal {
   ai?: boolean
   statusLabel: string
   month: number
+  /** Refusal reason (refused quotes). */
+  reason?: string
+  /** Automatic follow-ups paused on this quote. */
+  paused?: boolean
 }
 
-/** Builds pipeline cards from leads + quotes (mockup: `L3`). */
+/** Builds pipeline cards from leads + quotes (mockup: `L3`). Call it on every store change (`useStore`). */
 export function buildDeals(): Deal[] {
   const deals: Deal[] = []
-  LEADS.filter((l) => l.status !== 'Non qualifié').forEach((l, i) =>
+  LEADS.filter((l) => l.status !== 'Non qualifié' && l.status !== 'Converti').forEach((l, i) =>
     deals.push({
       id: l.id,
       no: 'Lead',
@@ -108,6 +119,8 @@ export function buildDeals(): Deal[] {
       work: q.workType,
       statusLabel: q.status,
       month: 10 + (i % 3),
+      reason: (q as QuoteRecord).refusalReason,
+      paused: (q as QuoteRecord).followUpPaused,
     })
   })
   return deals

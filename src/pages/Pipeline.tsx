@@ -1,48 +1,94 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Ellipsis, MessageSquare, Phone } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Ellipsis, MessageSquare, Pause, Phone } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { FilterBar, FilterField, Select, type SelectOption } from '../components/filters'
 import { ComposeDrawer, type MessageCtx, type MessageKind } from '../components/messaging'
+import { HoverTip, useChangeStatus } from '../components/quote-status'
+import { ErrorState, Loading } from '../components/states'
 import { Page, PageHeader, RepAvatar } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { REPS, companyById } from '../data/mock'
-import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type Deal, type PipelineColumnId as ColumnId } from '../data/pipeline'
+import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, QUOTE_COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type PipelineColumnId as ColumnId } from '../data/pipeline'
+import { request, useStore } from '../data/store'
 import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort } from '../lib/utils'
 
-/** Pipeline kanban (mockup: `V3`). */
+/** Pipeline kanban (mockup: `V3`). Quote cards follow the store; moving one changes the quote's status. */
 export default function Pipeline() {
   const { scope } = useApp()
   const navigate = useNavigate()
-  const [deals, setDeals] = useState<Deal[]>(buildDeals)
+  const version = useStore()
+  const { user, can } = useAuth()
+  const viewAll = can('quotes.viewAll')
+  const myCompanies = useMemo(() => user?.companies ?? [], [user])
+  const status = useChangeStatus({ via: 'pipeline' })
+  const [params] = useSearchParams()
+  const forceError = params.get('erreur') === '1'
+  const [attempt, setAttempt] = useState(0)
+  const [load, setLoad] = useState<'loading' | 'ready' | 'error'>('loading')
+  /** Lead cards moved by hand (leads keep their local behaviour). */
+  const [leadMoves, setLeadMoves] = useState<Record<string, ColumnId>>({})
   const [rep, setRep] = useState('all')
   const [amountRange, setAmountRange] = useState<AmountRange>('all')
   useEffect(() => {
     setRep('all')
   }, [scope])
+  useEffect(() => {
+    let live = true
+    setLoad('loading')
+    request(null, { ms: 350, fail: forceError && attempt === 0 }).then(
+      () => live && setLoad('ready'),
+      () => live && setLoad('error'),
+    )
+    return () => {
+      live = false
+    }
+  }, [attempt, forceError])
   const [showRefused, setShowRefused] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overCol, setOverCol] = useState<ColumnId | null>(null)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [compose, setCompose] = useState<{ kind: MessageKind; ctx: MessageCtx } | null>(null)
 
-  const visible = useMemo(() => deals.filter((d) => inScope(scope, d.company) && (rep === 'all' || d.repId === rep) && matchesAmount(d.amount, amountRange)), [deals, scope, rep, amountRange])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const deals = useMemo(() => buildDeals().map((d) => (!d.quoteId && leadMoves[d.id] ? { ...d, col: leadMoves[d.id], days: 0, statusLabel: COLUMN_STATUS[leadMoves[d.id]] } : d)), [version, leadMoves])
+  const visible = useMemo(
+    () =>
+      deals.filter(
+        (d) => inScope(scope, d.company) && myCompanies.includes(d.company) && (viewAll || !d.quoteId || d.repId === user?.repId) && (rep === 'all' || d.repId === rep) && matchesAmount(d.amount, amountRange),
+      ),
+    [deals, scope, myCompanies, viewAll, user, rep, amountRange],
+  )
   const inColumn = (col: ColumnId) => visible.filter((d) => d.col === col).sort((a, b) => a.days - b.days || b.amount - a.amount)
+  const canDrag = (d: { quoteId?: string }) => !d.quoteId || status.canChange
+  const targets = (d: { quoteId?: string; col: ColumnId }) => COLUMNS.filter((c) => c.id !== d.col && (!d.quoteId || QUOTE_COLUMNS.includes(c.id)))
 
-  const move = (id: string, col: ColumnId) => {
-    setDeals((all) => all.map((d) => (d.id === id ? { ...d, col, days: 0, statusLabel: COLUMN_STATUS[col], prob: col === 'signe' ? 100 : col === 'refuse' ? 0 : d.prob } : d)))
-    const deal = deals.find((d) => d.id === id)
-    if (deal && deal.col !== col) {
-      toast(
-        col === 'signe'
-          ? t('{name} → Signé · chantier créé dans « À planifier »', { name: deal.name })
-          : col === 'refuse'
-            ? t('{name} → Refusé · demande de raison envoyée', { name: deal.name })
-            : `${deal.name} → ${t(COLUMNS.find((c) => c.id === col)!.label)}`,
-      )
-    }
+  const move = async (id: string, col: ColumnId) => {
     setMenuId(null)
+    const deal = deals.find((d) => d.id === id)
+    if (!deal || deal.col === col) return
+    if (!deal.quoteId) {
+      setLeadMoves((m) => ({ ...m, [id]: col }))
+      toast(`${deal.name} → ${t(COLUMNS.find((c) => c.id === col)!.label)}`)
+      return
+    }
+    if (!QUOTE_COLUMNS.includes(col)) {
+      toast(t('Une soumission ne peut pas revenir à l’étape lead ou visite.'))
+      return
+    }
+    // Refusé asks the reason, Signé asks to confirm; cancelling leaves the card where it was.
+    await status.change(deal.quoteId, COLUMN_STATUS[col])
+  }
+
+  if (load !== 'ready') {
+    return (
+      <Page wide>
+        <PageHeader title={t('Pipeline')} />
+        <div className="bg-white rounded-xl shadow-card">{load === 'loading' ? <Loading /> : <ErrorState title={t('Impossible de charger le pipeline')} onRetry={() => setAttempt((a) => a + 1)} />}</div>
+      </Page>
+    )
   }
 
   const open = visible.filter((d) => !['signe', 'refuse'].includes(d.col))
@@ -107,20 +153,28 @@ export default function Pipeline() {
                   {items.map((d) => (
                     <article
                       key={d.id}
-                      draggable
+                      draggable={canDrag(d)}
                       onDragStart={() => setDragId(d.id)}
                       onDragEnd={() => {
                         setDragId(null)
                         setOverCol(null)
                       }}
                       onClick={() => (d.quoteId ? navigate(`/soumissions/${d.quoteId}`) : navigate(`/leads/${d.id}`))}
-                      className={cn('group relative bg-white rounded-lg shadow-card p-3 cursor-grab active:cursor-grabbing hover:shadow-elevated transition-shadow', dragId === d.id && 'opacity-40')}
+                      className={cn('group relative bg-white rounded-lg shadow-card p-3 hover:shadow-elevated transition-shadow', canDrag(d) ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer', dragId === d.id && 'opacity-40')}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-ink truncate">{d.name}</p>
-                          <p className="text-2xs text-ink-mute tnum">{d.no}</p>
+                          <p className="text-2xs text-ink-mute tnum flex items-center gap-1.5">
+                            {d.no}
+                            {d.paused && d.col !== 'signe' && d.col !== 'refuse' && (
+                              <HoverTip tip={t('Relance en pause')}>
+                                <Pause className="w-3 h-3 text-tone-warn-ink" />
+                              </HoverTip>
+                            )}
+                          </p>
                         </div>
+                        {canDrag(d) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -131,7 +185,9 @@ export default function Pipeline() {
                         >
                           <Ellipsis className="w-4 h-4" />
                         </button>
+                        )}
                       </div>
+                      {d.col === 'refuse' && d.reason && <p className="text-2xs text-tone-critical-ink mt-1 truncate" title={t(d.reason)}>{t(d.reason)}</p>}
                       <div className="flex items-center justify-between mt-2.5">
                         <div className="flex items-center gap-2">
                           <RepAvatar id={d.repId} size="xs" />
@@ -169,7 +225,7 @@ export default function Pipeline() {
                       {menuId === d.id && (
                         <div onClick={(e) => e.stopPropagation()} className="absolute right-2 top-8 z-20 w-52 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in cursor-default">
                           <p className="label-caps px-3 py-1.5">{t('Déplacer vers')}</p>
-                          {COLUMNS.filter((c) => c.id !== d.col).map((c) => (
+                          {targets(d).map((c) => (
                             <button key={c.id} onClick={() => move(d.id, c.id)} className="w-full text-left px-3 py-1.5 text-sm text-ink-secondary hover:bg-sand">
                               {t(c.label)}
                             </button>
@@ -197,6 +253,7 @@ export default function Pipeline() {
           )}
         </div>
       </div>
+      {status.dialog}
       <ComposeDrawer kind={compose?.kind ?? null} ctx={compose?.ctx ?? {}} onClose={() => setCompose(null)} />
     </Page>
   )

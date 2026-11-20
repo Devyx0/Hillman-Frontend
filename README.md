@@ -30,11 +30,33 @@ npm run dev
 | `src/layout/AppLayout.tsx` | Sidebar, top bar, company switcher, ⌘K search, toasts |
 | `src/pages/*` | One file per route |
 
+## Demo accounts
+
+There is no backend yet: sign in at `/connexion` with any demo account listed on the sign-in page
+(shared demo password shown there, defined in `src/auth/permissions.ts`). Admins can use "Voir comme…" in the
+user menu to preview a rep's or the coordinator's view. All data lives in memory and resets on reload.
+
+## Data and backend seam
+
+| Path | What |
+| --- | --- |
+| `src/data/store.ts` | The only place that mutates data (`addQuote`, `setQuoteStatus`, `signQuote`, `recordPayment`, …). Each mutator becomes an API call when the backend exists; `request()` simulates latency/errors |
+| `src/data/settings.ts` | Lead sources, statuses, numbering, payment schedules, follow-up sequences (days 6/12/20), templates, connections, Loi 25 |
+| `src/auth/` | Roles (admin / coordinator / rep), editable permission table, session, route guards |
+| `src/data/crews.ts` | Crews, job scheduling, absences, external calendar connections |
+| `src/data/quote-builder.ts` | Per-quote builder state and the pricing rule (the quote amount drives every total) |
+
+Phase 2 (not built): Facebook Lead Ads, reports, reactivation campaigns, Google review requests, satellite
+measurements, online payments, crew app, route optimization. The AI agent is labelled "January 2027"
+(`AI_AGENT_LIVE` in `src/data/settings.ts`).
+
 ## Routes
 
 `/` Aujourd'hui · `/leads` · `/leads/:id` · `/pipeline` · `/soumissions` · `/soumissions/:id` (quote builder) ·
 `/clients` · `/clients/:id` · `/conversations` · `/agenda` · `/catalogue` (`?tab=parametres` for settings) ·
-`/portail/:no` (client-facing quote portal, no app chrome)
+`/profil` · `/connexion`, `/invitation/:token`, `/mot-de-passe` (account, no app chrome) ·
+`/portail/:no` (client-facing quote portal; `?mode=tablette` for in-person signing), `/portail/:no/copie-signee`,
+`/portail/:no/annulation` (art. 58 LPC cancellation form)
 
 ## Language (EN / FR)
 

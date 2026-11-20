@@ -38,7 +38,7 @@ export function LanguageSwitch({ className }: { className?: string }) {
       className={cn('shrink-0 h-9 p-0.5 rounded-md bg-sand hover:bg-stone transition-colors inline-flex items-center text-xs font-semibold', className)}
     >
       {(['en', 'fr'] as const).map((l) => (
-        <span key={l} className={cn('h-8 px-2.5 rounded-[8px] inline-flex items-center uppercase', lang === l ? 'bg-white text-ink shadow-1' : 'text-ink-mute')}>
+        <span key={l} className={cn('h-8 px-1.5 sm:px-2.5 rounded-[8px] inline-flex items-center uppercase', lang === l ? 'bg-white text-ink shadow-1' : 'text-ink-mute')}>
           {l}
         </span>
       ))}

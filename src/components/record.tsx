@@ -5,12 +5,53 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Bot, Check, Clock, Copy, Eye, FileText, Mail, MessageSquare, Paperclip, PhoneIncoming, PhoneOutgoing, Play, Send, ShieldCheck, Sparkles, StickyNote } from 'lucide-react'
+import { ArrowLeft, Ban, Bot, Check, Clock, Copy, Eye, FileText, LoaderCircle, Mail, MessageSquare, Paperclip, PhoneIncoming, PhoneOutgoing, Play, RefreshCw, Send, ShieldCheck, Sparkles, StickyNote, Trash2, TriangleAlert } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { ME, companyById, type Message, type Thread } from '../data/mock'
+import { isOptedOut, optOut } from '../data/settings'
+import { request, useStore } from '../data/store'
 import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
-import { Avatar, Badge, CHANNEL_ICONS, type Icon } from './ui'
+import { ComingSoon, Notice, confirmAction } from './states'
+import { Avatar, Badge, CHANNEL_ICONS, Empty, type Icon } from './ui'
+
+// ── Delivery state, STOP handling ───────────────────────────────────────────
+
+/** A message plus its delivery state (outgoing texts and emails can fail). */
+export type ChatMessage = Message & {
+  /** `sending` while the provider has not confirmed; `failed` when it refused. */
+  state?: 'sending' | 'failed'
+  /** Provider error shown under a failed message (French, translated at display). */
+  error?: string
+}
+
+/** Opt-out keywords a client can text back (CRTC / Loi 25). */
+export const isStopReply = (text: string) => /^\s*(stop|arr[eê]t|arreter|arrêter|désabonner|desabonner|unsubscribe)\s*[.!]?\s*$/i.test(text)
+
+/**
+ * Applies STOP replies found in a thread: the phone number is opted out of texts (Settings keeps
+ * the list). Returns true when the number is (now) opted out.
+ */
+export function applyStopReplies(messages: Message[], phone?: string) {
+  if (!phone) return false
+  if (!isOptedOut(phone) && messages.some((m) => m.dir === 'in' && m.channel === 'sms' && isStopReply(m.text))) optOut(phone)
+  return isOptedOut(phone)
+}
+
+/**
+ * Simulated provider delivery for an outgoing message: resolves as delivered, or fails for a
+ * number that cannot receive texts. `patch` updates the message in the caller's state.
+ */
+export function deliver(m: ChatMessage, phone: string | undefined, patch: (id: string, p: Partial<ChatMessage>) => void) {
+  if (m.dir !== 'out' || m.channel === 'note') return
+  const badNumber = m.channel === 'sms' && (phone ?? '').replace(/\D/g, '').length < 10
+  patch(m.id, { state: 'sending', error: undefined })
+  request(true, { ms: 700, fail: badNumber }).then(
+    () => patch(m.id, { state: undefined, error: undefined }),
+    () => patch(m.id, { state: 'failed', error: 'Numéro invalide ou injoignable' }),
+  )
+}
 
 /** Canned AI reply suggestions per thread (mockup: `hd`). */
 const AI_SUGGESTIONS: Record<string, string> = {
@@ -27,8 +68,34 @@ const QUICK_REPLIES = [
   { name: 'Soumission acceptée — merci', text: 'Merci pour votre confiance! Nous vous appelons sous peu pour planifier les travaux.' },
 ]
 
+/** Delivery line under an outgoing message: sending / failed + retry / delivered. */
+function DeliveryState({ m, onRetry }: { m: ChatMessage; onRetry?: (m: ChatMessage) => void }) {
+  if (m.state === 'sending')
+    return (
+      <span className="inline-flex items-center gap-1">
+        <LoaderCircle className="w-3 h-3 animate-spin" />
+        {t('Envoi…')}
+      </span>
+    )
+  if (m.state === 'failed')
+    return (
+      <span className="inline-flex items-center gap-1.5 text-tone-critical-ink font-semibold">
+        <TriangleAlert className="w-3 h-3" />
+        {t("Échec de l'envoi")}
+        {m.error && <span className="font-normal">· {t(m.error)}</span>}
+        {onRetry && (
+          <button onClick={() => onRetry(m)} className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline">
+            <RefreshCw className="w-3 h-3" />
+            {t('Réessayer')}
+          </button>
+        )}
+      </span>
+    )
+  return <>{t('Livré')}</>
+}
+
 /** One message in a thread (mockup: `H0`). */
-export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
+export function MessageBubble({ m, thread, onRetry }: { m: ChatMessage; thread: Thread; onRetry?: (m: ChatMessage) => void }) {
   const ChannelIcon = CHANNEL_ICONS[m.channel]
   if (m.channel === 'note')
     return (
@@ -73,6 +140,11 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
             <span className="ml-auto">{t(m.at)}</span>
           </div>
           <p className="px-4 py-3 text-sm text-ink-secondary whitespace-pre-line">{t(m.text)}</p>
+          {m.dir === 'out' && m.state && (
+            <p className={cn('px-4 pb-3 text-2xs', m.state === 'failed' ? '' : 'text-ink-faint')}>
+              <DeliveryState m={m} onRetry={onRetry} />
+            </p>
+          )}
           {m.meta && (
             <div className="mx-4 mb-3 flex items-center gap-2 rounded-lg bg-sand px-3 py-2 text-xs">
               <FileText className="w-4 h-4 text-ink-mute" />
@@ -91,6 +163,8 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
   const out = m.dir === 'out'
   const ai = m.channel === 'ai'
   const auto = m.by?.startsWith('Automatisation')
+  const failed = m.state === 'failed'
+  const stop = !out && m.channel === 'sms' && isStopReply(m.text)
   return (
     <div className={cn('flex gap-2', out ? 'justify-end' : 'justify-start')}>
       {!out && <Avatar name={thread.name} size="sm" className="mt-auto" />}
@@ -101,6 +175,7 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
               <>
                 <Bot className="w-3 h-3" />
                 {t('Agent IA Hillman')}
+                <ComingSoon />
               </>
             ) : (
               <>
@@ -110,13 +185,32 @@ export function MessageBubble({ m, thread }: { m: Message; thread: Thread }) {
             )}
           </p>
         )}
-        <div className={cn('px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed', out ? (ai ? 'bg-lavender text-ink rounded-br-md' : 'bg-primary text-white rounded-br-md') : 'bg-white text-ink shadow-card rounded-bl-md')}>{t(m.text)}</div>
-        <p className={cn('text-2xs text-ink-faint mt-1 flex items-center gap-1', out && 'justify-end')}>
+        <div
+          className={cn(
+            'px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed',
+            failed ? 'bg-tone-critical-soft text-tone-critical-ink border border-tone-critical rounded-br-md' : out ? (ai ? 'bg-lavender text-ink rounded-br-md' : 'bg-primary text-white rounded-br-md') : 'bg-white text-ink shadow-card rounded-bl-md',
+            m.state === 'sending' && 'opacity-70',
+          )}
+        >
+          {t(m.text)}
+        </div>
+        <p className={cn('text-2xs text-ink-faint mt-1 flex flex-wrap items-center gap-1', out && 'justify-end')}>
           <ChannelIcon className="w-3 h-3" />
           {t(m.at)}
           {out && !ai && !auto && m.by ? ` · ${m.by}` : ''}
-          {out && ` · ${t('Livré')}`}
+          {out && (
+            <>
+              {' · '}
+              <DeliveryState m={m} onRetry={onRetry} />
+            </>
+          )}
         </p>
+        {stop && (
+          <p className="text-2xs mt-1 flex items-center gap-1 text-tone-critical-ink font-semibold">
+            <Ban className="w-3 h-3" />
+            {t('Désabonné des textos (STOP) — plus aucun texto ne sera envoyé')}
+          </p>
+        )}
         {m.meta && ai && (
           <p className="text-2xs mt-1 flex items-center gap-1 justify-end text-tone-good-ink font-semibold">
             <ShieldCheck className="w-3 h-3" />
@@ -136,9 +230,16 @@ const COMPOSER_MODES: { v: ComposerMode; l: string; i: Icon }[] = [
   { v: 'note', l: 'Note interne', i: StickyNote },
 ]
 
-/** Reply composer with AI suggestion, templates and internal notes (mockup: `G0`). */
-export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSend: (m: Message) => void; suggestion?: string }) {
-  const [mode, setMode] = useState<ComposerMode>(thread.channel === 'email' ? 'email' : 'sms')
+/**
+ * Reply composer with AI suggestion, templates and internal notes (mockup: `G0`). `phone` is the
+ * contact's texting number: texts are blocked when it replied STOP.
+ */
+export function Composer({ thread, onSend, suggestion, phone }: { thread: Thread; onSend: (m: ChatMessage) => void; suggestion?: string; phone?: string }) {
+  useStore() // opt-out list changes
+  const { user } = useAuth()
+  const optedOut = isOptedOut(phone)
+  const [mode, setMode] = useState<ComposerMode>(thread.channel === 'email' || (optedOut && thread.channel === 'sms') ? 'email' : 'sms')
+  const smsBlocked = mode === 'sms' && optedOut
   const [text, setText] = useState('')
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [drafting, setDrafting] = useState(false)
@@ -152,10 +253,10 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
     }, 700)
   }
   const send = () => {
-    if (!text.trim()) return
-    onSend({ id: 'x' + Date.now(), dir: 'out', channel: mode === 'note' ? 'note' : mode, at: "À l'instant", by: ME.name, text, meta: mode === 'note' ? 'Note interne' : undefined })
+    if (!text.trim() || smsBlocked) return
+    onSend({ id: 'x' + Date.now(), dir: 'out', channel: mode === 'note' ? 'note' : mode, at: "À l'instant", by: user?.name ?? ME.name, text, meta: mode === 'note' ? 'Note interne' : undefined })
     setText('')
-    toast(mode === 'note' ? t('Note ajoutée') : t('Message envoyé'))
+    if (mode === 'note') toast(t('Note ajoutée'))
   }
 
   return (
@@ -171,11 +272,16 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
           {t('De : {company} · {phone}', { company: companyById(thread.company).name, phone: companyById(thread.company).phone })}
         </span>
       </div>
-      {!text && !drafting && (
+      {smsBlocked && (
+        <Notice tone="critical" className="mb-2">
+          {t('Ce client a répondu STOP : les textos sont bloqués pour ce numéro. Écrivez-lui par courriel ou appelez-le.')}
+        </Notice>
+      )}
+      {!text && !drafting && !smsBlocked && (
         <button onClick={draft} className="mb-2 w-full text-left rounded-lg border border-lavender bg-lavender-soft px-3 py-2 text-sm text-ink-secondary hover:bg-lavender/40 flex items-start gap-2">
           <Sparkles className="w-4 h-4 text-ink mt-0.5 shrink-0" />
           <span className="line-clamp-2 md:line-clamp-none">
-            <span className="font-semibold text-ink">{t('Suggestion IA')}</span>
+            <span className="font-semibold text-ink">{t('Suggestion IA')}</span> <ComingSoon />
             {' · '}
             {hint ? hint.slice(0, 92) + '…' : t('Générer une réponse à partir du dossier client')}
           </span>
@@ -186,7 +292,7 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
           value={drafting ? t("L'IA rédige une réponse à partir de la soumission et de l'historique…") : text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
-          disabled={drafting}
+          disabled={drafting || smsBlocked}
           placeholder={mode === 'note' ? t("Note visible seulement par l'équipe… @mention") : t('Écrire à {name}…', { name: thread.name })}
           className="w-full resize-none bg-transparent px-3 py-2.5 text-sm outline-none placeholder:text-ink-faint disabled:text-ink-mute"
           aria-label={t('Message')}
@@ -225,7 +331,7 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
           <div className="ml-auto flex items-center gap-1">
             <button
               onClick={() => {
-                if (text) {
+                if (text && !smsBlocked) {
                   toast(t('Programmé demain 8 h 30'))
                   setText('')
                 }
@@ -235,7 +341,7 @@ export function Composer({ thread, onSend, suggestion }: { thread: Thread; onSen
             >
               <Clock className="w-3.5 h-3.5" />
             </button>
-            <button onClick={send} className="btn btn-xs btn-primary">
+            <button onClick={send} disabled={smsBlocked || !text.trim()} className="btn btn-xs btn-primary">
               <Send className="w-3.5 h-3.5" />
               {mode === 'note' ? t('Ajouter') : t('Envoyer')}
             </button>
@@ -353,24 +459,35 @@ export function SideCard({ title, action, children }: { title: ReactNode; action
   )
 }
 
-/** Scrollable thread + composer (mockup: `Q0`). */
-export function ThreadPanel({ thread, suggestion }: { thread: Thread; suggestion?: string }) {
-  const [messages, setMessages] = useState(thread.messages)
+/** Scrollable thread + composer (mockup: `Q0`). `phone` enables STOP handling and failed-text states. */
+export function ThreadPanel({ thread, suggestion, phone }: { thread: Thread; suggestion?: string; phone?: string }) {
+  const [messages, setMessages] = useState<ChatMessage[]>(thread.messages)
   const scroller = useRef<HTMLDivElement>(null)
   useEffect(() => {
     setMessages(thread.messages)
-  }, [thread])
+    applyStopReplies(thread.messages, phone)
+  }, [thread, phone])
+  const patch = (id: string, p: Partial<ChatMessage>) => setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...p } : m)))
+  const send = (m: ChatMessage) => {
+    setMessages((prev) => [...prev, m])
+    deliver(m, phone, patch)
+  }
   useEffect(() => {
     if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight
   }, [messages.length])
   return (
     <div className="bg-white rounded-xl shadow-card overflow-hidden flex flex-col">
       <div ref={scroller} className="bg-sand/60 px-4 py-5 space-y-4 h-[28rem] overflow-y-auto">
+        {messages.length === 0 && (
+          <Empty icon={MessageSquare} title={t('Aucun message')}>
+            {t('Les textos, courriels et appels avec ce contact apparaîtront ici.')}
+          </Empty>
+        )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} m={m} thread={thread} />
+          <MessageBubble key={m.id} m={m} thread={thread} onRetry={(x) => deliver(x, phone, patch)} />
         ))}
       </div>
-      <Composer thread={thread} suggestion={suggestion} onSend={(m) => setMessages((prev) => [...prev, m])} />
+      <Composer thread={thread} suggestion={suggestion} phone={phone} onSend={send} />
     </div>
   )
 }
@@ -414,12 +531,16 @@ interface Note {
 
 /** Internal notes list with add box (mockup: `X0`). */
 export function Notes({ initial }: { initial: Note[] }) {
+  const { user } = useAuth()
   const [notes, setNotes] = useState(initial)
   const [draft, setDraft] = useState('')
   const add = () => {
     if (!draft.trim()) return
-    setNotes((n) => [{ at: t("Aujourd'hui"), by: 'Jean-Pierre Hillman', text: draft.trim() }, ...n])
+    setNotes((n) => [{ at: t("Aujourd'hui"), by: user?.name ?? ME.name, text: draft.trim() }, ...n])
     setDraft('')
+  }
+  const remove = async (i: number) => {
+    if (await confirmAction({ title: t('Supprimer cette note?'), body: t('La note sera retirée pour toute l’équipe.'), confirmLabel: t('Supprimer'), danger: true })) setNotes((n) => n.filter((_, j) => j !== i))
   }
   return (
     <div className="bg-white rounded-xl shadow-card p-5 space-y-4">
@@ -431,9 +552,12 @@ export function Notes({ initial }: { initial: Note[] }) {
       </div>
       <ul className="space-y-3">
         {notes.map((n, i) => (
-          <li key={i} className="rounded-lg bg-sand px-3.5 py-3">
-            <p className="text-2xs text-ink-mute mb-1">
+          <li key={i} className="group rounded-lg bg-sand px-3.5 py-3">
+            <p className="text-2xs text-ink-mute mb-1 flex items-center gap-1">
               <span className="font-semibold text-ink-secondary">{n.by}</span> · {n.at}
+              <button onClick={() => remove(i)} className="ml-auto p-1 rounded sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-white" aria-label={t('Supprimer la note')}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </p>
             <p className="text-sm text-ink-secondary">{n.text}</p>
           </li>

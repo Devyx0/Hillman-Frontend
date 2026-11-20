@@ -3,30 +3,21 @@ import { Field } from '../../components/ui'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, money, pct } from '../../lib/utils'
-import { BuilderSection, PhotoTile, ToggleChip } from '../../components/quote-shared'
+import { BuilderSection, ToggleChip } from '../../components/quote-shared'
+import { CAA_RATE } from '../../data/quote-builder'
+import { PhotoGrid } from './PhotosSection'
 import type { Builder } from './useQuoteBuilder'
 
 const DOLLAR = <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-mute">$</span>
 
 /** Price, discount, taxes, add-ons and payment schedule. */
 export function PrixSection({ b }: { b: Builder }) {
-  const schedule: [number, string][] =
-    b.payMode === 'std'
-      ? [
-          [15, 'Signature'],
-          [35, 'Début'],
-          [35, 'Milieu'],
-          [15, 'Fin'],
-        ]
-      : [
-          [30, 'Dépôt'],
-          [70, 'Fin'],
-        ]
+  const sg = b.quote.company === 'sg'
   return (
     <BuilderSection id="prix" title={t('Prix')}>
       <div className="grid md:grid-cols-[260px_1fr] gap-5">
         <div className="space-y-3">
-          <Field label={t('Prix')}>
+          <Field label={b.tiered ? t('Prix de base (sans protection)') : t('Prix')}>
             <div className="relative">
               <input type="number" value={b.price} onChange={(e) => b.setPrice(Number(e.target.value))} className="form-input pr-8 tnum" />
               {DOLLAR}
@@ -38,7 +29,27 @@ export function PrixSection({ b }: { b: Builder }) {
               {DOLLAR}
             </div>
           </Field>
+          {sg && (
+            <div className="rounded-lg border border-hairline p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" checked={b.caa} onChange={() => b.setCaa(!b.caa)} className="w-4 h-4 accent-[var(--color-primary)]" />
+                {t('Membre CAA-Québec (−{n} %)', { n: Math.round(CAA_RATE * 100) })}
+              </label>
+              {b.caa && <input className="form-input h-8 text-sm" value={b.caaNo} onChange={(e) => b.setCaaNo(e.target.value)} placeholder={t('No de membre CAA')} aria-label={t('No de membre CAA')} />}
+            </div>
+          )}
           <div className="rounded-lg bg-sand p-3 space-y-1 text-sm">
+            {b.pricing.lines.length > 1 &&
+              b.pricing.lines.map((l, i) => (
+                <div key={i} className="flex justify-between gap-2 text-ink-secondary">
+                  <span className="truncate">{t(l.label, { item: l.item ? t(l.item) : '', n: Math.round(CAA_RATE * 100) })}</span>
+                  <span className="tnum">{money(l.amount)}</span>
+                </div>
+              ))}
+            <div className="flex justify-between text-ink font-medium">
+              <span>{t('Sous-total')}</span>
+              <span className="tnum">{money(b.subtotal)}</span>
+            </div>
             <div className="flex justify-between text-ink-mute">
               <span>{t('TPS')}</span>
               <span className="tnum">{money(b.gst)}</span>
@@ -74,6 +85,7 @@ export function PrixSection({ b }: { b: Builder }) {
           </Field>
         </div>
         <div className="min-w-0 space-y-3">
+          {b.tiered && <TierOptions b={b} />}
           <Field label={t('Commentaires')}>
             <textarea value={b.comments} onChange={(e) => b.setComments(e.target.value)} rows={3} className="form-input h-auto py-2" placeholder="" />
           </Field>
@@ -112,25 +124,60 @@ export function PrixSection({ b }: { b: Builder }) {
           </div>
         </div>
       </div>
-      <p className="label-caps mt-6 mb-2">{t('Paiements')}</p>
+      <p className="label-caps mt-6 mb-2">{t('Calendrier des paiements')}</p>
       <div className="flex gap-1.5 mb-3">
         <ToggleChip active={b.payMode === 'std'} onClick={() => b.setPayMode('std')}>
-          {t('Standard')}
+          {t('Standard de la compagnie')}
         </ToggleChip>
         <ToggleChip active={b.payMode === 'autre'} onClick={() => b.setPayMode('autre')}>
-          {t('Autre')}
+          {t('Autre (30 / 70)')}
         </ToggleChip>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {schedule.map(([percent, label], i) => (
+        {b.schedule.map((step, i) => (
           <div key={i} className="rounded-lg border border-hairline p-3">
-            <p className="text-xs text-ink-mute">{t(label)}</p>
-            <p className="text-lg font-semibold tnum">{pct(percent)}</p>
-            <p className="text-xs tnum text-ink-secondary">{money((b.total * Number(percent)) / 100, false)}</p>
+            <p className="text-xs text-ink-mute">{t(step.label)}</p>
+            <p className="text-lg font-semibold tnum">{pct(step.pct)}</p>
+            <p className="text-xs tnum text-ink-secondary">{money((b.total * step.pct) / 100, false)}</p>
           </div>
         ))}
       </div>
     </BuilderSection>
+  )
+}
+
+/** Gouttières protection tiers (plan: crochet standard, crochet continu, 5000, 1800), offered as options. */
+function TierOptions({ b }: { b: Builder }) {
+  return (
+    <div>
+      <p className="label-caps mb-1.5">{t('Options de protection')}</p>
+      <div className="rounded-lg border border-hairline divide-y divide-hairline" role="radiogroup" aria-label={t('Options de protection')}>
+        {b.tiers.map((tier, i) => {
+          const on = b.tier === tier.id
+          return (
+            <div key={tier.id} className={cn('flex items-center gap-3 px-3 py-2', on && 'bg-primary-wash')}>
+              <input type="radio" name="tier" checked={on} onChange={() => b.setTier(tier.id)} className="w-4 h-4 accent-[var(--color-primary)]" aria-label={t(tier.label)} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ink">{t(tier.label)}</p>
+                <p className="text-2xs text-ink-mute truncate">{t(tier.detail)}</p>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={tier.price}
+                  disabled={tier.id === 'standard'}
+                  onChange={(e) => b.setTiers((prev) => prev.map((x, k) => (k === i ? { ...x, price: Number(e.target.value) } : x)))}
+                  className="w-24 h-8 pl-2 pr-6 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary disabled:bg-sand disabled:text-ink-mute"
+                  aria-label={t('Prix {desc}', { desc: t(tier.label) })}
+                />
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-2xs text-ink-mute">$</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <p className="text-2xs text-ink-mute mt-1">{t('Le client choisit son option dans le portail; l’option cochée ici est celle du total affiché.')}</p>
+    </div>
   )
 }
 
@@ -198,20 +245,8 @@ export function AutresSection({ b }: { b: Builder }) {
           </button>
         </div>
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="label-caps">{t('Photos')}</p>
-            <button className="text-xs text-primary-press font-semibold hover:underline" onClick={() => toast(t('Téléversement depuis le téléphone…'))}>
-              {t('Ajouter')}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            <PhotoTile label={t('Façade')} main />
-            <PhotoTile label={t('Versant sud')} email />
-            <PhotoTile label={t('Cheminée')} email />
-            <PhotoTile label={t('Entretoit')} />
-            <PhotoTile label={t('Accès conteneur')} />
-            <PhotoTile label={t('Piscine à protéger')} />
-          </div>
+          <p className="label-caps">{t('Photos')}</p>
+          <PhotoGrid b={b} />
         </div>
       </div>
     </BuilderSection>

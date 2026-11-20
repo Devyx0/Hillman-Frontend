@@ -1,10 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bot, ChevronLeft, Clock, Eye, FileText, Hand, Inbox, Mail, MapPin, MessageSquare, Paperclip, Phone, Search, Send, UserRound, X } from 'lucide-react'
-import { Composer, MessageBubble } from '../components/record'
+import { Ban, Bot, ChevronLeft, Clock, Eye, FileText, Hand, Inbox, Mail, MapPin, MessageSquare, Paperclip, Phone, Search, Send, UserRound, X } from 'lucide-react'
+import { Composer, MessageBubble, applyStopReplies, deliver, type ChatMessage } from '../components/record'
+import { ComingSoon, SkeletonRows } from '../components/states'
 import { Avatar, Badge, CHANNEL_ICONS, CompanyBadge, Empty, StatusBadge, type Icon } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
-import { APPOINTMENTS, LEADS, ME, QUOTES, THREADS, clientById, companyById, repById, type CompanyId, type Message, type Thread } from '../data/mock'
+import { useAuth } from '../auth/AuthContext'
+import { APPOINTMENTS, CLIENTS, LEADS, ME, QUOTES, THREADS, clientById, companyById, fullName, repById, type CompanyId, type Thread } from '../data/mock'
+import { SENT_LOG, type SentRecord } from '../data/quote-builder'
+import { isOptedOut } from '../data/settings'
+import { quoteById, request, useStore } from '../data/store'
 import { toast } from '../lib/toast'
 import { cn, formatHour, money } from '../lib/utils'
 import { getLang, t } from '../i18n'
@@ -29,8 +34,45 @@ const hourLabel = (h: number) => getLang() === 'en' ? formatHour(h) : `${Math.fl
 /** Threads that belong to a lead rather than a client (mockup: `j4`). */
 const THREAD_LEAD: Record<string, string> = { t2: 'l1', t3: 'l2', t5: 'l4' }
 
+/** Thread whose messages carry a delivery state (failed texts can be retried). */
+type ChatThread = Omit<Thread, 'messages'> & { messages: ChatMessage[] }
+
+/** Texting number of a thread's contact. */
+function threadPhone(thread: Thread) {
+  const client = thread.clientId ? clientById(thread.clientId) : undefined
+  const lead = LEADS.find((l) => l.name === thread.name)
+  return client?.mobile ?? client?.phone ?? lead?.phone ?? (thread.id === 't4' ? '418 681-2200' : thread.id === 't6' ? '418 655-0193' : '418 802-5531')
+}
+
+/**
+ * Demo threads for the texting edge cases: a client who replied STOP (number opted out) and a
+ * follow-up text the provider could not deliver. Text stays French; it is translated when shown.
+ */
+const STOP_CLIENT = CLIENTS[7]
+const FAILED_CLIENT = CLIENTS[11]
+const DEMO_THREADS: ChatThread[] = [
+  {
+    id: 'd-stop', clientId: STOP_CLIENT.id, name: fullName(STOP_CLIENT), company: 'toit', channel: 'sms', unread: 0, last: 'STOP', at: '7 h 05', assigned: 'jph',
+    messages: [
+      { id: 'ds1', dir: 'out', channel: 'sms', at: 'Hier · 10 h 00', by: 'Automatisation · Suivi J+6', text: "Bonjour, c'est Jean-Pierre de Toitures Hillman. Avez-vous bien reçu votre soumission? Je peux répondre à vos questions. Répondez STOP pour ne plus recevoir de textos." },
+      { id: 'ds2', dir: 'in', channel: 'sms', at: '7 h 05', text: 'STOP' },
+      { id: 'ds3', dir: 'in', channel: 'note', at: '7 h 05', text: 'Numéro désabonné des textos. Les suivis automatiques par texto sont arrêtés; les courriels continuent.', meta: 'Désabonnement' },
+    ],
+  },
+  {
+    id: 'd-fail', clientId: FAILED_CLIENT.id, name: fullName(FAILED_CLIENT), company: 'toit', channel: 'sms', unread: 0, last: "Échec de l'envoi", at: '9 h 00', assigned: 'jph',
+    messages: [
+      { id: 'df1', dir: 'out', channel: 'email', at: 'Ven. · 15 h 30', by: 'Jean-Pierre Hillman', text: 'Bonjour, voici votre soumission. Vous pouvez la consulter et la signer en ligne avec le lien ci-dessous.' },
+      { id: 'df2', dir: 'out', channel: 'sms', at: '9 h 00', by: 'Jean-Pierre Hillman', text: 'Bonjour, avez-vous eu la chance de regarder la soumission? Je peux passer vous voir cette semaine.', state: 'failed', error: 'Le fournisseur de textos a refusé le message' },
+    ],
+  },
+]
+// Replies received before the app was opened: apply STOP to the opt-out list (Settings).
+for (const th of [...THREADS, ...DEMO_THREADS]) applyStopReplies(th.messages, threadPhone(th))
+
 /** Contact card shown beside a thread (mockup: `Nx`). */
 function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => void }) {
+  useStore()
   const client = thread.clientId ? clientById(thread.clientId) : undefined
   const quote = thread.quoteNo ? QUOTES.find((q) => q.no === thread.quoteNo) : undefined
   const appt = APPOINTMENTS.find(
@@ -38,7 +80,8 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
   )
   const lead = LEADS.find((l) => l.name === thread.name)
   const leadId = THREAD_LEAD[thread.id]
-  const phone = client?.mobile ?? client?.phone ?? lead?.phone ?? (thread.id === 't4' ? '418 681-2200' : thread.id === 't6' ? '418 655-0193' : '418 802-5531')
+  const phone = threadPhone(thread)
+  const optedOut = isOptedOut(phone)
   const email = client?.email ?? lead?.email ?? (thread.id === 't4' ? 'gestion@laurentia.ca' : thread.id === 't6' ? 'louis.bergeron@outlook.com' : undefined)
   const address = client ? `${client.no}, ${client.street}, ${client.city}` : lead ? lead.city : thread.id === 't4' ? '2600, boul. Laurier, Sainte-Foy' : thread.id === 't6' ? 'Sillery' : undefined
   const recordHref = client ? `/clients/${client.id}` : leadId ? `/leads/${leadId}` : undefined
@@ -59,6 +102,12 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
           <Phone className="w-4 h-4 text-ink-mute shrink-0" />
           {phone}
         </p>
+        {optedOut && (
+          <Badge tone="critical">
+            <Ban className="w-3 h-3" />
+            {t('Désabonné des textos')}
+          </Badge>
+        )}
         {email && (
           <p className="flex items-center gap-2 min-w-0">
             <Mail className="w-4 h-4 text-ink-mute shrink-0" />
@@ -163,6 +212,34 @@ const SENT_EMAILS: SentEmail[] = [
   { id: 'e12', type: 'Soumission', date: 'Sam. 10 h 18', day: 'week', by: 'Benoit Tondreau', quoteNo: 'G64300', client: 'Steve Dubé', email: 'steve.dube@videotron.ca', company: 'sg', subject: 'Soumission nettoyage G64300', body: `Bonjour, voici la soumission pour le nettoyage avant l'hiver.\n\nBenoit Tondreau\nSignature Gouttières`, attach: 'Soumission G64300.pdf' },
 ]
 
+/**
+ * A send logged by the quote builder (`logSent`), shown with the same layout as the mock rows.
+ * Built while rendering, so its labels follow the current language.
+ */
+function fromSentLog(r: SentRecord): SentEmail {
+  const q = quoteById(r.quoteId)
+  const c = q ? clientById(q.clientId) : undefined
+  const at = new Date(r.at)
+  const today = at.toDateString() === new Date().toDateString()
+  const time = formatHour(at.getHours() + at.getMinutes() / 60)
+  const sms = r.channels.includes('sms')
+  return {
+    id: r.id,
+    type: r.kind === 'Relance' ? 'Rappel' : 'Soumission',
+    date: today ? t("Aujourd'hui {time}", { time }) : at.toLocaleDateString(getLang() === 'en' ? 'en-CA' : 'fr-CA', { day: 'numeric', month: 'short' }) + ' ' + time,
+    day: today ? 'today' : 'week',
+    by: r.by,
+    quoteNo: r.quoteNo,
+    quoteId: r.quoteId,
+    client: c ? fullName(c) : r.to,
+    email: r.to,
+    company: r.company,
+    subject: r.subject,
+    body: (r.kind === 'Relance' ? t('Relance de la soumission {no} envoyée depuis la soumission.', { no: r.quoteNo }) : t('Soumission {no} envoyée depuis la soumission, avec le lien pour la consulter et la signer en ligne.', { no: r.quoteNo })) + (sms ? '\n\n' + t('Aussi envoyée par texto.') : ''),
+    attach: r.channels.includes('email') ? t('Soumission {no}.pdf', { no: r.quoteNo }) : undefined,
+  }
+}
+
 /** Mockup: `N4`. */
 function SentList({ rows, activeId, onOpen }: { rows: SentEmail[]; activeId?: string; onOpen: (id: string) => void }) {
   if (!rows.length)
@@ -257,6 +334,7 @@ function SentEmailView({ e, onBack }: { e: SentEmail; onBack: () => void }) {
 /* ── Page ──────────────────────────────────────────────────────────────── */
 
 const hasAI = (t: Thread) => t.aiHandled || t.messages.some((m) => m.channel === 'ai')
+const hasFailed = (t: ChatThread) => t.messages.some((m) => m.state === 'failed')
 
 const VIEW_TABS: [view: 'threads' | 'sent', label: string, icon: Icon][] = [
   ['threads', 'Conversations', MessageSquare],
@@ -264,10 +342,20 @@ const VIEW_TABS: [view: 'threads' | 'sent', label: string, icon: Icon][] = [
 ]
 
 export default function Conversations() {
+  useStore() // opt-out list
   const { scope } = useApp()
+  const { can, user } = useAuth()
   const [filter, setFilter] = useState<ThreadFilter>('all')
   const [query, setQuery] = useState('')
-  const [threads, setThreads] = useState<Thread[]>(() => THREADS.filter((t) => t.id !== 't7'))
+  const [threads, setThreads] = useState<ChatThread[]>(() => [...THREADS.filter((t) => t.id !== 't7'), ...DEMO_THREADS])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let live = true
+    request(null, { ms: 350 }).then(() => live && setLoading(false))
+    return () => {
+      live = false
+    }
+  }, [])
   const [activeId, setActiveId] = useState('t1')
   const [pane, setPane] = useState<'list' | 'thread'>('list')
   const [aiOn, setAiOn] = useState<Record<string, boolean>>({ t2: true, t3: true })
@@ -278,25 +366,24 @@ export default function Conversations() {
   const [sentDay, setSentDay] = useState('all')
   const [sentId, setSentId] = useState('e7')
 
-  const sentRows = useMemo(
-    () =>
-      SENT_EMAILS.filter((e) => inScope(scope, e.company))
-        .filter((e) => sentType === 'all' || e.type === sentType)
-        .filter((e) => sentBy === 'all' || e.by === sentBy)
-        .filter((e) => sentDay === 'all' || e.day === sentDay)
-        .filter((e) => !query || (e.client + e.subject + e.quoteNo + e.email).toLowerCase().includes(query.toLowerCase())),
-    [scope, sentType, sentBy, sentDay, query],
-  )
-  const senders = useMemo(() => [...new Set(SENT_EMAILS.filter((e) => inScope(scope, e.company)).map((e) => e.by))], [scope])
+  // Sends logged by the quote builder (newest first), then the mock history.
+  const allSent: SentEmail[] = [...SENT_LOG.map(fromSentLog), ...SENT_EMAILS]
+  const sentRows = allSent
+    .filter((e) => inScope(scope, e.company))
+    .filter((e) => sentType === 'all' || e.type === sentType)
+    .filter((e) => sentBy === 'all' || e.by === sentBy)
+    .filter((e) => sentDay === 'all' || e.day === sentDay)
+    .filter((e) => !query || (e.client + e.subject + e.quoteNo + e.email).toLowerCase().includes(query.toLowerCase()))
+  const senders = [...new Set(allSent.filter((e) => inScope(scope, e.company)).map((e) => e.by))]
   const sent = sentRows.find((e) => e.id === sentId) ?? sentRows[0]
 
   const visible = useMemo(
     () =>
       threads
-        .filter((t) => inScope(scope, t.company))
-        .filter((t) => (filter === 'unread' ? t.unread > 0 : filter === 'ai' ? hasAI(t) : filter === 'mine' ? t.assigned === ME.id : filter === 'sms' || filter === 'email' || filter === 'call' ? t.channel === filter : true))
+        .filter((t) => inScope(scope, t.company) && (can('quotes.viewAll') || !user || t.assigned === user.repId))
+        .filter((t) => (filter === 'unread' ? t.unread > 0 : filter === 'ai' ? hasAI(t) : filter === 'mine' ? t.assigned === (user?.repId ?? ME.id) : filter === 'sms' || filter === 'email' || filter === 'call' ? t.channel === filter : true))
         .filter((t) => !query || (t.name + t.last).toLowerCase().includes(query.toLowerCase())),
-    [threads, scope, filter, query],
+    [threads, scope, filter, query, can, user],
   )
   const active = threads.find((t) => t.id === activeId) ?? visible[0]
 
@@ -305,7 +392,13 @@ export default function Conversations() {
     setPane('thread')
     setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, unread: 0 } : t)))
   }
-  const appendMessage = (m: Message) => setThreads((prev) => prev.map((t) => (t.id === active.id ? { ...t, messages: [...t.messages, m], last: m.text, at: "À l'instant" } : t)))
+  const patchMessage = (threadId: string) => (id: string, p: Partial<ChatMessage>) =>
+    setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, messages: t.messages.map((m) => (m.id === id ? { ...m, ...p } : m)) } : t)))
+  const appendMessage = (m: ChatMessage) => {
+    setThreads((prev) => prev.map((t) => (t.id === active.id ? { ...t, messages: [...t.messages, m], last: m.text, at: "À l'instant" } : t)))
+    deliver(m, threadPhone(active), patchMessage(active.id))
+  }
+  const retry = (m: ChatMessage) => deliver(m, threadPhone(active), patchMessage(active.id))
   const aiActive = active ? !!aiOn[active.id] : false
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -371,7 +464,9 @@ export default function Conversations() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto">
-          {view === 'sent' ? (
+          {loading ? (
+            <SkeletonRows rows={7} />
+          ) : view === 'sent' ? (
             <SentList
               rows={sentRows}
               activeId={sent?.id}
@@ -404,7 +499,7 @@ export default function Conversations() {
                         <span className="text-2xs text-ink-mute shrink-0">{t(th.at)}</span>
                       </div>
                       <p className={cn('text-xs truncate mt-0.5', th.unread ? 'text-ink' : 'text-ink-mute')}>{t(th.last)}</p>
-                      {(scope === 'all' || ai || th.unread > 0) && (
+                      {(scope === 'all' || ai || th.unread > 0 || hasFailed(th)) && (
                         <div className="flex items-center gap-1.5 mt-1.5">
                           {scope === 'all' && <CompanyBadge id={th.company} />}
                           {ai && (
@@ -413,6 +508,7 @@ export default function Conversations() {
                               {t('IA')}
                             </span>
                           )}
+                          {hasFailed(th) && <span className="badge bg-tone-critical-soft text-tone-critical-ink !text-2xs !px-1.5">{t('Échec')}</span>}
                           {th.unread > 0 && <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-2xs font-bold flex items-center justify-center tnum">{th.unread}</span>}
                         </div>
                       )}
@@ -450,19 +546,22 @@ export default function Conversations() {
             <button
               onClick={() => {
                 setAiOn((prev) => ({ ...prev, [active.id]: !prev[active.id] }))
-                toast(aiActive ? t('Vous avez pris le relais') : t("Conversation confiée à l'agent IA"))
+                toast(aiActive ? t('Vous avez pris le relais') : t("Conversation confiée à l'agent IA (démo · janvier 2027)"))
               }}
               className={cn('btn btn-xs', aiActive ? 'bg-lavender text-ink hover:bg-lavender/70' : 'btn-quiet')}
+              title={t("L'agent IA arrive en janvier 2027")}
             >
               {aiActive ? (
                 <>
                   <Hand className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">{t('Prendre le relais')}</span>
+                  <ComingSoon className="hidden sm:inline-flex" />
                 </>
               ) : (
                 <>
                   <Bot className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">{t("Confier à l'agent IA")}</span>
+                  <ComingSoon className="hidden sm:inline-flex" />
                 </>
               )}
             </button>
@@ -477,14 +576,20 @@ export default function Conversations() {
             <div className="bg-lavender-soft border-b border-lavender px-5 py-2 text-xs text-ink-secondary flex items-center gap-2">
               <Bot className="w-4 h-4 text-ink" />
               <span className="font-semibold text-ink">{t("L'agent IA répond à ce client")}</span>
+              <ComingSoon />
             </div>
           )}
           <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 md:px-6 py-5 space-y-4">
+            {active.messages.length === 0 && (
+              <Empty icon={MessageSquare} title={t('Aucun message')}>
+                {t('Écrivez le premier message ci-dessous.')}
+              </Empty>
+            )}
             {active.messages.map((m) => (
-              <MessageBubble key={m.id} m={m} thread={active} />
+              <MessageBubble key={m.id} m={m} thread={active} onRetry={retry} />
             ))}
           </div>
-          <Composer key={active.id} thread={active} onSend={appendMessage} />
+          <Composer key={active.id} thread={active} phone={threadPhone(active)} onSend={appendMessage} />
         </div>
       )}
 

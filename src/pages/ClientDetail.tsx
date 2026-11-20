@@ -1,38 +1,212 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CalendarDays, Download, Eye, FilePenLine, FileText, House, Inbox, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag } from 'lucide-react'
+import { Archive, Ban, CalendarDays, Download, Eye, FilePenLine, FileText, History, House, Inbox, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag, UserX } from 'lucide-react'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
-import { Badge, CompanyBadge, Page, RepName, StatusBadge, Tabs } from '../components/ui'
+import { ErrorState, SkeletonRows } from '../components/states'
+import { Badge, CompanyBadge, Drawer, Empty, Page, RepName, StatusBadge, Tabs } from '../components/ui'
 import { useApp } from '../context/AppContext'
-import { CLIENTS, QUOTES, REPS, THREADS, clientById, companyById, fullName, repById, type Quote, type Thread } from '../data/mock'
+import { LOGICIA_TONE, logiciaForClient, type LogiciaQuote } from '../data/logicia'
+import { QUOTES, REPS, THREADS, clientById, companyById, fullName, repById, type Client, type Quote, type Thread } from '../data/mock'
+import { isOptedOut } from '../data/settings'
+import { request, useStore } from '../data/store'
+import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
-import { money } from '../lib/utils'
-import { t } from '../i18n'
+import { GST, QST, money } from '../lib/utils'
+import { locale, t } from '../i18n'
 
 /** Statuses that count as an open quote (mockup: `x4`). */
 const OPEN_STATUSES = ['En soumission', 'À rappeler', 'Rappel courriel envoyé', 'Client va nous rappeler']
 
-type TabId = 'conversation' | 'activite' | 'soumissions' | 'notes' | 'fichiers'
+type TabId = 'conversation' | 'activite' | 'soumissions' | 'logicia' | 'notes' | 'fichiers'
+
+const longDate = (iso: string) => new Date(iso + 'T12:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** Archived Logicia PDF, shown as a read-only page preview. */
+function LogiciaPdf({ q, client, onClose }: { q: LogiciaQuote | null; client: Client; onClose: () => void }) {
+  const download = (file: string) => toast(t('Téléchargement de {file}', { file }))
+  return (
+    <Drawer open={!!q} onClose={onClose} title={q ? q.pdf : ''} width="max-w-2xl">
+      {q && (
+        <div className="p-4 md:p-6 bg-sand min-h-full space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="neutral">
+              <Archive className="w-3 h-3" />
+              {t('Archive Logicia · lecture seule')}
+            </Badge>
+            <button onClick={() => download(q.pdf)} className="btn btn-xs btn-secondary ml-auto">
+              <Download className="w-3.5 h-3.5" />
+              {t('Télécharger')}
+            </button>
+          </div>
+          <article className="bg-white shadow-card rounded-sm aspect-[8.5/11] p-6 md:p-10 text-ink flex flex-col gap-6 text-xs md:text-sm">
+            <header className="flex items-start justify-between gap-4 border-b border-hairline pb-4">
+              <div>
+                <p className="text-base md:text-lg font-semibold">{companyById(q.company).name}</p>
+                <p className="text-ink-mute">
+                  {t('RBQ')} {companyById(q.company).rbq} · {companyById(q.company).phone}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="label-caps">{t('Soumission')}</p>
+                <p className="font-semibold tnum">{q.no}</p>
+                <p className="text-ink-mute">{longDate(q.date)}</p>
+              </div>
+            </header>
+            <section>
+              <p className="label-caps mb-1">{t('Client')}</p>
+              <p className="font-semibold">{fullName(client)}</p>
+              <p className="text-ink-mute">
+                {client.no}, {client.street}, {client.city} {client.postal}
+              </p>
+            </section>
+            <section className="flex-1">
+              <p className="label-caps mb-2">{t('Description des travaux')}</p>
+              <p>{t(q.workType)}</p>
+              <div className="mt-3 space-y-1.5" aria-hidden="true">
+                {[92, 80, 86, 64].map((w, i) => (
+                  <span key={i} className="block h-2 rounded bg-sand" style={{ width: `${w}%` }} />
+                ))}
+              </div>
+            </section>
+            <section className="ml-auto w-full max-w-[16rem] space-y-1 tnum">
+              {(
+                [
+                  [t('Sous-total'), money(q.amount)],
+                  [t('TPS'), money(q.amount * GST)],
+                  [t('TVQ'), money(q.amount * QST)],
+                ] as const
+              ).map(([l, v]) => (
+                <p key={l} className="flex justify-between text-ink-mute">
+                  <span>{l}</span>
+                  <span>{v}</span>
+                </p>
+              ))}
+              <p className="flex justify-between font-semibold border-t border-hairline pt-1">
+                <span>{t('Total')}</span>
+                <span>{money(q.amount * (1 + GST + QST))}</span>
+              </p>
+            </section>
+            <footer className="text-2xs text-ink-faint border-t border-hairline pt-3">{t('Préparée par {name} dans Logicia · document importé dans Hillman Centrale', { name: q.by })}</footer>
+          </article>
+        </div>
+      )}
+    </Drawer>
+  )
+}
+
+/** Read-only past quotes imported from Logicia (the previous software). */
+function LogiciaHistory({ client }: { client: Client }) {
+  const [state, setState] = useState<{ status: 'loading' | 'error' | 'ready'; rows: LogiciaQuote[] }>({ status: 'loading', rows: [] })
+  const [attempt, setAttempt] = useState(0)
+  const [preview, setPreview] = useState<LogiciaQuote | null>(null)
+  useEffect(() => {
+    let live = true
+    request(() => logiciaForClient(client.id), { ms: 450 }).then(
+      (rows) => live && setState({ status: 'ready', rows }),
+      () => live && setState({ status: 'error', rows: [] }),
+    )
+    return () => {
+      live = false
+    }
+  }, [client.id, attempt])
+
+  const download = (file: string) => toast(t('Téléchargement de {file}', { file }))
+  return (
+    <section className="bg-white rounded-xl shadow-card overflow-hidden">
+      <header className="px-5 py-3.5 border-b border-hairline flex items-center gap-2">
+        <History className="w-4 h-4 text-ink-mute" />
+        <h3 className="text-sm font-semibold text-ink">{t('Historique Logicia')}</h3>
+        <span className="text-xs text-ink-mute ml-auto">{t('Lecture seule · avant Hillman Centrale')}</span>
+      </header>
+      {state.status === 'loading' && <SkeletonRows rows={3} />}
+      {state.status === 'error' && (
+        <ErrorState
+          onRetry={() => {
+            setState({ status: 'loading', rows: [] })
+            setAttempt((n) => n + 1)
+          }}
+        />
+      )}
+      {state.status === 'ready' && state.rows.length === 0 && (
+        <Empty icon={Archive} title={t('Aucune soumission dans Logicia')}>
+          {t("Ce client n'a pas d'historique dans l'ancien logiciel.")}
+        </Empty>
+      )}
+      {state.status === 'ready' && state.rows.length > 0 && (
+        <ul className="divide-y divide-hairline">
+          {state.rows.map((q) => (
+            <li key={q.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-ink tnum">{q.no}</span>
+                  <CompanyBadge id={q.company} />
+                  <Badge tone={LOGICIA_TONE[q.status]} dot>
+                    {t(q.status)}
+                  </Badge>
+                </div>
+                <p className="text-xs text-ink-mute mt-0.5 truncate">
+                  {longDate(q.date)} · {t(q.workType)} · {q.by}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 sm:justify-end">
+                <span className="text-sm font-semibold tnum text-ink mr-auto sm:mr-2">{money(q.amount, false)}</span>
+                <button onClick={() => setPreview(q)} className="btn btn-xs btn-secondary">
+                  <Eye className="w-3.5 h-3.5" />
+                  {t('Voir le PDF')}
+                </button>
+                <button onClick={() => download(q.pdf)} className="btn btn-xs btn-quiet" aria-label={t('Télécharger {file}', { file: q.pdf })}>
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <LogiciaPdf q={preview} client={client} onClose={() => setPreview(null)} />
+    </section>
+  )
+}
 
 export default function ClientDetail() {
-  const { id = 'c66700' } = useParams()
+  useStore()
+  const { id = '' } = useParams()
+  const client = clientById(id)
+  if (!client)
+    return (
+      <Page>
+        <Empty icon={UserX} title={t('Client introuvable')}>
+          {t('Cette fiche a peut-être été fusionnée ou supprimée.')}
+        </Empty>
+        <div className="flex justify-center">
+          <Link to="/clients" className="btn btn-sm btn-secondary">
+            {t('Retour aux clients')}
+          </Link>
+        </div>
+      </Page>
+    )
+  return <ClientRecord key={client.id} client={client} />
+}
+
+function ClientRecord({ client }: { client: Client }) {
+  const version = useStore()
   const navigate = useNavigate()
   const { scope } = useApp()
-  const client = clientById(id) ?? CLIENTS[0]
   const isDemo = client.id === 'c66700'
   const [tab, setTab] = useState<TabId>('conversation')
+  const textPhone = client.mobile ?? client.phone
+  const optedOut = isOptedOut(client.mobile) || isOptedOut(client.phone)
 
   const quotes = useMemo<Quote[]>(
     () =>
       isDemo
         ? [
-            QUOTES[0],
+            ...QUOTES.filter((q) => q.clientId === client.id),
             { ...QUOTES[0], id: 'qx1', no: 'G58114', company: 'sg', repId: 'bto', status: 'Payé', date: '2025-08-28', amount: 200, workType: 'Nettoyage de gouttières', views: 0 },
             { ...QUOTES[0], id: 'qx2', no: 'G31877', company: 'sg', repId: 'plc', status: 'Payé', date: '2021-04-30', amount: 2500, workType: 'Gouttières · T-Rex M-5200', views: 0 },
           ]
         : QUOTES.filter((q) => q.clientId === client.id),
-    [client.id, isDemo],
+    [client.id, isDemo, version], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const companies = [...new Set(quotes.map((q) => q.company))]
   const open = quotes.filter((q) => OPEN_STATUSES.includes(q.status))
@@ -101,6 +275,12 @@ export default function ClientDetail() {
               <CompanyBadge key={c} id={c} />
             ))}
             <span className="text-xs text-ink-mute">{t(client.type)}</span>
+            {optedOut && (
+              <Badge tone="critical">
+                <Ban className="w-3 h-3" />
+                {t('Désabonné des textos')}
+              </Badge>
+            )}
           </>
         }
         actions={
@@ -109,17 +289,18 @@ export default function ClientDetail() {
               <Phone className="w-4 h-4" />
               {t('Appeler')}
             </button>
-            <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
+            {optedOut ? (
+              <button disabled className="btn btn-sm btn-secondary" title={t('Ce client a répondu STOP : aucun texto ne peut lui être envoyé.')}>
+                <Ban className="w-4 h-4" />
+                {t('Texto')}
+              </button>
+            ) : (
+              <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
+            )}
             <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
-            <button
-              onClick={() => {
-                toast(t('Nouvelle soumission · coordonnées copiées'))
-                navigate('/soumissions/q64320')
-              }}
-              className="btn btn-sm btn-primary"
-            >
+            <button onClick={() => openCreate('quote', { clientId: client.id, company: scope !== 'all' ? scope : undefined })} className="btn btn-sm btn-primary">
               <Plus className="w-4 h-4" />
-              {t('Nouvelle soumission')}
+              {t('Créer une soumission')}
             </button>
           </>
         }
@@ -165,7 +346,11 @@ export default function ClientDetail() {
                 rows: [
                   { icon: Inbox, label: t('Source'), value: t(client.source) },
                   { icon: House, label: t('Propriété'), value: isDemo ? t('Maison 1998 · 2 étages') : t(client.type) },
-                  { icon: ShieldCheck, label: t('Consentement texto'), value: client.consentSms ? t('Oui') : t('Non') },
+                  {
+                    icon: ShieldCheck,
+                    label: t('Consentement texto'),
+                    value: optedOut ? <span className="font-semibold text-tone-critical-ink">{t('Désabonné des textos (STOP)')}</span> : client.consentSms ? t('Oui') : t('Non'),
+                  },
                   {
                     icon: Tag,
                     label: t('Étiquettes'),
@@ -193,13 +378,28 @@ export default function ClientDetail() {
                 { value: 'conversation', label: t('Conversation'), icon: MessageSquare },
                 { value: 'activite', label: t('Activité') },
                 { value: 'soumissions', label: t('Soumissions'), count: quotes.length },
+                { value: 'logicia', label: t('Historique Logicia'), icon: History },
                 { value: 'notes', label: t('Notes') },
                 { value: 'fichiers', label: t('Fichiers') },
               ]}
             />
-            {tab === 'conversation' && <ThreadPanel thread={thread} />}
+            {tab === 'conversation' && <ThreadPanel thread={thread} phone={textPhone} />}
+            {tab === 'logicia' && <LogiciaHistory client={client} />}
             {tab === 'activite' && <Timeline items={activity} />}
-            {tab === 'soumissions' && (
+            {tab === 'soumissions' && quotes.length === 0 && (
+              <div className="bg-white rounded-xl shadow-card">
+                <Empty icon={FileText} title={t('Aucune soumission')}>
+                  {t('Créez la première soumission de ce client.')}
+                </Empty>
+                <div className="flex justify-center pb-6 -mt-4">
+                  <button onClick={() => openCreate('quote', { clientId: client.id, company: scope !== 'all' ? scope : undefined })} className="btn btn-sm btn-primary">
+                    <Plus className="w-4 h-4" />
+                    {t('Créer une soumission')}
+                  </button>
+                </div>
+              </div>
+            )}
+            {tab === 'soumissions' && quotes.length > 0 && (
               <div className="bg-white rounded-xl shadow-card overflow-x-auto">
                 <table className="w-full min-w-[560px]">
                   <thead className="border-b border-hairline">
@@ -230,7 +430,12 @@ export default function ClientDetail() {
               </div>
             )}
             {tab === 'notes' && <Notes initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
-            {tab === 'fichiers' && (
+            {tab === 'fichiers' && quotes.length === 0 && (
+              <div className="bg-white rounded-xl shadow-card">
+                <Empty icon={FileText} title={t('Aucun fichier')} />
+              </div>
+            )}
+            {tab === 'fichiers' && quotes.length > 0 && (
               <ul className="bg-white rounded-xl shadow-card divide-y divide-hairline">
                 {quotes.slice(0, 4).map((q) => (
                   <li key={q.id} className="flex items-center gap-3 px-5 py-3">
@@ -262,7 +467,11 @@ export default function ClientDetail() {
                       </p>
                     </div>
                   </div>
-                  <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.when }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                  {optedOut ? (
+                    <MessageButton kind="email" ctx={ctx} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                  ) : (
+                    <MessageButton kind="reminder" ctx={{ ...ctx, date: nextStep.when }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                  )}
                 </div>
               ) : (
                 <button onClick={() => navigate(`/agenda?nouveau=${open[0]?.id ?? 'q64320'}`)} className="btn btn-sm btn-secondary w-full">

@@ -31,6 +31,8 @@ const shared: Record<string, string> = {
   Fiche: 'Record',
   'Courriels envoyés': 'Sent emails',
   'Équipement roulant': 'Truck signage',
+  // Product name, not translated
+  Centrale: 'Centrale',
 
   // Context-specific wording (see `tx`)
   'today::Soumissions ouvertes': 'Opened quotes',

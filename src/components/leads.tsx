@@ -12,6 +12,12 @@ export function LeadStageBadge({ lead }: { lead: Lead }) {
         {t('Non qualifié')}
       </Badge>
     )
+  if (stage === 4)
+    return (
+      <Badge tone="good" dot>
+        {t('Converti')}
+      </Badge>
+    )
   return (
     <Badge tone={stage === 3 ? 'good' : stage === 0 ? 'warn' : 'info'} dot>
       {t(LEAD_STAGES[stage])}

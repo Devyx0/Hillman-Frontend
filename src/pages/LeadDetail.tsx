@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { Bot, CalendarCheck, CalendarClock, Check, FilePenLine, Flame, House, Inbox, Mail, MapPin, MessageSquare, Phone, Tag, UserRound, Wallet, Wrench } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Bot, CalendarCheck, CalendarClock, CalendarPlus, Check, FilePenLine, FileText, Flame, House, Inbox, Mail, MapPin, MessageSquare, Phone, RotateCcw, SearchX, Tag, UserRound, Wallet, Wrench } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { LeadStageBadge } from '../components/leads'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
-import { CompanyBadge, Drawer, Page, RepAvatar, Tabs } from '../components/ui'
-import { ALL_LEADS, LEAD_PROFILES, LEAD_STAGES, channelStyle, leadStage, threadForLead } from '../data/leads'
-import { REPS, companyById, repById, type Lead } from '../data/mock'
+import { ComingSoon, confirmAction } from '../components/states'
+import { CompanyBadge, Drawer, Empty, Page, RepAvatar, StatusBadge, Tabs } from '../components/ui'
+import { DEFAULT_LEAD_REP, LEAD_LOST, LEAD_PROFILES, LEAD_STAGES, LEAD_STATUS, channelStyle, leadById, leadStage, threadForLead } from '../data/leads'
+import { REPS, clientById, companyById, fullName, repById } from '../data/mock'
+import { addAppointment, quoteById, updateLead, useStore } from '../data/store'
 import { t } from '../i18n'
+import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 
@@ -18,41 +22,101 @@ const SLOTS = [
   { day: 'Ven. 23 oct.', times: ['8 h 30', '10 h 00', '13 h 00'] },
 ]
 
-/** Stage index → lead status (mockup: `R3`). */
-const STAGE_STATUS = ['Nouveau', 'À contacter', 'Qualifié par IA', 'RDV réservé']
+/** Slot day label → agenda day index (Mon 19 oct. = 1) and "13 h 30" → 13.5. */
+const SLOT_DAY: Record<string, number> = { 'Mer. 21 oct.': 3, 'Jeu. 22 oct.': 4, 'Ven. 23 oct.': 5 }
+const slotHour = (time: string) => {
+  const [h, m] = time.split(' h ').map(Number)
+  return h + (m || 0) / 60
+}
 
 type Tab = 'conversation' | 'activite' | 'notes'
 
 /** Lead record (mockup: `z3`). */
 export default function LeadDetail() {
-  const { id = 'l1' } = useParams()
+  useStore()
+  const { id = '' } = useParams()
   const navigate = useNavigate()
-  const source = ALL_LEADS.find((l) => l.id === id) ?? ALL_LEADS[0]
-  const [lead, setLead] = useState<Lead>(source)
+  const { can } = useAuth()
   const [tab, setTab] = useState<Tab>('conversation')
   const [booking, setBooking] = useState(false)
   const [slot, setSlot] = useState<string | null>(null)
   const [changingRep, setChangingRep] = useState(false)
-  if (lead.id !== source.id) setLead(source)
+  const found = leadById(id)
+  // Rebuild the synthesized conversation only when the lead's identity or status changes.
+  const thread = useMemo(() => (found ? threadForLead(found) : null), [found, found?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!found || !thread)
+    return (
+      <Page>
+        <Empty icon={SearchX} title={t('Lead introuvable')}>
+          {t('Ce lead a peut-être été supprimé ou fusionné.')}
+        </Empty>
+        <div className="flex justify-center">
+          <Link to="/leads" className="btn btn-sm btn-secondary">
+            {t('Retour aux leads')}
+          </Link>
+        </div>
+      </Page>
+    )
+  const lead = found
 
   const profile = LEAD_PROFILES[lead.id]
-  const rep = repById(lead.repId ?? 'jph')!
+  const rep = repById(lead.repId ?? DEFAULT_LEAD_REP[lead.company])!
   const company = companyById(lead.company)
-  const thread = useMemo(() => threadForLead(lead), [lead])
   const stage = leadStage(lead)
   const channel = channelStyle(lead.channel)
+  const quote = quoteById(lead.quoteId)
+  const client = clientById(lead.clientId)
   const ctx: MessageCtx = { name: lead.name, first: lead.name.split(' ')[0], company: company.name, rep: rep.first }
+  const aiLead = !!profile // seeded mockup leads carry the AI-agent demo
 
   const activity: TimelineItem[] = [
     { icon: channel.icon, title: t('Demande reçue · {channel}', { channel: t(lead.channel) }), at: t(lead.ago) },
-    { icon: Bot, title: t("Réponse de l'agent IA"), at: t(lead.ago), meta: t('en 38 s') },
+    ...(aiLead
+      ? [
+          {
+            icon: Bot,
+            title: (
+              <>
+                {t("Réponse de l'agent IA")} <ComingSoon />
+              </>
+            ),
+            at: t(lead.ago),
+            meta: t('en 38 s'),
+          },
+        ]
+      : []),
     ...(lead.booked ? [{ icon: CalendarCheck, title: t('Estimation réservée'), at: t(lead.ago), meta: `${t(lead.booked)} · ${rep.first}`, tone: 'primary' as const }] : []),
     { icon: UserRound, title: t('Assigné à {name}', { name: rep.name }), at: t(lead.ago) },
+    ...(quote ? [{ icon: FilePenLine, title: t('Converti en soumission {no}', { no: quote.no }), at: t("Aujourd'hui"), tone: 'primary' as const }] : []),
   ]
 
+  const setStatus = (status: string, message?: string) => {
+    updateLead(lead.id, { status })
+    toast(message ?? t('Étape : {stage}', { stage: t(status) }))
+  }
+
+  /** Converts the lead: the quote flow finds or creates the client (duplicate check) and links the quote. */
   const createQuote = () => {
-    toast(t('Soumission créée à partir du lead'))
-    navigate('/soumissions/q64320')
+    if (quote) {
+      navigate(`/soumissions/${quote.id}`)
+      return
+    }
+    openCreate('quote', { leadId: lead.id, company: lead.company, clientId: lead.clientId, name: lead.name, phone: lead.phone, email: lead.email, city: lead.city, source: lead.channel })
+  }
+
+  /** "Ajouter" a visit: with a quote, the agenda opens prefilled from it (same as the quote screen). */
+  const addVisit = () => {
+    if (quote) navigate(`/agenda?nouveau=${quote.id}`)
+    else setBooking(true)
+  }
+
+  const book = (key: string) => {
+    const [day, time] = key.split(' · ')
+    const start = slotHour(time)
+    addAppointment({ repId: rep.id, day: SLOT_DAY[day] ?? 3, start, end: start + 1, title: profile?.work ?? 'Estimation', city: lead.city, type: 'Estimation', clientId: lead.clientId, quoteNo: quote?.no })
+    updateLead(lead.id, { status: 'RDV réservé', booked: key })
+    toast(`${t('Estimation réservée')} · ${t(key)}`)
   }
 
   return (
@@ -77,7 +141,7 @@ export default function LeadDetail() {
             <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
             <button onClick={createQuote} className="btn btn-sm btn-primary">
               <FilePenLine className="w-4 h-4" />
-              {t('Créer la soumission')}
+              {quote ? t('Ouvrir {no}', { no: quote.no }) : t('Créer la soumission')}
             </button>
           </>
         }
@@ -93,11 +157,11 @@ export default function LeadDetail() {
               return
             }
             if (i === 3 && !lead.booked) {
-              setBooking(true)
+              addVisit()
               return
             }
-            setLead((l) => ({ ...l, status: STAGE_STATUS[i] }))
-            toast(t('Étape : {stage}', { stage: t(LEAD_STAGES[i]) }))
+            if (stage === 4) return // converted: the quote now carries the status
+            setStatus(LEAD_STATUS[i], t('Étape : {stage}', { stage: t(LEAD_STAGES[i]) }))
           }}
         />
       )}
@@ -130,7 +194,7 @@ export default function LeadDetail() {
               {
                 title: t('Demande'),
                 rows: [
-                  { icon: Wrench, label: t('Travaux'), value: profile ? t(profile.work) : '—' },
+                  { icon: Wrench, label: t('Travaux'), value: profile ? t(profile.work) : lead.message || '—' },
                   { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
                   { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
                   { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
@@ -181,13 +245,33 @@ export default function LeadDetail() {
                 { value: 'notes', label: t('Notes') },
               ]}
             />
-            {tab === 'conversation' && <ThreadPanel thread={thread} />}
+            {tab === 'conversation' && <ThreadPanel thread={thread} phone={lead.phone} />}
             {tab === 'activite' && <Timeline items={activity} />}
             {tab === 'notes' && <Notes initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
           </>
         }
         right={
           <>
+            {quote && (
+              <SideCard title={t('Soumission')}>
+                <Link to={`/soumissions/${quote.id}`} className="block group">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold group-hover:text-primary-press inline-flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-ink-mute" />
+                      {quote.no}
+                    </p>
+                    <StatusBadge status={quote.status} />
+                  </div>
+                  <p className="text-xs text-ink-mute mt-0.5 truncate">{t(quote.workType)}</p>
+                </Link>
+                {client && (
+                  <Link to={`/clients/${client.id}`} className="mt-2 text-xs font-semibold text-primary-press inline-flex items-center gap-1">
+                    <UserRound className="w-3.5 h-3.5" />
+                    {t('Fiche client : {name}', { name: fullName(client) })}
+                  </Link>
+                )}
+              </SideCard>
+            )}
             <SideCard title={t('Prochaine étape')}>
               {lead.booked ? (
                 <div className="space-y-3">
@@ -201,23 +285,54 @@ export default function LeadDetail() {
                     </div>
                   </div>
                   <MessageButton kind="reminder" ctx={{ ...ctx, date: t(lead.booked) }} label={t('Envoyer le rappel')} variant="secondary" className="w-full" />
+                  {quote && (
+                    <button onClick={addVisit} className="btn btn-sm btn-ghost w-full">
+                      <CalendarPlus className="w-4 h-4" />
+                      {t('Ajouter une visite')}
+                    </button>
+                  )}
                 </div>
+              ) : stage < 0 ? (
+                <p className="text-sm text-ink-mute">{t('Lead non qualifié : aucune action prévue.')}</p>
               ) : (
-                <button onClick={() => setBooking(true)} className="btn btn-sm btn-primary w-full">
-                  <CalendarCheck className="w-4 h-4" />
-                  {t('Réserver une estimation')}
-                </button>
+                <div className="space-y-2">
+                  {stage === 0 && (
+                    <button onClick={() => setStatus('Contacté', t('Marqué comme contacté'))} className="btn btn-sm btn-secondary w-full">
+                      <Phone className="w-4 h-4" />
+                      {t('Marquer comme contacté')}
+                    </button>
+                  )}
+                  {stage === 1 && (
+                    <button onClick={() => setStatus('Qualifié', t('Marqué comme qualifié'))} className="btn btn-sm btn-secondary w-full">
+                      <Check className="w-4 h-4" />
+                      {t('Marquer comme qualifié')}
+                    </button>
+                  )}
+                  <button onClick={addVisit} className="btn btn-sm btn-primary w-full">
+                    <CalendarCheck className="w-4 h-4" />
+                    {quote ? t('Ajouter une visite') : t('Réserver une estimation')}
+                  </button>
+                </div>
               )}
             </SideCard>
-            <SideCard title={t("Résumé de l'agent IA")}>
-              <p className="text-sm text-ink-secondary">{t(lead.aiSummary)}</p>
-            </SideCard>
+            {lead.aiSummary && (
+              <SideCard title={t("Résumé de l'agent IA")} action={<ComingSoon />}>
+                <p className="text-sm text-ink-secondary">{t(lead.aiSummary)}</p>
+                {lead.score > 0 && (
+                  <p className="text-xs text-ink-mute mt-2">
+                    {t('Score IA')} <span className="font-semibold text-ink tnum">{lead.score}</span>/100
+                  </p>
+                )}
+              </SideCard>
+            )}
             <SideCard
               title={t('Responsable')}
               action={
-                <button onClick={() => setChangingRep((o) => !o)} className="text-xs font-semibold text-primary-press">
-                  {t('Changer')}
-                </button>
+                can('leads.assign') ? (
+                  <button onClick={() => setChangingRep((o) => !o)} className="text-xs font-semibold text-primary-press">
+                    {t('Changer')}
+                  </button>
+                ) : undefined
               }
             >
               <div className="flex items-center gap-3">
@@ -229,11 +344,11 @@ export default function LeadDetail() {
               </div>
               {changingRep && (
                 <ul className="mt-3 border-t border-hairline pt-2">
-                  {REPS.filter((r) => r.company === lead.company || r.company === 'all').map((r) => (
+                  {REPS.filter((r) => r.company === lead.company).map((r) => (
                     <li key={r.id}>
                       <button
                         onClick={() => {
-                          setLead((l) => ({ ...l, repId: r.id }))
+                          updateLead(lead.id, { repId: r.id })
                           setChangingRep(false)
                           toast(t('Assigné à {name}', { name: r.name }))
                         }}
@@ -248,15 +363,20 @@ export default function LeadDetail() {
                 </ul>
               )}
             </SideCard>
-            {stage >= 0 && (
+            {stage >= 0 && stage < 4 && (
               <button
-                onClick={() => {
-                  setLead((l) => ({ ...l, status: 'Non qualifié' }))
-                  toast(t('Marqué non qualifié'))
+                onClick={async () => {
+                  if (await confirmAction({ title: t('Marquer ce lead non qualifié?'), body: t('Il sort de la liste de suivi. Vous pourrez le réactiver.'), confirmLabel: t('Marquer non qualifié') })) setStatus(LEAD_LOST, t('Marqué non qualifié'))
                 }}
                 className="btn btn-sm btn-ghost w-full text-ink-mute"
               >
                 {t('Marquer non qualifié')}
+              </button>
+            )}
+            {stage < 0 && (
+              <button onClick={() => setStatus('Nouveau', t('Lead réactivé'))} className="btn btn-sm btn-secondary w-full">
+                <RotateCcw className="w-4 h-4" />
+                {t('Réactiver le lead')}
               </button>
             )}
           </>
@@ -295,10 +415,9 @@ export default function LeadDetail() {
             disabled={!slot}
             className="btn btn-md btn-primary w-full"
             onClick={() => {
-              setLead((l) => ({ ...l, status: 'RDV réservé', booked: slot! }))
+              book(slot!)
               setBooking(false)
               setSlot(null)
-              toast(`${t('Estimation réservée')} · ${t(slot!)}`)
             }}
           >
             <CalendarCheck className="w-4 h-4" />

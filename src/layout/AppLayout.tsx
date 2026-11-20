@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, ChevronsUpDown, Columns3, FilePenLine, FileText, Inbox, Layers, LogOut, Menu, MessagesSquare, Plus, Search, Settings, Sun, UserPlus, Users, X } from 'lucide-react'
-import { CompanyLogo, RepAvatar, StatusBadge, Wordmark, type Icon } from '../components/ui'
-import { useApp, type Scope } from '../context/AppContext'
-import { CLIENTS, COMPANIES, LEADS, ME, QUOTES, THREADS, clientById, fullName, type CompanyId } from '../data/mock'
+import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, ChevronRight, ChevronsUpDown, Columns3, Eye, FilePenLine, FileText, Inbox, Layers, LogOut, Menu, MessagesSquare, Plus, Search, Settings, Sun, Undo2, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { Avatar, CompanyLogo, StatusBadge, Wordmark, type Icon } from '../components/ui'
+import { inScope, useApp, type Scope } from '../context/AppContext'
+import { useAuth } from '../auth/AuthContext'
+import { ACCOUNTS, ROLE_LABELS, type Account, type Permission } from '../auth/permissions'
+import { setViewAsOrigin, viewAsOrigin } from '../auth/session'
+import { useStore } from '../data/store'
+import { CLIENTS, COMPANIES, LEADS, QUOTES, THREADS, clientById, fullName, repById, type CompanyId } from '../data/mock'
 import { t } from '../i18n'
 import { LanguageSwitch } from '../i18n/LanguageProvider'
 import { onToast, toast } from '../lib/toast'
 import { openCreate } from '../lib/create'
 import CreateHost from '../components/create/CreateHost'
-import { ConfirmHost } from '../components/states'
+import { ConfirmHost, Loading } from '../components/states'
 import { cn, money, normalize } from '../lib/utils'
 
 interface NavEntry {
@@ -17,6 +21,8 @@ interface NavEntry {
   href: string
   icon: Icon
   count?: number
+  /** Shown when the user has at least one of these permissions. */
+  perm?: Permission[]
 }
 
 const NAV_GROUPS: { label: string; items: NavEntry[] }[] = [
@@ -35,17 +41,21 @@ const NAV_GROUPS: { label: string; items: NavEntry[] }[] = [
 ]
 
 const ADMIN_NAV: NavEntry[] = [
-  { name: 'Catalogue', href: '/catalogue', icon: BookOpen },
-  { name: 'Paramètres', href: '/catalogue?tab=parametres', icon: Settings },
+  { name: 'Catalogue', href: '/catalogue', icon: BookOpen, perm: ['catalogue.edit'] },
+  { name: 'Paramètres', href: '/catalogue?tab=parametres', icon: Settings, perm: ['settings.manage', 'users.manage'] },
 ]
 
 function NavItem({ item }: { item: NavEntry }) {
   const location = useLocation()
   const { scope } = useApp()
+  const { user, can } = useAuth()
+  useStore()
   const visible = (company: string) => scope === 'all' || scope === company
+  // Reps who can't see the whole team only count their own leads.
+  const own = (repId?: string) => can('quotes.viewAll') || repId === user?.repId
   const count =
     item.href === '/leads'
-      ? LEADS.filter((l) => visible(l.company) && l.status !== 'Non qualifié' && l.status !== 'RDV réservé').length
+      ? LEADS.filter((l) => visible(l.company) && own(l.repId) && l.status !== 'Non qualifié' && l.status !== 'RDV réservé' && l.status !== 'Converti').length
       : item.href === '/conversations'
         ? THREADS.filter((t) => visible(t.company)).reduce((n, t) => n + t.unread, 0)
         : item.count
@@ -73,9 +83,21 @@ function NavItem({ item }: { item: NavEntry }) {
 
 function CompanySwitcher({ onPick }: { onPick?: () => void }) {
   const { scope, setScope } = useApp()
+  const { companies, can } = useAuth()
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const current = scope === 'all' ? null : COMPANIES.find((c) => c.id === scope)
+  const options = COMPANIES.filter((c) => companies.includes(c.id))
+  const group = can('groupView') && options.length > 1
+  const manage = can('settings.manage')
+  // One company and no group view: the scope is locked, show the logo only.
+  if (options.length <= 1 && !group) {
+    return (
+      <div className="w-full h-12 pl-3 pr-2 flex items-center" aria-label={current?.name}>
+        {current ? <CompanyLogo id={current.id} className="h-8 max-w-[150px]" /> : <Wordmark sub={false} />}
+      </div>
+    )
+  }
   const choose = (s: Scope) => {
     setScope(s)
     setOpen(false)
@@ -101,7 +123,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
           <div className="absolute left-0 top-full mt-2 z-50 w-[19rem] bg-white rounded-xl border border-hairline shadow-float overflow-hidden menu-in" role="listbox">
             <p className="label-caps px-4 pt-3 pb-2">{t('Compagnies')}</p>
             <div className="px-2 pb-2 space-y-1">
-              {COMPANIES.map((c) => (
+              {options.map((c) => (
                 <button key={c.id} role="option" aria-selected={scope === c.id} onClick={() => choose(c.id)} className={cn('w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors', scope === c.id ? 'bg-primary-wash ring-1 ring-primary/30' : 'hover:bg-sand')}>
                   <span className="w-24 h-10 rounded-md bg-white border border-hairline flex items-center justify-center px-1.5 shrink-0">
                     <CompanyLogo id={c.id} className="max-h-7 w-full object-center" />
@@ -116,18 +138,18 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
                 </button>
               ))}
             </div>
-            <div className="border-t border-hairline p-2">
-              <button role="option" aria-selected={scope === 'all'} onClick={() => choose('all')} className={cn('w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors', scope === 'all' ? 'bg-primary-wash ring-1 ring-primary/30' : 'hover:bg-sand')}>
+            {(group || manage) && <div className="border-t border-hairline p-2">
+              {group && <button role="option" aria-selected={scope === 'all'} onClick={() => choose('all')} className={cn('w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors', scope === 'all' ? 'bg-primary-wash ring-1 ring-primary/30' : 'hover:bg-sand')}>
                 <span className="w-24 h-10 rounded-md bg-sand flex items-center justify-center shrink-0">
                   <Layers className="w-4 h-4 text-ink-mute" />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-ink">Groupe Hillman</span>
-                  <span className="block text-2xs text-ink-mute">{t("Vue d'ensemble des 3 compagnies · admin")}</span>
+                  <span className="block text-2xs text-ink-mute">{manage ? t("Vue d'ensemble des 3 compagnies · admin") : t("Vue d'ensemble des 3 compagnies")}</span>
                 </span>
                 {scope === 'all' && <Check className="w-4 h-4 text-primary-press shrink-0" />}
-              </button>
-              <button
+              </button>}
+              {manage && <button
                 onClick={() => {
                   setOpen(false)
                   onPick?.()
@@ -137,8 +159,8 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
               >
                 <Settings className="w-3.5 h-3.5" />
                 {t('Gérer les compagnies')}
-              </button>
-            </div>
+              </button>}
+            </div>}
           </div>
         </>
       )}
@@ -187,18 +209,25 @@ function NewMenu() {
 }
 
 function CommandPalette() {
-  const { paletteOpen, setPaletteOpen } = useApp()
+  const { paletteOpen, setPaletteOpen, scope } = useApp()
+  const { user, can } = useAuth()
+  const version = useStore()
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
+  const viewAll = can('quotes.viewAll')
+  const repId = user?.repId
   useEffect(() => {
     if (!paletteOpen) setQuery('')
   }, [paletteOpen])
   const results = useMemo(() => {
     const q = normalize(query.trim())
-    const quotes = QUOTES.filter((x) => !q || normalize(`${x.no} ${fullName(clientById(x.clientId)!)} ${x.city} ${x.workType}`).includes(q)).slice(0, 5)
-    const clients = CLIENTS.filter((c) => !q || normalize(`${fullName(c)} ${c.phone} ${c.mobile ?? ''} ${c.street} ${c.city} ${c.email}`).includes(q)).slice(0, 5)
+    // Scope first; reps without `quotes.viewAll` only find their own quotes.
+    const allowed = QUOTES.filter((x) => inScope(scope, x.company) && (viewAll || x.repId === repId))
+    const quotes = allowed.filter((x) => !q || normalize(`${x.no} ${fullName(clientById(x.clientId)!)} ${x.city} ${x.workType}`).includes(q)).slice(0, 5)
+    const inScopeClient = (c: (typeof CLIENTS)[number]) => scope === 'all' || c.company === scope || QUOTES.some((x) => x.clientId === c.id && x.company === scope)
+    const clients = CLIENTS.filter((c) => inScopeClient(c) && (!q || normalize(`${fullName(c)} ${c.phone} ${c.mobile ?? ''} ${c.street} ${c.city} ${c.email}`).includes(q))).slice(0, 5)
     return { quotes, clients }
-  }, [query])
+  }, [query, scope, viewAll, repId, version])
   if (!paletteOpen) return null
   const go = (to: string) => {
     setPaletteOpen(false)
@@ -243,6 +272,165 @@ function CommandPalette() {
   )
 }
 
+/** One-line description of what the user can see, under their name. */
+function accessLine(a: Account) {
+  if (a.role === 'admin') return t('Administrateur · accès aux 3 comptes')
+  const where = a.companies.length === COMPANIES.length ? t('3 compagnies') : a.companies.map((c) => t(COMPANIES.find((x) => x.id === c)!.short)).join(', ')
+  return `${t(ROLE_LABELS[a.role])} · ${where}`
+}
+
+/** Leave "Voir comme…" and go back to the admin's own account. */
+function useViewAs() {
+  const { user, impersonate } = useAuth()
+  const navigate = useNavigate()
+  const origin = viewAsOrigin()
+  const active = !!origin && origin !== user?.id && ACCOUNTS.some((a) => a.id === origin)
+  return {
+    active,
+    origin: active ? ACCOUNTS.find((a) => a.id === origin)! : null,
+    start: (id: string) => {
+      if (!user) return
+      if (!viewAsOrigin()) setViewAsOrigin(user.id)
+      impersonate(id)
+      navigate('/')
+      toast(t('Aperçu : vous voyez l’application comme {name}', { name: ACCOUNTS.find((a) => a.id === id)!.name }))
+    },
+    stop: () => {
+      if (!origin) return
+      setViewAsOrigin(null)
+      impersonate(origin)
+      navigate('/')
+    },
+  }
+}
+
+/** Sidebar footer: signed-in user, profile, "view as" (admins) and sign-out. */
+function UserMenu({ onNavigate }: { onNavigate: () => void }) {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const viewAs = useViewAs()
+  const [open, setOpen] = useState(false)
+  const [asOpen, setAsOpen] = useState(false)
+  if (!user) return null
+  const rep = repById(user.repId)
+  const canViewAs = user.role === 'admin' && !viewAs.active
+  const targets = ACCOUNTS.filter((a) => a.id !== user.id && a.status === 'actif' && a.role !== 'admin')
+  const close = () => {
+    setOpen(false)
+    setAsOpen(false)
+  }
+  const go = (to: string) => {
+    close()
+    onNavigate()
+    navigate(to)
+  }
+  const signOut = () => {
+    close()
+    setViewAsOrigin(null)
+    logout()
+    navigate('/connexion', { replace: true })
+  }
+  return (
+    <div className="relative mt-2">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn('w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors', open ? 'bg-sand' : 'hover:bg-sand')}
+      >
+        <Avatar name={user.name} size="md" color={rep?.color} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold text-ink-secondary truncate">{user.name}</span>
+          <span className="block text-2xs text-ink-mute truncate">{accessLine(user)}</span>
+        </span>
+        <ChevronsUpDown className="w-3.5 h-3.5 text-ink-faint shrink-0" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div className="absolute left-0 bottom-full mb-2 z-50 w-full min-w-[14rem] bg-white rounded-lg border border-hairline shadow-float py-1 menu-in" role="menu">
+            <div className="px-3 py-2 border-b border-hairline mb-1">
+              <p className="text-xs font-semibold text-ink truncate">{user.email}</p>
+              <p className="text-2xs text-ink-mute">{t(ROLE_LABELS[user.role])}</p>
+            </div>
+            <button role="menuitem" onClick={() => go('/profil')} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary hover:bg-sand">
+              <UserRound className="w-4 h-4 text-ink-mute" />
+              {t('Mon profil')}
+            </button>
+            {canViewAs && (
+              <>
+                <button role="menuitem" aria-expanded={asOpen} onClick={() => setAsOpen((o) => !o)} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary hover:bg-sand">
+                  <Eye className="w-4 h-4 text-ink-mute" />
+                  <span className="flex-1 text-left">{t('Voir comme…')}</span>
+                  <ChevronRight className={cn('w-3.5 h-3.5 text-ink-faint transition-transform', asOpen && 'rotate-90')} />
+                </button>
+                {asOpen && (
+                  <div className="max-h-60 overflow-y-auto py-1 bg-sand/50">
+                    {targets.map((a) => (
+                      <button
+                        key={a.id}
+                        role="menuitem"
+                        onClick={() => {
+                          close()
+                          onNavigate()
+                          viewAs.start(a.id)
+                        }}
+                        className="w-full flex items-center gap-2.5 pl-5 pr-3 py-1.5 text-left hover:bg-sand"
+                      >
+                        <Avatar name={a.name} size="sm" color={repById(a.repId)?.color} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-xs font-semibold text-ink truncate">{a.name}</span>
+                          <span className="block text-2xs text-ink-mute truncate">{accessLine(a)}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {viewAs.active && viewAs.origin && (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  close()
+                  onNavigate()
+                  viewAs.stop()
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary hover:bg-sand"
+              >
+                <Undo2 className="w-4 h-4 text-ink-mute" />
+                {t('Revenir à {name}', { name: viewAs.origin.name })}
+              </button>
+            )}
+            <div className="border-t border-hairline mt-1 pt-1">
+              <button role="menuitem" onClick={signOut} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary hover:bg-sand">
+                <LogOut className="w-4 h-4 text-ink-mute" />
+                {t('Se déconnecter')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Thin bar shown while an admin previews the app as someone else. */
+function ViewAsBanner() {
+  const { user } = useAuth()
+  const viewAs = useViewAs()
+  if (!viewAs.active || !user) return null
+  return (
+    <div className="bg-ink text-white text-xs px-4 md:px-6 py-2 flex items-center gap-3">
+      <Eye className="w-3.5 h-3.5 shrink-0 opacity-80" />
+      <span className="flex-1 min-w-0 truncate">{t('Aperçu comme {name} · {role}', { name: user.name, role: t(ROLE_LABELS[user.role]) })}</span>
+      <button onClick={viewAs.stop} className="shrink-0 font-semibold underline underline-offset-2 hover:opacity-80">
+        {t('Revenir à mon compte')}
+      </button>
+    </div>
+  )
+}
+
 function Toaster() {
   const [message, setMessage] = useState<string | null>(null)
   useEffect(() => {
@@ -264,6 +452,8 @@ export default function AppLayout() {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const { setPaletteOpen, scope } = useApp()
+  const { can } = useAuth()
+  const adminNav = ADMIN_NAV.filter((it) => !it.perm || it.perm.some(can))
 
   useEffect(() => {
     setMenuOpen(false)
@@ -302,18 +492,11 @@ export default function AppLayout() {
         ))}
       </nav>
       <div className="shrink-0 border-t border-hairline px-3 py-3 space-y-0.5">
-        <p className="label-caps px-3 pb-1.5">{t('Administration')}</p>
-        {ADMIN_NAV.map((it) => (
+        {adminNav.length > 0 && <p className="label-caps px-3 pb-1.5">{t('Administration')}</p>}
+        {adminNav.map((it) => (
           <NavItem key={it.name} item={it} />
         ))}
-        <div className="flex items-center gap-3 px-3 py-2 mt-2 rounded-md hover:bg-sand transition-colors">
-          <RepAvatar id={ME.id} size="md" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-ink-secondary truncate">{ME.name}</p>
-            <p className="text-2xs text-ink-mute truncate">{t('Administrateur · accès aux 3 comptes')}</p>
-          </div>
-          <LogOut className="w-3.5 h-3.5 text-ink-faint" />
-        </div>
+        <UserMenu onNavigate={() => setMenuOpen(false)} />
       </div>
     </div>
   )
@@ -323,7 +506,8 @@ export default function AppLayout() {
       <aside className={cn('fixed md:sticky top-0 left-0 z-50 h-screen w-60 border-r border-hairline shrink-0 transition-transform duration-300', menuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0')}>{sidebar}</aside>
       {menuOpen && <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={() => setMenuOpen(false)} />}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-hairline flex items-center gap-3 px-4 md:px-6 sticky top-0 z-30">
+        <ViewAsBanner />
+        <header className="h-16 bg-white border-b border-hairline flex items-center gap-2 sm:gap-3 px-4 md:px-6 sticky top-0 z-30">
           <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2 text-ink-mute hover:bg-sand rounded-md" aria-label={t('Menu')}>
             <Menu className="w-5 h-5" />
           </button>
@@ -336,7 +520,7 @@ export default function AppLayout() {
             <span className="flex-1 truncate sm:hidden">{t('Rechercher…')}</span>
             <kbd className="hidden sm:inline text-2xs text-ink-mute bg-white px-1.5 py-0.5 rounded border border-hairline">⌘ K</kbd>
           </button>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <LanguageSwitch />
             <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
               <Bell className="w-5 h-5" />
@@ -346,7 +530,9 @@ export default function AppLayout() {
           </div>
         </header>
         <main className="flex-1 min-w-0">
-          <Outlet />
+          <Suspense fallback={<Loading />}>
+            <Outlet />
+          </Suspense>
         </main>
         <footer className="px-6 py-4 text-2xs text-ink-faint flex items-center justify-between border-t border-hairline bg-white/40">
           <span>{t('Maquette interactive · données fictives')}</span>

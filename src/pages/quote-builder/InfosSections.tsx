@@ -5,10 +5,10 @@ import { REPS, fullName } from '../../data/mock'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, formatHour } from '../../lib/utils'
-import { SCOPE_TEMPLATES } from '../../data/quote-builder'
+import { SCOPE_TEMPLATES, WARRANTY_GROUPS, isSeededQuote, fillClause, hasTokens, type ExpertiseValue } from '../../data/quote-builder'
 import { Select } from '../../components/filters'
 import { BuilderSection, ToggleChip, UnitField } from '../../components/quote-shared'
-import type { Builder, ExpertiseValue } from './useQuoteBuilder'
+import type { Builder } from './useQuoteBuilder'
 
 const DAY_LABELS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.']
 
@@ -92,91 +92,52 @@ export function InfosSection({ b }: { b: Builder }) {
               </span>
             </div>
           ))}
-          <div className="px-4 py-2.5 flex flex-wrap items-center gap-3 text-sm text-ink-mute">
-            <CalendarDays className="w-4 h-4" />
-            {t("Jeu. 15 oct. · 13 h 00 · Visite d'estimation")}
-            <Badge tone="good" className="ml-auto">
-              {t('Fait')}
-            </Badge>
-          </div>
+          {isSeededQuote(quote.id) ? (
+            <div className="px-4 py-2.5 flex flex-wrap items-center gap-3 text-sm text-ink-mute">
+              <CalendarDays className="w-4 h-4" />
+              {t("Jeu. 15 oct. · 13 h 00 · Visite d'estimation")}
+              <Badge tone="good" className="ml-auto">
+                {t('Fait')}
+              </Badge>
+            </div>
+          ) : (
+            !b.appointments.length && <p className="px-4 py-3 text-sm text-ink-mute">{t('Aucun rendez-vous lié à cette soumission.')}</p>
+          )}
         </div>
       </div>
     </BuilderSection>
   )
 }
 
-const noop = () => {}
-
-/** Measurements and job facts; fields differ per company. */
+/** Roof form (Toitures). Its area and eaves length fill the `{pi²}` / `{carrés}` / `{pi lin.}` clauses. */
 export function ObligationsSection({ b }: { b: Builder }) {
-  const { quote, dims, setDims } = b
+  const { dims, setDims } = b
   return (
     <BuilderSection id="obligations" title={t('Obligations')}>
-      {quote.company === 'toit' ? (
-        <div className="space-y-4">
-          <Field label={t('Type de travaux')} className="max-w-xs">
-            <Select value={b.workKind} onChange={b.setWorkKind} options={['Toit plat', 'Toit en pente', 'Toit en métal'].map((v) => ({ value: v, label: t(v) }))} searchable={false} />
-          </Field>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <UnitField label={t('Superficie approx.')} value={dims.area} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, area: v })} />
-            <UnitField label={t('Superficie « fond »')} value={dims.fond} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, fond: v })} />
-            <UnitField label={t('Superficie « remontée »')} value={dims.rem} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, rem: v })} />
-            <UnitField label={t('Pente moyenne')} value={dims.pente} suffix="/12" onChange={(v) => setDims({ ...dims, pente: v })} />
-            <UnitField label={t('Nombre de versants')} value={dims.versants} onChange={(v) => setDims({ ...dims, versants: v })} />
-            <UnitField label={t("Nombre d'étages")} value={dims.etages} onChange={(v) => setDims({ ...dims, etages: v })} />
-            <UnitField label={t('Nombre de drains')} value={dims.drains} onChange={(v) => setDims({ ...dims, drains: v })} />
-            <UnitField label={t('Jours estimés')} value={dims.jours} suffix={t('j')} onChange={(v) => setDims({ ...dims, jours: v })} />
-          </div>
-          <Field label={t('Note')}>
-            <textarea className="form-input h-auto py-2" rows={2} defaultValue={b.isDemo ? t("Cheminée en brique côté nord. Accès conteneur par l'entrée asphaltée. Piscine hors-terre à protéger.") : ''} />
-          </Field>
+      <div className="space-y-4">
+        <Field label={t('Type de travaux')} className="max-w-xs">
+          <Select value={b.workKind} onChange={b.setWorkKind} options={['Toit plat', 'Toit en pente', 'Toit en métal'].map((v) => ({ value: v, label: t(v) }))} searchable={false} />
+        </Field>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <UnitField label={t('Superficie approx.')} value={dims.area} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, area: v })} />
+          <UnitField label={t('Superficie « fond »')} value={dims.fond} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, fond: v })} />
+          <UnitField label={t('Superficie « remontée »')} value={dims.rem} suffix={t('pi²')} onChange={(v) => setDims({ ...dims, rem: v })} />
+          <UnitField label={t('Avant-toits (larmiers)')} value={dims.avantToits} suffix={t('pi lin.')} onChange={(v) => setDims({ ...dims, avantToits: v })} />
+          <UnitField label={t('Pente moyenne')} value={dims.pente} suffix="/12" onChange={(v) => setDims({ ...dims, pente: v })} />
+          <UnitField label={t('Nombre de versants')} value={dims.versants} onChange={(v) => setDims({ ...dims, versants: v })} />
+          <UnitField label={t("Nombre d'étages")} value={dims.etages} onChange={(v) => setDims({ ...dims, etages: v })} />
+          <UnitField label={t('Nombre de drains')} value={dims.drains} onChange={(v) => setDims({ ...dims, drains: v })} />
+          <UnitField label={t('Jours estimés')} value={dims.jours} suffix={t('j')} onChange={(v) => setDims({ ...dims, jours: v })} />
         </div>
-      ) : quote.company === 'sg' ? (
-        <div className="space-y-4">
-          <Field label={t('Type de travaux')} className="max-w-xs">
-            <Select value="Gouttière" onChange={noop} options={[{ value: 'Gouttière', label: t('Gouttière') }]} searchable={false} />
-          </Field>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Field label={t('Type')} className="col-span-2">
-              <div className="flex flex-wrap gap-1.5">
-                <ToggleChip active onClick={noop}>
-                  {t('Aluminium')}
-                </ToggleChip>
-                <ToggleChip active={false} onClick={noop}>
-                  {t('Acier')}
-                </ToggleChip>
-                <ToggleChip active onClick={noop}>
-                  {t('Crochet vissé Suprême')}
-                </ToggleChip>
-              </div>
-            </Field>
-            <UnitField label={t('Gouttières')} value="140" suffix={t('pi')} />
-            <UnitField label={t('Tuyaux')} value="48" suffix={t('pi')} />
-            <UnitField label={t('Échelles')} value="2" />
-            <UnitField label={t('Étages')} value="2" />
-            <UnitField label={t('Toit')} value={t('Bardeaux')} />
-            <UnitField label={t('Penchées')} value="0" />
-            <UnitField label={t('Drip')} value="0" suffix={t('pi')} />
-          </div>
-          <Field label={t('Note')}>
-            <textarea className="form-input h-auto py-2" rows={2} defaultValue={t('Arbres matures côté cour : proposer protège-gouttières.')} />
-          </Field>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="grid sm:grid-cols-3 gap-3">
-            <Field label={t('Type de travaux')}>
-              <Select value="Rénovation" onChange={noop} options={[{ value: 'Rénovation', label: t('Rénovation') }]} searchable={false} />
-            </Field>
-            <UnitField label={t('Autre travaux')} value={t(quote.workType)} className="sm:col-span-2" />
-            <UnitField label={t('Superficie approximative')} value="192" suffix={t('pi²')} />
-            <UnitField label={t('Nombre de jours estimés')} value="18" suffix={t('j')} />
-          </div>
-          <Field label={t('Note')}>
-            <textarea className="form-input h-auto py-2" rows={3} defaultValue={t("** Soumission budgétaire selon les travaux\n- travaux de menuiserie et charpente\n- travaux d'isolation\n- travaux de revêtements")} />
-          </Field>
-        </div>
-      )}
+        {b.values['pi²'] && (
+          <p className="text-xs text-ink-mute">
+            {t('{area} pi² = {sq} carrés — repris dans les clauses de Travaux.', { area: b.values['pi²'], sq: b.values['carrés'] })}
+          </p>
+        )}
+        <Field label={t('Note')}>
+          <textarea className="form-input h-auto py-2" rows={2} value={b.roofNote} onChange={(e) => b.setRoofNote(e.target.value)} />
+        </Field>
+      </div>
     </BuilderSection>
   )
 }
@@ -253,7 +214,14 @@ export function TravauxSection({ b }: { b: Builder }) {
                   {group.lines.map((line) => (
                     <label key={line} className={cn('flex items-start gap-3 px-3 py-2 rounded-md cursor-pointer text-sm', checked.has(line) ? 'text-ink' : 'text-ink-mute hover:bg-sand/60')}>
                       <input type="checkbox" checked={checked.has(line)} onChange={() => b.toggleLine(line)} className="mt-0.5 w-4 h-4 accent-[var(--color-primary)] shrink-0" />
-                      <span className="flex-1">{t(line)}</span>
+                      <span className="flex-1">
+                        {fillClause(t(line), b.values)}
+                        {hasTokens(line) && (
+                          <span className="ml-1.5 inline-flex align-middle items-center text-2xs font-semibold text-primary-press bg-primary-wash rounded px-1.5" title={t('Rempli depuis le formulaire')}>
+                            {t('auto')}
+                          </span>
+                        )}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -294,17 +262,12 @@ export function ExpertisesSection({ b }: { b: Builder }) {
   )
 }
 
-const WARRANTY_GROUPS: [keyof Builder['warranties'], string, string[]][] = [
-  ['fab', 'Manufacturier', ['Non applicable', 'Prolongé IKO ShieldPro Plus 20 ans', 'Prolongé BP 50 ans ferme', 'Voir détail du fabricant', 'Autre']],
-  ['mo', "Main-d'œuvre", ['Non applicable', '5 ans', '10 ans', 'Autre']],
-  ['offre', 'Validité', ['24 h', '48 h', '30 jours', '60 jours', 'Autre']],
-]
-
+/** Warranty choices of the quote's company (no roofing warranties on Gouttières or Rénovations). */
 export function GarantiesSection({ b }: { b: Builder }) {
   return (
     <BuilderSection id="garanties" title={t('Garanties')}>
       <div className="space-y-4">
-        {WARRANTY_GROUPS.map(([key, label, options]) => (
+        {WARRANTY_GROUPS[b.quote.company].map(([key, label, options]) => (
           <div key={key}>
             <p className="label-caps mb-1.5">{t(label)}</p>
             <div className="flex flex-wrap gap-1.5">

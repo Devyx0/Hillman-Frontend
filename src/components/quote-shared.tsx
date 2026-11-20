@@ -6,39 +6,69 @@
  */
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Image, Star } from 'lucide-react'
-import { QUOTE_STATUSES } from '../data/mock'
+import { STATUS_DEFS } from '../data/settings'
+import type { QuoteStatusRecord, StatusChange } from '../data/store'
 import { t } from '../i18n'
 import { cn } from '../lib/utils'
+import { HoverTip, QuoteStatusBadge, statusDetail, useChangeStatus } from './quote-status'
 import { Field, StatusBadge } from './ui'
 
-/** Inline status dropdown shown in list rows (mockup: `r4`). */
-export function StatusPicker({ q, onChange }: { q: { status: string }; onChange: (status: string) => void }) {
+/**
+ * Status dropdown for list rows and the builder header (mockup: `r4`).
+ *
+ * Pass a store quote (`q.id`): choosing a status runs the real flow (`useChangeStatus`): "Refusé"
+ * asks the reason, "Signé" asks to confirm the acceptance, "Payé" asks the payment date; then
+ * `onChange(status)` is called once applied. Users without `quotes.status` (or `readOnly`) see a
+ * read-only badge. Without `q.id` it only reports the choice through `onChange` (legacy).
+ */
+export function StatusPicker({
+  q,
+  onChange,
+  readOnly,
+  via,
+  align = 'left',
+}: {
+  q: Partial<QuoteStatusRecord> & { status: string }
+  onChange?: (status: string) => void
+  readOnly?: boolean
+  via?: StatusChange['via']
+  align?: 'left' | 'right'
+}) {
   const [open, setOpen] = useState(false)
+  const { change, dialog, canChange } = useChangeStatus({ via })
+  if (readOnly || !canChange) return <QuoteStatusBadge q={q} />
+  const pick = async (s: string) => {
+    setOpen(false)
+    if (!q.id) return onChange?.(s)
+    if (await change(q.id, s)) onChange?.(s)
+  }
   return (
     <div className="relative inline-block" onClick={(e) => e.stopPropagation()}>
-      <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 rounded-full hover:ring-2 hover:ring-hairline-strong" aria-label={t('Changer le statut')}>
-        <StatusBadge status={q.status} />
-        <ChevronDown className="w-3 h-3 text-ink-faint" />
-      </button>
+      <HoverTip tip={open ? undefined : statusDetail(q)}>
+        <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 rounded-full hover:ring-2 hover:ring-hairline-strong" aria-label={t('Changer le statut')} aria-haspopup="menu" aria-expanded={open}>
+          <StatusBadge status={q.status} />
+          <ChevronDown className="w-3 h-3 text-ink-faint" />
+        </button>
+      </HoverTip>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-50 w-60 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in">
-            {QUOTE_STATUSES.map((s) => (
+          <div role="menu" className={cn('absolute top-full mt-1 z-50 w-60 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in', align === 'right' ? 'right-0' : 'left-0')}>
+            {STATUS_DEFS.map(({ name: s }) => (
               <button
                 key={s}
-                onClick={() => {
-                  onChange(s)
-                  setOpen(false)
-                }}
-                className={cn('w-full px-3 py-1.5 text-left hover:bg-sand flex items-center', s === q.status && 'bg-primary-wash')}
+                role="menuitem"
+                onClick={() => pick(s)}
+                className={cn('w-full px-3 py-1.5 text-left hover:bg-sand flex items-center justify-between gap-2', s === q.status && 'bg-primary-wash')}
               >
                 <StatusBadge status={s} />
+                {s === q.status && <Check className="w-3.5 h-3.5 text-primary-press" />}
               </button>
             ))}
           </div>
         </>
       )}
+      {dialog}
     </div>
   )
 }

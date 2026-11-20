@@ -16,13 +16,13 @@ import {
   LEADS,
   QUOTES,
   TODAY,
-  companyById,
   type Appointment,
   type Client,
   type CompanyId,
   type Lead,
   type Quote,
 } from './mock'
+import { NUMBERING } from './settings'
 
 // ── Subscription ────────────────────────────────────────────────────────────
 let version = 0
@@ -147,8 +147,12 @@ export const FINAL_STATUSES = ['Signé', 'Refusé', 'Terminé', 'Payé']
 
 /** Next quote number for a company, following the numbering settings. */
 export function nextQuoteNo(company: CompanyId) {
-  const max = Math.max(...QUOTES.map((q) => Number(q.no.slice(1)) || 0))
-  return `${companyById(company).code}${max + 1}`
+  const cfg = NUMBERING[company]
+  const used = new Set(QUOTES.map((q) => q.no))
+  let n = Math.max(cfg.next, ...QUOTES.filter((q) => q.no.startsWith(cfg.prefix)).map((q) => (Number(q.no.slice(cfg.prefix.length)) || 0) + 1))
+  while (used.has(`${cfg.prefix}${n}`)) n++
+  cfg.next = n + 1
+  return `${cfg.prefix}${n}`
 }
 
 export function addQuote(input: Pick<Quote, 'clientId' | 'company' | 'repId' | 'workType'> & Partial<QuoteRecord>): QuoteRecord {
@@ -228,7 +232,9 @@ export function duplicateQuote(id: string): QuoteRecord | undefined {
   const src = quoteById(id)
   if (!src) return
   const versions = QUOTES.filter((q) => (q as QuoteRecord).parentId === id || q.id === id).length
-  return addQuote({ ...src, id: undefined, no: undefined, status: 'En cours', views: 0, lastViewed: undefined, signature: undefined, payments: undefined, parentId: id, version: versions + 1 } as never)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _id, no: _no, signature: _sig, payments: _pay, lastViewed: _lv, ...rest } = src
+  return addQuote({ ...rest, status: 'En cours', views: 0, parentId: id, version: versions + 1 })
 }
 
 // ── Appointments ────────────────────────────────────────────────────────────
@@ -248,5 +254,71 @@ export function updateAppointment(id: string, patch: Partial<Appointment>) {
 export function removeAppointment(id: string) {
   const i = APPOINTMENTS.findIndex((x) => x.id === id)
   if (i >= 0) APPOINTMENTS.splice(i, 1)
+  commit()
+}
+
+// ── Quote list & pipeline (status changes at the office) ────────────────────
+/** One manual status change, kept on the quote for its history. */
+export interface StatusChange {
+  status: string
+  from: string
+  at: string
+  /** Account name of who made the change. */
+  by?: string
+  /** Refusal reason (status "Refusé"). */
+  reason?: string
+  comment?: string
+  /** Payment date (status "Payé"). */
+  paidAt?: string
+  /** Where the change was made. */
+  via?: 'liste' | 'pipeline' | 'soumission' | string
+}
+
+export type QuoteStatusRecord = QuoteRecord & {
+  statusLog?: StatusChange[]
+  /** Comment entered with the refusal reason. */
+  refusalComment?: string
+  /** Date the quote was marked paid by hand. */
+  paidAt?: string
+  /** Accepted by the client outside the portal (phone, in person), recorded at the office. */
+  officeAcceptance?: { at: string; by?: string; comment?: string }
+}
+
+/**
+ * Status change made by a user (list, pipeline, builder header). Wraps `setQuoteStatus` and keeps
+ * the details: refusal reason + comment, payment date, acceptance by phone, history entry.
+ * Leaving a final status (e.g. "Signé" back to "En soumission") pauses follow-ups instead of
+ * silently restarting them.
+ */
+export function changeQuoteStatus(
+  id: string,
+  status: string,
+  d: { reason?: string; comment?: string; paidAt?: string; by?: string; via?: StatusChange['via'] } = {},
+) {
+  const q = quoteById(id) as QuoteStatusRecord | undefined
+  if (!q || q.status === status) return
+  const from = q.status
+  const wasFinal = FINAL_STATUSES.includes(from)
+  setQuoteStatus(id, status, { reason: d.reason })
+  if (status === 'Refusé') q.refusalComment = d.comment || undefined
+  if (status === 'Payé') q.paidAt = d.paidAt ?? TODAY
+  if (status === 'Signé' && !q.signature) q.officeAcceptance = { at: now(), by: d.by, comment: d.comment || undefined }
+  if (wasFinal && !FINAL_STATUSES.includes(status)) {
+    q.followUpStopped = undefined
+    q.followUpPaused = true
+  }
+  q.statusLog = [...(q.statusLog ?? []), { status, from, at: now(), by: d.by, reason: d.reason, comment: d.comment || undefined, paidAt: status === 'Payé' ? q.paidAt : undefined, via: d.via }]
+  commit()
+}
+
+/** Delete quotes (needs the `quotes.delete` permission; confirm first). */
+export function removeQuotes(ids: string[]) {
+  for (const id of ids) {
+    const i = QUOTES.findIndex((q) => q.id === id)
+    if (i < 0) continue
+    const c = CLIENTS.find((x) => x.id === QUOTES[i].clientId)
+    if (c) c.quotes = Math.max(0, c.quotes - 1)
+    QUOTES.splice(i, 1)
+  }
   commit()
 }

@@ -23,8 +23,8 @@ export function PortalSection({ id, title, kicker, children, className }: { id?:
   )
 }
 
-/** Mockup: `u5`. */
-const TERMS: { t: string; d: string }[] = [
+/** Contract terms shown before signing and on the signed copy (mockup: `u5`). */
+export const TERMS: { t: string; d: string }[] = [
   { t: 'Droit de résolution', d: "Le consommateur peut résoudre le présent contrat, sans frais ni pénalité, à sa discrétion, dans les 10 jours suivant celui où chacune des parties est en possession d'un double du contrat signé (art. 58 de la Loi sur la protection du consommateur)." },
   { t: 'Validité et modifications', d: "Le prix soumis est valide pour la durée de l'offre indiquée. Tout travail supplémentaire fera l'objet d'un avenant écrit, approuvé par le client avant exécution." },
   { t: 'Dates des travaux', d: 'Les dates sont confirmées après réception de la mise de fond et peuvent être déplacées en raison de la météo.' },
@@ -60,10 +60,14 @@ export function TermsAccordion() {
   )
 }
 
-/** Freehand signature canvas (mockup: `m5`). `onChange(true)` once something is drawn. */
-export function SignaturePad({ onChange }: { onChange: (signed: boolean) => void }) {
+/**
+ * Freehand signature canvas (mockup: `m5`). `onChange(true)` once something is drawn; `onImage` receives
+ * the drawing as a PNG data URL after each stroke (undefined when cleared). `className` sizes the canvas.
+ */
+export function SignaturePad({ onChange, onImage, className, large }: { onChange: (signed: boolean) => void; onImage?: (dataUrl?: string) => void; className?: string; large?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
+  const drawn = useRef(false)
   const [signed, setSigned] = useState(false)
   const ready = useRef(false)
 
@@ -110,19 +114,23 @@ export function SignaturePad({ onChange }: { onChange: (signed: boolean) => void
     const ctx = canvasRef.current!.getContext('2d')!
     ctx.lineTo(x, y)
     ctx.stroke()
+    drawn.current = true
     if (!signed) {
       setSigned(true)
       onChange(true)
     }
   }
   const end = () => {
+    if (drawing.current && drawn.current && onImage) onImage(canvasRef.current!.toDataURL('image/png'))
     drawing.current = false
   }
   const clear = () => {
     const canvas = canvasRef.current!
     canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height)
+    drawn.current = false
     setSigned(false)
     onChange(false)
+    onImage?.(undefined)
   }
 
   return (
@@ -133,18 +141,18 @@ export function SignaturePad({ onChange }: { onChange: (signed: boolean) => void
         onPointerMove={move}
         onPointerUp={end}
         onPointerLeave={end}
-        className="w-full h-36 rounded-xl border border-dashed border-hairline-strong bg-sand touch-none cursor-crosshair"
+        className={cn('w-full h-36 rounded-xl border border-dashed border-hairline-strong bg-sand touch-none cursor-crosshair', className)}
         aria-label={t('Zone de signature')}
       />
       {!signed && (
-        <span className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-sm text-ink-faint">
-          <PenLine className="w-4 h-4" />
+        <span className={cn('pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-ink-faint', large ? 'text-lg' : 'text-sm')}>
+          <PenLine className={large ? 'w-5 h-5' : 'w-4 h-4'} />
           {t('Signez ici avec le doigt ou la souris')}
         </span>
       )}
       <div className="absolute left-4 right-4 bottom-8 border-b border-hairline-strong pointer-events-none" />
       {signed && (
-        <button onClick={clear} className="absolute top-2 right-2 btn btn-xs btn-ghost bg-white/80">
+        <button onClick={clear} className={cn('absolute top-2 right-2 btn btn-ghost bg-white/80', large ? 'btn-sm' : 'btn-xs')}>
           <Eraser className="w-3.5 h-3.5" />
           {t('Effacer')}
         </button>

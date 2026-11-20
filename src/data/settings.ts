@@ -15,11 +15,13 @@ export interface LeadSource {
   name: string
   active: boolean
   /** Where the lead comes from technically. */
-  kind: 'manuel' | 'formulaire' | 'google' | 'facebook' | 'telephone' | 'ia'
+  kind: 'manuel' | 'formulaire' | 'google' | 'telephone' | 'ia'
 }
 
-const KIND: Record<string, LeadSource['kind']> = { 'Site web': 'formulaire', Google: 'google', Facebook: 'facebook', 'Appel entrant': 'telephone', 'Agent IA': 'ia' }
-export const LEAD_SOURCES: LeadSource[] = SOURCES.map((name, i) => ({ id: 's' + i, name, active: true, kind: KIND[name] ?? 'manuel' }))
+const KIND: Record<string, LeadSource['kind']> = { 'Site web': 'formulaire', Google: 'google', 'Appel entrant': 'telephone', 'Agent IA': 'ia' }
+/** Facebook intake is phase 2: the source stays for historical leads but is inactive. */
+const PHASE_2_SOURCES = ['Facebook']
+export const LEAD_SOURCES: LeadSource[] = SOURCES.map((name, i) => ({ id: 's' + i, name, active: !PHASE_2_SOURCES.includes(name), kind: KIND[name] ?? 'manuel' }))
 
 export function saveLeadSource(s: LeadSource) {
   const i = LEAD_SOURCES.findIndex((x) => x.id === s.id)
@@ -186,7 +188,7 @@ export interface CompanyConnections {
   email: { domain: string; from: string; state: ConnectionState; detail?: string }
   websiteForm: { url: string; state: ConnectionState }
   google: { account: string; state: ConnectionState }
-  facebook: { page: string; state: ConnectionState }
+  // Facebook Lead Ads: phase 2
 }
 export const CONNECTIONS: Record<CompanyId, CompanyConnections> = {
   toit: {
@@ -194,21 +196,18 @@ export const CONNECTIONS: Record<CompanyId, CompanyConnections> = {
     email: { domain: 'toitureshillman.com', from: 'soumissions@toitureshillman.com', state: 'connecte' },
     websiteForm: { url: 'toitureshillman.com/soumission', state: 'connecte' },
     google: { account: 'Toitures Hillman · Google Ads', state: 'connecte' },
-    facebook: { page: 'Toitures Hillman', state: 'erreur' },
   },
   sg: {
     sms: { number: '418 915-3443', state: 'connecte' },
     email: { domain: 'signaturegouttieres.com', from: 'info@signaturegouttieres.com', state: 'en_attente', detail: 'Enregistrements DKIM à ajouter' },
     websiteForm: { url: 'signaturegouttieres.com/soumission', state: 'connecte' },
     google: { account: 'Signature Gouttières · Google Ads', state: 'connecte' },
-    facebook: { page: 'Signature Gouttières', state: 'connecte' },
   },
   reno: {
     sms: { number: '418 576-1993', state: 'en_attente', detail: 'Numéro partagé avec Toitures' },
     email: { domain: 'renovationshillman.com', from: '', state: 'non_configure' },
     websiteForm: { url: '', state: 'non_configure' },
     google: { account: '', state: 'non_configure' },
-    facebook: { page: '', state: 'non_configure' },
   },
 }
 export function saveConnections(company: CompanyId, c: CompanyConnections) {
@@ -250,3 +249,33 @@ export function updateDataRequest(id: string, patch: Partial<DataRequest>) {
 
 /** Feature flag: the AI agent is outside the 200 h plan and ships in January. */
 export const AI_AGENT_LIVE = false
+
+// ── Settings & Catalogue area: extra mutators ───────────────────────────────
+/** Remove a number from the STOP list (only after new written consent). */
+export function unOptOut(phone: string) {
+  SMS_OPT_OUTS.delete(phone.replace(/\D/g, ''))
+  commit()
+}
+/** Add a refusal reason, keeping "Autre" last. Returns false when it already exists. */
+export function addRefusalReason(name: string) {
+  const r = name.trim()
+  if (!r || REFUSAL_REASONS.some((x) => x.toLowerCase() === r.toLowerCase())) return false
+  const other = REFUSAL_REASONS.indexOf('Autre')
+  REFUSAL_REASONS.splice(other >= 0 ? other : REFUSAL_REASONS.length, 0, r)
+  commit()
+  return true
+}
+export function removeRefusalReason(name: string) {
+  const i = REFUSAL_REASONS.indexOf(name)
+  if (i >= 0) REFUSAL_REASONS.splice(i, 1)
+  commit()
+}
+/** Log a Loi 25 request. The due date is 30 days after reception when not given. */
+export function addDataRequest(r: Omit<DataRequest, 'id' | 'due' | 'status'> & Partial<Pick<DataRequest, 'due' | 'status'>>): DataRequest {
+  const d = new Date(r.received + 'T12:00:00')
+  d.setDate(d.getDate() + 30)
+  const req: DataRequest = { status: 'nouvelle', due: d.toISOString().slice(0, 10), ...r, id: 'dr' + Date.now() }
+  DATA_REQUESTS.push(req)
+  commit()
+  return req
+}

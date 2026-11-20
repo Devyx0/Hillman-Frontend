@@ -2,7 +2,6 @@ import { ChevronDown, LayoutList, List, Plus, RefreshCw, Scale, Search, Trash2, 
 import { Field } from '../../components/ui'
 import type { MaterialLine } from '../../data/mock'
 import { t } from '../../i18n'
-import { toast } from '../../lib/toast'
 import { cn, money, pct } from '../../lib/utils'
 import { TARGET_MARGIN } from '../../data/quote-builder'
 import { BuilderSection } from '../../components/quote-shared'
@@ -11,7 +10,7 @@ import type { Builder } from './useQuoteBuilder'
 const NUM_INPUT = 'h-8 px-2 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary'
 
 /** Catalogue picker: every item of the company, quantities typed in place. */
-function ListMode({ b }: { b: Builder }) {
+export function ListMode({ b }: { b: Builder }) {
   const { listDraft, listFilter } = b
   const update = (index: number, key: keyof MaterialLine, value: number) => b.setListDraft((prev) => prev.map((l, i) => (i === index ? { ...l, [key]: value } : l)))
   return (
@@ -91,7 +90,7 @@ function ListMode({ b }: { b: Builder }) {
 }
 
 /** Lines currently in the quote, grouped by category, with margin per line. */
-function StandardMode({ b }: { b: Builder }) {
+export function StandardMode({ b }: { b: Builder }) {
   const { costs } = b
   return (
     <>
@@ -150,7 +149,7 @@ function StandardMode({ b }: { b: Builder }) {
         </table>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <button className="btn btn-sm btn-quiet" onClick={() => toast(t('Item ajouté depuis le catalogue'))}>
+        <button className="btn btn-sm btn-quiet" onClick={b.openList}>
           <Plus className="w-4 h-4" />
           {t('Ajouter un item')}
         </button>
@@ -160,8 +159,8 @@ function StandardMode({ b }: { b: Builder }) {
             <p className="text-md font-semibold tnum">{money(b.costTotal, false)}</p>
           </div>
           <div className="rounded-lg bg-sand p-3">
-            <p className="label-caps">{t('Vendant')}</p>
-            <p className="text-md font-semibold tnum">{money(costs.reduce((n, l) => n + l.qty * l.sell, 0), false)}</p>
+            <p className="label-caps">{t('Prix de vente')}</p>
+            <p className="text-md font-semibold tnum">{money(b.subtotal, false)}</p>
           </div>
           <div className="rounded-lg bg-ink text-white p-3">
             <p className="label-caps text-white/70">{t('Profit estimé')}</p>
@@ -169,7 +168,29 @@ function StandardMode({ b }: { b: Builder }) {
           </div>
         </div>
       </div>
+      <SuggestedGap b={b} />
     </>
+  )
+}
+
+/** The selling price drives the quote; the catalogue rates are a suggestion (see data/quote-builder.ts). */
+export function SuggestedGap({ b }: { b: Builder }) {
+  const gap = b.suggested - b.subtotal
+  if (!b.costs.length) return null
+  if (Math.abs(gap) < 1)
+    return <p className="mt-3 text-xs text-ink-mute">{t('Vendant suggéré du catalogue : {amount} — égal au prix de vente.', { amount: money(b.suggested, false) })}</p>
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-tone-warn-soft text-tone-warn-ink px-3 py-2 text-xs font-medium">
+      <span className="flex-1 min-w-0">
+        {t('Vendant suggéré du catalogue : {amount} ({gap} vs le prix de vente). Le prix de vente reste celui de la section Prix.', {
+          amount: money(b.suggested, false),
+          gap: (gap > 0 ? '+' : '−') + ' ' + money(Math.abs(gap), false),
+        })}
+      </span>
+      <button className="btn btn-xs btn-secondary" onClick={b.applySuggested}>
+        {t('Appliquer au prix')}
+      </button>
+    </div>
   )
 }
 
@@ -180,7 +201,7 @@ const ACTUAL_FIELDS: ['conteneurs' | 'salaires' | 'frais', string][] = [
 ]
 
 /** Post-job actual costs vs estimate (roofing only). */
-function ActualProfit({ b }: { b: Builder }) {
+export function ActualProfit({ b }: { b: Builder }) {
   const { actuals, setActuals } = b
   return (
     <div className="mt-6 rounded-xl border border-hairline">
@@ -283,7 +304,6 @@ export function CoutantsSection({ b }: { b: Builder }) {
       }
     >
       {costMode === 'liste' ? <ListMode b={b} /> : <StandardMode b={b} />}
-      {b.quote.company === 'toit' && <ActualProfit b={b} />}
     </BuilderSection>
   )
 }

@@ -1,18 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, Search, UserPlus, Workflow, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Search, UserPlus, Users, Workflow, X } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { Select } from '../components/filters'
-import { Avatar, CompanyBadge, Page, PageHeader } from '../components/ui'
+import { SkeletonRows } from '../components/states'
+import { Avatar, CompanyBadge, Empty, Page, PageHeader } from '../components/ui'
 import { useApp } from '../context/AppContext'
-import { TOTAL_CLIENTS, companiesServing, relativeDay } from '../data/clients'
+import { CLIENT_COMPANIES, TOTAL_CLIENTS, companiesServing, relativeDay } from '../data/clients'
 import { CLIENTS, COMPANIES, fullName, type CompanyId } from '../data/mock'
+import { request, useStore } from '../data/store'
+import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn, normalize, num } from '../lib/utils'
 import { t } from '../i18n'
 
 export default function Clients() {
+  useStore()
   const navigate = useNavigate()
   const { scope } = useApp()
+  const { can } = useAuth()
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let live = true
+    request(null, { ms: 350 }).then(() => live && setLoading(false))
+    return () => {
+      live = false
+    }
+  }, [])
   const [query, setQuery] = useState('')
   const [type, setType] = useState('Tous')
   const [company, setCompany] = useState('Toutes')
@@ -49,11 +63,13 @@ export default function Clients() {
         title={t('Clients')}
         actions={
           <>
-            <button onClick={() => toast(t('Export CSV lancé'))} className="btn btn-sm btn-secondary">
-              <Download className="w-4 h-4" />
-              {t('Exporter')}
-            </button>
-            <button onClick={() => toast(t('Nouvelle fiche client'))} className="btn btn-sm btn-primary">
+            {can('clients.export') && (
+              <button onClick={() => toast(t('Export CSV lancé'))} className="btn btn-sm btn-secondary">
+                <Download className="w-4 h-4" />
+                {t('Exporter')}
+              </button>
+            )}
+            <button onClick={() => openCreate('client', { company: scope !== 'all' ? scope : undefined })} className="btn btn-sm btn-primary">
               <UserPlus className="w-4 h-4" />
               {t('Nouveau client')}
             </button>
@@ -95,7 +111,8 @@ export default function Clients() {
         </div>
       )}
       <div className="bg-white rounded-xl shadow-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {loading && <SkeletonRows rows={8} />}
+        <div className={cn('overflow-x-auto', loading && 'hidden')}>
           <table className="w-full min-w-[720px] [&_td]:px-3 [&_th]:px-3">
             <thead className="border-b border-hairline">
               <tr>
@@ -133,8 +150,10 @@ export default function Clients() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td text-center py-12 text-ink-mute">
-                    {t('Aucun client trouvé.')}
+                  <td colSpan={6}>
+                    <Empty icon={Users} title={t('Aucun client trouvé.')}>
+                      {query.trim() ? t('Vérifiez l’orthographe ou cherchez par téléphone.') : t('Créez une fiche avec « Nouveau client ».')}
+                    </Empty>
                   </td>
                 </tr>
               )}
@@ -143,7 +162,7 @@ export default function Clients() {
         </div>
         <div className="px-5 py-3 border-t border-hairline flex items-center justify-between text-xs text-ink-mute">
           <span className="tnum">
-            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(TOTAL_CLIENTS[scope]) })}
+            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(TOTAL_CLIENTS[scope] + Object.values(CLIENT_COMPANIES).filter((cs) => scope === 'all' || cs.includes(scope)).length) })}
           </span>
           <div className="flex items-center gap-1">
             <button className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Page précédente')} disabled>

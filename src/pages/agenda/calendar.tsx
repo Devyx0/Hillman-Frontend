@@ -1,42 +1,78 @@
 /**
- * Agenda calendar pieces. Private copies of mockup helpers that sit just
- * before the Agenda page in the bundle:
- *   $0→DAY_ABBR  Rd→DAY_NAMES  S4→capitalize  zs→TODAY_INDEX  _i→DAY_START
- *   F0→DAY_END  Cl→HOUR_HEIGHT  k4→NOW_HOUR  Bi→formatHour (lib/utils)
- *   zd→AGENDA_REPS  C4→EventChip  M4→layoutLanes  K0→HourGutter
- *   I0→DayColumn  E4→quotePath  T4→JobsStrip  R4→WeekView  z4→DayView
- *   D4→MonthView
+ * Agenda calendar pieces: week / day / month views, rep columns and the
+ * "Équipes" band (crews as rows with their scheduled job days and absences).
+ * Day numbers are absolute indexes from dim. 18 oct. 2026 (see data/crews.ts).
  */
 import type { CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
-import { Ban, HardHat, Sparkles } from 'lucide-react'
+import { Ban, CalendarOff, ChevronLeft, ChevronRight, HardHat, Sparkles } from 'lucide-react'
 import { RepAvatar } from '../../components/ui'
 import { inScope, useApp } from '../../context/AppContext'
-import { JOBS, QUOTES, REPS, companyById, repById, type Appointment } from '../../data/mock'
-import { cn, formatHour, money } from '../../lib/utils'
+import { APPOINTMENTS, JOBS, REPS, repById } from '../../data/mock'
+import { ABSENCES, CREWS, PROVIDER_LABEL, busyBlocksFor, calendarLink, dayDate, isScheduled, type AppointmentRecord, type Crew, type JobRecord } from '../../data/crews'
+import { cn, formatHour } from '../../lib/utils'
 import { getLang, t } from '../../i18n'
 
-const DAY_ABBR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
+export const DAY_ABBR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
 export const DAY_NAMES = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
 export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
-/** Index of "today" (mardi 20 oct.) within the displayed week (dim. 18 → sam. 24). */
+/** Day index of "today" (mardi 20 oct.). */
 export const TODAY_INDEX = 2
-const DAY_START = 7
-const DAY_END = 18
+export const DAY_START = 7
+export const DAY_END = 18
 const HOUR_HEIGHT = 56
 const NOW_HOUR = 9.1
 
 /** Reps who have a calendar (everyone but the coordinator). */
 export const AGENDA_REPS = REPS.filter((r) => r.id !== 'hpe')
 
-function EventChip({ a, onClick, style, compact }: { a: Appointment; onClick: () => void; style: CSSProperties; compact?: boolean }) {
+/** Something drawn in a rep column: an appointment, an absence or a busy block from Google/Outlook. */
+export type CalEvent = AppointmentRecord & { kind?: 'appt' | 'absence' | 'busy'; label?: string; absenceId?: string }
+
+/** Appointments + rep absences + imported busy blocks for the given reps. */
+export function calendarEvents(repIds: string[]): CalEvent[] {
+  const appts: CalEvent[] = (APPOINTMENTS as AppointmentRecord[]).filter((a) => repIds.includes(a.repId)).map((a) => ({ ...a, kind: 'appt' }))
+  const absences: CalEvent[] = ABSENCES.filter((a) => a.target === 'rep' && repIds.includes(a.targetId)).flatMap((a) =>
+    Array.from({ length: a.days }, (_, i) => ({
+      id: `abs-${a.id}-${i}`,
+      repId: a.targetId,
+      day: a.day + i,
+      start: a.start ?? DAY_START,
+      end: a.end ?? DAY_END,
+      title: a.reason,
+      city: '',
+      type: 'Non dispo',
+      kind: 'absence' as const,
+      label: t(a.reason),
+      absenceId: a.id,
+    })),
+  )
+  const busy: CalEvent[] = repIds.flatMap((id) =>
+    busyBlocksFor(id).map((b) => ({ id: `busy-${b.id}`, repId: id, day: b.day, start: b.start, end: b.end, title: 'Occupé', city: '', type: 'Non dispo', kind: 'busy' as const, label: t('Occupé · {p}', { p: PROVIDER_LABEL[calendarLink(id)!.provider] }) })),
+  )
+  return [...appts, ...absences, ...busy]
+}
+
+function EventChip({ a, onClick, style, compact }: { a: CalEvent; onClick: () => void; style: CSSProperties; compact?: boolean }) {
   const rep = repById(a.repId)!
   if (a.type === 'Non dispo') {
+    const Icon = a.kind === 'busy' ? CalendarOff : Ban
+    const text = a.label ? `${a.label} · ${rep.first}` : t('Non dispo · {name}', { name: rep.first })
+    const cls = cn(
+      'absolute text-left rounded-md border text-2xs text-ink-mute p-1.5 overflow-hidden bg-[repeating-linear-gradient(135deg,var(--color-sand)_0_6px,var(--color-stone)_6px_12px)]',
+      a.kind === 'busy' ? 'border-dashed border-hairline-strong' : 'border-hairline-strong',
+    )
+    if (a.kind === 'absence')
+      return (
+        <button style={style} onClick={onClick} className={cn(cls, 'hover:shadow-elevated hover:z-20')} title={text}>
+          <Icon className="w-3 h-3 inline mr-1" />
+          {text}
+        </button>
+      )
     return (
-      <div style={style} className="absolute rounded-md border border-hairline-strong text-2xs text-ink-mute p-1.5 overflow-hidden bg-[repeating-linear-gradient(135deg,var(--color-sand)_0_6px,var(--color-stone)_6px_12px)]">
-        <Ban className="w-3 h-3 inline mr-1" />
-        {t('Non dispo · {name}', { name: rep.first })}
+      <div style={style} className={cls} title={text}>
+        <Icon className="w-3 h-3 inline mr-1" />
+        {text}
       </div>
     )
   }
@@ -47,7 +83,7 @@ function EventChip({ a, onClick, style, compact }: { a: Appointment; onClick: ()
       className={cn('absolute text-left rounded-md border-l-[3px] px-1.5 py-1 overflow-hidden hover:shadow-elevated hover:z-20 transition-shadow', `bg-${rep.color} text-${rep.color}-ink border-${rep.color}-ink`)}
     >
       <p className="text-2xs font-bold leading-tight truncate flex items-center gap-1">
-        {a.aiBooked && <Sparkles className="w-2.5 h-2.5 shrink-0" />}
+        {a.aiBooked && <Sparkles className="w-2.5 h-2.5 shrink-0" aria-label={t("Réservé par l'agent IA")} />}
         {a.city || t(a.title)}
       </p>
       {!compact && <p className="text-2xs leading-tight truncate opacity-90">{t(a.title)}</p>}
@@ -57,10 +93,10 @@ function EventChip({ a, onClick, style, compact }: { a: Appointment; onClick: ()
 }
 
 /** Packs overlapping appointments into side-by-side lanes. */
-function layoutLanes(evts: Appointment[]) {
+function layoutLanes(evts: CalEvent[]) {
   const sorted = [...evts].sort((a, b) => a.start - b.start)
-  const out: { a: Appointment; lane: number; of: number }[] = []
-  let group: { a: Appointment; lane: number }[] = []
+  const out: { a: CalEvent; lane: number; of: number }[] = []
+  let group: { a: CalEvent; lane: number }[] = []
   let groupEnd = -1
   const flush = () => {
     const of = Math.max(1, ...group.map((g) => g.lane + 1))
@@ -91,18 +127,22 @@ function HourGutter() {
   )
 }
 
-function DayColumn({ evts, onOpen, today, dot = true }: { evts: Appointment[]; onOpen: (a: Appointment) => void; today?: boolean; dot?: boolean }) {
+function DayColumn({ evts, onOpen, today, dot = true }: { evts: CalEvent[]; onOpen: (a: CalEvent) => void; today?: boolean; dot?: boolean }) {
   return (
     <div className={cn('relative flex-1 min-w-0 border-l border-hairline grid-bg', today && 'bg-primary-wash/50')} style={{ height: (DAY_END - DAY_START) * HOUR_HEIGHT, backgroundSize: `100% ${HOUR_HEIGHT}px` }}>
-      {layoutLanes(evts).map(({ a, lane, of }) => (
-        <EventChip
-          key={a.id}
-          a={a}
-          onClick={() => onOpen(a)}
-          compact={a.end - a.start < 1}
-          style={{ top: (a.start - DAY_START) * HOUR_HEIGHT + 1, height: (a.end - a.start) * HOUR_HEIGHT - 3, left: `calc(${(lane / of) * 100}% + 2px)`, width: `calc(${100 / of}% - 4px)` }}
-        />
-      ))}
+      {layoutLanes(evts).map(({ a, lane, of }) => {
+        const start = Math.max(DAY_START, a.start)
+        const end = Math.min(DAY_END, a.end)
+        return (
+          <EventChip
+            key={a.id}
+            a={a}
+            onClick={() => onOpen(a)}
+            compact={end - start < 1}
+            style={{ top: (start - DAY_START) * HOUR_HEIGHT + 1, height: Math.max(18, (end - start) * HOUR_HEIGHT - 3), left: `calc(${(lane / of) * 100}% + 2px)`, width: `calc(${100 / of}% - 4px)` }}
+          />
+        )
+      })}
       {today && (
         <div className="absolute left-0 right-0 z-10 flex items-center" style={{ top: (NOW_HOUR - DAY_START) * HOUR_HEIGHT }}>
           {dot && <span className="w-2 h-2 rounded-full bg-tone-critical -ml-1" />}
@@ -113,90 +153,153 @@ function DayColumn({ evts, onOpen, today, dot = true }: { evts: Appointment[]; o
   )
 }
 
-const quotePath = (no: string) => {
-  const q = QUOTES.find((x) => x.no === no)
-  return q ? `/soumissions/${q.id}` : '/soumissions'
+/* ── Équipes band ──────────────────────────────────────────────────────── */
+
+/** Crews in the current company scope (active only). */
+export function useScopedCrews(): Crew[] {
+  const { scope } = useApp()
+  return CREWS.filter((c) => c.active && inScope(scope, c.company))
 }
 
-/** Strip of scheduled jobs ("jours de travaux") above the week grid. */
-function JobsStrip({ cols }: { cols: number[] }) {
-  const { scope } = useApp()
-  const jobs = JOBS.filter((j) => j.startDay !== undefined && j.crewId && inScope(scope, j.company) && j.startDay <= 4 && j.startDay + j.days > 0)
+/**
+ * Crews as rows over the given days: scheduled jobs as bars (click → job drawer), crew absences
+ * as hatched "Non dispo" blocks.
+ */
+export function CrewBand({ days, onOpenJob, onOpenAbsence }: { days: number[]; onOpenJob: (j: JobRecord) => void; onOpenAbsence: (id: string) => void }) {
+  const crews = useScopedCrews()
+  const first = days[0]
+  const last = days[days.length - 1]
+  const grid = { display: 'grid', gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))`, gridAutoRows: '24px', rowGap: 3 } as const
   return (
-    <div className="flex border-b border-hairline bg-sand/60">
-      <div className="w-12 shrink-0 flex items-center justify-end pr-2">
-        <HardHat className="w-3.5 h-3.5 text-ink-mute" aria-label={t('Jours de travaux')} />
+    <div className="border-b border-hairline bg-sand/60">
+      <div className="flex items-center gap-1.5 px-2 pt-1.5 text-2xs font-semibold text-ink-mute">
+        <HardHat className="w-3.5 h-3.5" />
+        {t('Équipes')}
       </div>
-      <div className="flex-1 relative py-1.5" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(0,1fr))`, gridAutoRows: '22px', rowGap: 3 }}>
-        {jobs.map((j) => {
-          const from = Math.max(1, j.startDay! + 1)
-          const to = Math.min(6, j.startDay! + j.days)
-          const col = cols.indexOf(from)
-          if (col < 0) return null
-          const span = Math.max(1, cols.filter((c) => c >= from && c <= to).length)
-          return (
-            <Link
-              key={j.id}
-              to={quotePath(j.quoteNo)}
-              style={{ gridColumn: `${col + 1} / span ${span}` }}
-              className={cn('mx-0.5 rounded px-1.5 text-2xs font-semibold truncate flex items-center gap-1 border', companyById(j.company).tone)}
-              title={`${j.client} · ${j.quoteNo} · ${money(j.amount, false)}`}
-            >
-              <span className="truncate">
-                {j.client} · {j.quoteNo}
+      {crews.length === 0 && <p className="px-14 py-2 text-2xs text-ink-mute">{t('Aucune équipe active pour cette compagnie.')}</p>}
+      {crews.map((crew) => {
+        const jobs = (JOBS as JobRecord[]).filter((j) => j.crewId === crew.id && isScheduled(j) && j.startDay! <= last && j.startDay! + j.days - 1 >= first)
+        const absences = ABSENCES.filter((a) => a.target === 'crew' && a.targetId === crew.id && a.day <= last && a.day + a.days - 1 >= first)
+        const span = (start: number, len: number) => {
+          const from = Math.max(first, start)
+          const to = Math.min(last, start + len - 1)
+          return { gridColumn: `${from - first + 1} / span ${to - from + 1}`, cutLeft: start < first, cutRight: start + len - 1 > last }
+        }
+        return (
+          <div key={crew.id} className="flex py-1">
+            <div className="w-12 shrink-0 flex items-center justify-end pr-1.5">
+              <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', `bg-${crew.color} text-${crew.color}-ink border-${crew.color}-edge`)} title={t(crew.name)}>
+                {crew.code}
               </span>
-            </Link>
-          )
-        })}
-      </div>
+            </div>
+            <div className="flex-1 min-w-0" style={grid}>
+              {absences.map((a) => {
+                const s = span(a.day, a.days)
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => onOpenAbsence(a.id)}
+                    style={{ gridColumn: s.gridColumn, gridRow: 1 }}
+                    className="mx-0.5 rounded px-1.5 text-2xs font-semibold text-ink-mute truncate flex items-center gap-1 border border-hairline-strong bg-[repeating-linear-gradient(135deg,var(--color-sand)_0_6px,var(--color-stone)_6px_12px)]"
+                    title={`${t(crew.name)} · ${t(a.reason)}`}
+                  >
+                    <Ban className="w-3 h-3 shrink-0" />
+                    <span className="truncate">
+                      {t('Non dispo')} · {t(a.reason)}
+                    </span>
+                  </button>
+                )
+              })}
+              {jobs.map((j) => {
+                const s = span(j.startDay!, j.days)
+                return (
+                  <button
+                    key={j.id}
+                    onClick={() => onOpenJob(j)}
+                    style={{ gridColumn: s.gridColumn }}
+                    className={cn('mx-0.5 rounded px-1.5 text-2xs font-semibold truncate flex items-center gap-1 border text-left hover:shadow-elevated', `bg-${crew.color} text-${crew.color}-ink border-${crew.color}-edge`)}
+                    title={`${t(crew.name)} · ${j.client} · ${j.quoteNo}`}
+                  >
+                    {s.cutLeft && <ChevronLeft className="w-3 h-3 shrink-0 -ml-1" />}
+                    <span className="truncate flex-1">
+                      {j.client} · {j.quoteNo}
+                    </span>
+                    {s.cutRight && <ChevronRight className="w-3 h-3 shrink-0 -mr-1" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-export function WeekView({ evts, onOpen, showJobs }: { evts: Appointment[]; onOpen: (a: Appointment) => void; showJobs: boolean }) {
-  const days = [0, 1, 2, 3, 4, 5, 6]
+/* ── Views ─────────────────────────────────────────────────────────────── */
+
+interface ViewProps {
+  evts: CalEvent[]
+  onOpen: (a: CalEvent) => void
+  showCrews: boolean
+  onOpenJob: (j: JobRecord) => void
+  onOpenAbsence: (id: string) => void
+}
+
+export function WeekView({ weekStart, evts, onOpen, showCrews, onOpenJob, onOpenAbsence }: ViewProps & { weekStart: number }) {
+  const days = Array.from({ length: 7 }, (_, i) => weekStart + i)
+  const inWeek = evts.filter((e) => days.includes(e.day))
+  const noAppointments = !inWeek.some((e) => e.type !== 'Non dispo')
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <div className="min-w-[760px]">
         <div className="flex border-b border-hairline">
           <div className="w-12 shrink-0" />
-          {days.map((d) => (
-            <div key={d} className={cn('flex-1 py-2.5 text-center border-l border-hairline', d === TODAY_INDEX && 'bg-primary-wash/50')}>
-              <p className="label-caps">{t(DAY_ABBR[d])}</p>
-              <p className={cn('text-lg font-semibold tnum mx-auto w-8 h-8 rounded-full flex items-center justify-center', d === TODAY_INDEX ? 'bg-primary text-white' : 'text-ink')}>{18 + d}</p>
-            </div>
-          ))}
+          {days.map((d) => {
+            const date = dayDate(d)
+            return (
+              <div key={d} className={cn('flex-1 py-2.5 text-center border-l border-hairline', d === TODAY_INDEX && 'bg-primary-wash/50')}>
+                <p className="label-caps">{t(DAY_ABBR[date.getDay()])}</p>
+                <p className={cn('text-lg font-semibold tnum mx-auto w-8 h-8 rounded-full flex items-center justify-center', d === TODAY_INDEX ? 'bg-primary text-white' : 'text-ink')}>{date.getDate()}</p>
+              </div>
+            )
+          })}
         </div>
-        {showJobs && <JobsStrip cols={days} />}
-        <div className="flex pt-2 max-h-[620px] overflow-y-auto">
+        {showCrews && <CrewBand days={days} onOpenJob={onOpenJob} onOpenAbsence={onOpenAbsence} />}
+        <div className="relative flex pt-2 max-h-[620px] overflow-y-auto">
           <HourGutter />
           {days.map((d) => (
-            <DayColumn key={d} today={d === TODAY_INDEX} evts={evts.filter((e) => e.day === d)} onOpen={onOpen} />
+            <DayColumn key={d} today={d === TODAY_INDEX} evts={inWeek.filter((e) => e.day === d)} onOpen={onOpen} />
           ))}
+          {noAppointments && (
+            <p className="absolute left-1/2 top-24 -translate-x-1/2 z-10 rounded-full bg-white shadow-card px-3 py-1.5 text-xs text-ink-mute whitespace-nowrap">{t('Aucun rendez-vous cette semaine')}</p>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-export function DayView({ evts, reps, onOpen }: { evts: Appointment[]; reps: string[]; onOpen: (a: Appointment) => void }) {
+export function DayView({ day, evts, reps, onOpen, showCrews, onOpenJob, onOpenAbsence }: ViewProps & { day: number; reps: string[] }) {
+  const today = day === TODAY_INDEX
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[760px]">
+    <div className="relative overflow-x-auto">
+      <div className={cn(reps.length > 2 && 'min-w-[760px]')}>
         <div className="flex border-b border-hairline">
           <div className="w-12 shrink-0" />
           {reps.map((id) => (
             <div key={id} className="flex-1 py-2.5 px-2 border-l border-hairline flex items-center justify-center gap-2 min-w-0">
               <RepAvatar id={id} size="sm" />
               <span className="text-xs font-semibold text-ink truncate">{repById(id)!.first}</span>
-              <span className="text-2xs text-ink-mute tnum">{evts.filter((e) => e.repId === id && e.day === TODAY_INDEX).length}</span>
+              <span className="text-2xs text-ink-mute tnum">{evts.filter((e) => e.repId === id && e.day === day && e.type !== 'Non dispo').length}</span>
             </div>
           ))}
         </div>
+        {showCrews && <CrewBand days={[day]} onOpenJob={onOpenJob} onOpenAbsence={onOpenAbsence} />}
         <div className="flex pt-2 max-h-[620px] overflow-y-auto">
           <HourGutter />
           {reps.map((id, i) => (
-            <DayColumn key={id} today dot={i === 0} evts={evts.filter((e) => e.repId === id && e.day === TODAY_INDEX)} onOpen={onOpen} />
+            <DayColumn key={id} today={today} dot={i === 0} evts={evts.filter((e) => e.repId === id && e.day === day)} onOpen={onOpen} />
           ))}
         </div>
       </div>
@@ -204,17 +307,17 @@ export function DayView({ evts, reps, onOpen }: { evts: Appointment[]; reps: str
   )
 }
 
-export function MonthView({ evts, onPickWeek }: { evts: Appointment[]; onPickWeek: () => void }) {
+/** October 2026. Days with data use the real appointments; other days show the mockup's sample density. */
+export function MonthView({ evts, onPickDay }: { evts: CalEvent[]; onPickDay: (day: number) => void }) {
   const cells = Array.from({ length: 35 }, (_, i) => i - 4 + 1)
   const weekend = (d: number) => new Date(2026, 9, d).getDay() % 6 === 0
-  const countFor = (d: number) =>
-    d >= 18 && d <= 24
-      ? evts.filter((e) => e.day === d - 18 && e.type !== 'Non dispo').length
-      : d < 1 || d > 31
-        ? 0
-        : d > 24
-          ? Math.max(0, ((d * 7) % 9) - (weekend(d) ? 9 : 0))
-          : ((d * 5) % 11) + (weekend(d) ? -8 : 2)
+  const realDays = new Set(evts.filter((e) => e.kind === 'appt').map((e) => e.day))
+  const countFor = (d: number) => {
+    const idx = d - 18
+    if ((d >= 18 && d <= 24) || realDays.has(idx)) return evts.filter((e) => e.day === idx && e.type !== 'Non dispo').length
+    if (d < 1 || d > 31) return 0
+    return d > 24 ? Math.max(0, ((d * 7) % 9) - (weekend(d) ? 9 : 0)) : ((d * 5) % 11) + (weekend(d) ? -8 : 2)
+  }
   return (
     <div className="p-4">
       <div className="grid grid-cols-7 gap-px bg-hairline rounded-lg overflow-hidden">
@@ -226,9 +329,13 @@ export function MonthView({ evts, onPickWeek }: { evts: Appointment[]; onPickWee
         {cells.map((d, i) => {
           const inMonth = d >= 1 && d <= 31
           const count = Math.max(0, countFor(d))
+          const off = evts.some((e) => e.day === d - 18 && e.kind === 'absence')
           return (
-            <button key={i} onClick={onPickWeek} disabled={!inMonth} className={cn('bg-white min-h-[84px] p-2 text-left flex flex-col gap-1 hover:bg-primary-wash/40 disabled:bg-sand/40 disabled:hover:bg-sand/40', d === 20 && 'ring-2 ring-inset ring-primary')}>
-              <span className={cn('text-sm font-semibold tnum', inMonth ? (d === 20 ? 'text-primary-press' : 'text-ink') : 'text-ink-faint')}>{inMonth ? d : ''}</span>
+            <button key={i} onClick={() => onPickDay(d - 18)} disabled={!inMonth} className={cn('bg-white min-h-[64px] sm:min-h-[84px] p-1.5 sm:p-2 text-left flex flex-col gap-1 hover:bg-primary-wash/40 disabled:bg-sand/40 disabled:hover:bg-sand/40', d === 20 && 'ring-2 ring-inset ring-primary')}>
+              <span className={cn('text-sm font-semibold tnum flex items-center gap-1', inMonth ? (d === 20 ? 'text-primary-press' : 'text-ink') : 'text-ink-faint')}>
+                {inMonth ? d : ''}
+                {inMonth && off && <Ban className="w-3 h-3 text-ink-mute" aria-label={t('Non dispo')} />}
+              </span>
               {inMonth && count > 0 && (
                 <>
                   <div className="flex flex-wrap gap-0.5">

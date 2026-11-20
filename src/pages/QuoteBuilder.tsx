@@ -1,34 +1,77 @@
-import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, CircleCheck, CircleDot, Copy, Ellipsis, Eye, GitBranch, MapPin, Printer, Send } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Check, CircleCheck, CircleDot, Copy, Ellipsis, Eye, FileQuestion, GitBranch, MapPin, Printer, Send, WifiOff } from 'lucide-react'
+import { useAuth } from '../auth/AuthContext'
 import { ActionsMenu, ComposeDrawer } from '../components/messaging'
-import { Page, RepAvatar, type Icon } from '../components/ui'
-import { QUOTES, QUOTE_STATUSES, fullName, repById, type Quote } from '../data/mock'
+import { StatusPicker } from '../components/quote-shared'
+import { NoAccess } from '../components/states'
+import { Empty, Page, RepAvatar, type Icon } from '../components/ui'
+import { fullName } from '../data/mock'
+import { leadById } from '../data/leads'
+import { cloneQuote, newVersion } from '../data/quote-builder'
+import { quoteById, useStore, type QuoteRecord } from '../data/store'
 import { t } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, money } from '../lib/utils'
 import { CoutantsSection } from './quote-builder/CoutantsSection'
 import { EnvoiSection } from './quote-builder/EnvoiSection'
+import { FormulaireSection, QuantitesSection } from './quote-builder/GutterSections'
 import { ExpertisesSection, GarantiesSection, InfosSection, ObligationsSection, TravauxSection } from './quote-builder/InfosSections'
-import { Select } from '../components/filters'
+import { PhotosSection } from './quote-builder/PhotosSection'
 import { AutresSection, NotesSection, PrixSection } from './quote-builder/PrixSections'
+import { BudgetSection, DescriptionSection, VersionsSection } from './quote-builder/RenoSections'
+import { SuiviSection } from './quote-builder/SuiviSection'
 import { MobileTotalBar, SummaryRail } from './quote-builder/Summary'
 import { useQuoteBuilder, type Builder } from './quote-builder/useQuoteBuilder'
+import type { SectionId } from '../data/quote-builder'
 
-/** Route `soumissions/:id` — remounts the editor when the id changes (mockup: `u4`). */
+/**
+ * Route `soumissions/:id` — remounts the editor when the id changes (mockup: `u4`).
+ * Reads the quote from the store, so quotes created in this session (new-quote flow, versions) open too.
+ */
 export default function QuoteBuilderPage() {
+  useStore()
   const { id } = useParams()
-  const quote = QUOTES.find((q) => q.id === id) ?? QUOTES[0]
+  const { user, can, companies } = useAuth()
+  const quote = quoteById(id)
+  if (!quote)
+    return (
+      <Page>
+        <div className="card p-6">
+          <Empty icon={FileQuestion} title={t('Soumission introuvable')}>
+            <Link to="/soumissions" className="btn btn-sm btn-secondary mt-3">
+              {t('Retour aux soumissions')}
+            </Link>
+          </Empty>
+        </div>
+      </Page>
+    )
+  const mine = !!user && quote.repId === user.repId
+  if (!companies.includes(quote.company) || (!mine && !can('quotes.viewAll')))
+    return (
+      <Page>
+        <div className="card">
+          <NoAccess>{t('Cette soumission appartient à un autre représentant ou à une compagnie à laquelle vous n’avez pas accès.')}</NoAccess>
+        </div>
+      </Page>
+    )
   return <QuoteBuilder key={id} quote={quote} />
 }
 
 /** Title card: client, status, and the main actions. */
 function Header({ b }: { b: Builder }) {
   const navigate = useNavigate()
-  const { quote, client, company, status } = b
-  const more: { icon: Icon; label: string; toast: string }[] = [
-    { icon: Copy, label: t('Dupliquer'), toast: t('Soumission dupliquée') },
-    { icon: GitBranch, label: t('Nouvelle version'), toast: t('Version 2 créée — la v1 reste consultable') },
-    { icon: Printer, label: t('Télécharger le PDF'), toast: t('PDF généré (gabarit {company})', { company: company.name }) },
+  const { quote, client, company } = b
+  const lead = leadById(quote.leadId)
+  const copy = (asVersion: boolean) => {
+    const next = asVersion ? newVersion(quote) : cloneQuote(quote, { parentId: undefined, version: 1 })
+    if (!next) return
+    toast(asVersion ? t('Version {n} créée — la version {from} reste consultable', { n: next.version ?? 2, from: quote.version ?? 1 }) : t('Soumission dupliquée : {no}', { no: next.no }))
+    navigate(`/soumissions/${next.id}`)
+  }
+  const more: { icon: Icon; label: string; run: () => void }[] = [
+    { icon: Copy, label: t('Dupliquer'), run: () => copy(false) },
+    { icon: GitBranch, label: t('Nouvelle version'), run: () => copy(true) },
+    { icon: Printer, label: t('Télécharger le PDF'), run: () => toast(t('PDF généré (gabarit {company})', { company: company.name })) },
   ]
   return (
     <div className="space-y-4">
@@ -38,10 +81,14 @@ function Header({ b }: { b: Builder }) {
       </button>
       <div className="bg-white rounded-xl shadow-card p-5 flex flex-col lg:flex-row lg:items-center gap-4">
         <div className="min-w-0 flex-1 space-y-2">
-          <p className="eyebrow text-ink-mute tnum">{quote.no}</p>
+          <p className="eyebrow text-ink-mute tnum">
+            {quote.no}
+            {(quote.version ?? 1) > 1 && ` · V${quote.version}`}
+          </p>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-ink">{fullName(client)}</h1>
           <p className="text-md text-ink-secondary -mt-1">
-            {t(quote.workType)} · {money(b.subtotal, false)}
+            {t(quote.workType)} · <span className="tnum">{money(b.subtotal, false)}</span>
+            <span className="text-ink-mute text-sm tnum"> · {t('{total} taxes incluses', { total: money(b.total) })}</span>
           </p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-mute">
             <span className="flex items-center gap-1.5">
@@ -50,8 +97,13 @@ function Header({ b }: { b: Builder }) {
             </span>
             <span className="flex items-center gap-1.5">
               <RepAvatar id={b.repId} size="xs" />
-              {repById(b.repId)!.name}
+              {b.rep.name}
             </span>
+            {lead && (
+              <Link to={`/leads/${lead.id}`} className="hover:text-ink underline-offset-2 hover:underline">
+                {t('Lead : {name}', { name: lead.name })}
+              </Link>
+            )}
             {quote.views > 0 && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tone-good-soft text-tone-good-ink text-xs font-semibold">
                 <Eye className="w-3.5 h-3.5" />
@@ -60,19 +112,8 @@ function Header({ b }: { b: Builder }) {
             )}
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-          <div className="w-full sm:w-56">
-            <Select
-              value={status}
-              onChange={(s) => {
-                b.setStatus(s)
-                toast(t('Statut → {s}', { s: t(s) }))
-              }}
-              options={QUOTE_STATUSES.map((s) => ({ value: s as string, label: t(s) }))}
-              searchable={false}
-              variant={status === 'Signé' ? 'accent' : 'default'}
-            />
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <StatusPicker q={quote} via="soumission" align="right" />
           <div className="flex flex-wrap items-center gap-2">
             <a href={`#/portail/${quote.no}`} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">
               <Eye className="w-4 h-4" />
@@ -96,7 +137,7 @@ function Header({ b }: { b: Builder }) {
                         key={m.label}
                         onClick={() => {
                           b.setMoreMenu(false)
-                          toast(m.toast)
+                          m.run()
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-ink-secondary hover:bg-sand"
                       >
@@ -115,12 +156,48 @@ function Header({ b }: { b: Builder }) {
   )
 }
 
-/** The soumission editor (mockup: `d4`). */
-function QuoteBuilder({ quote }: { quote: Quote }) {
+/** "Hors ligne" banner: the rep keeps working; changes are queued and synced when the network returns. */
+function OfflineBanner({ b }: { b: Builder }) {
+  const { online, pending } = b.conn
+  if (online) return null
+  return (
+    <div className="sticky top-16 z-30 rounded-lg bg-ink text-white px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" role="status">
+      <WifiOff className="w-4 h-4 shrink-0" />
+      <span className="font-semibold">{t('Hors ligne')}</span>
+      <span className="text-white/80">
+        {pending ? t('{n} modifications en attente — synchronisées au retour du réseau', { n: pending }) : t('Vos modifications seront gardées sur l’appareil et synchronisées au retour du réseau.')}
+      </span>
+    </div>
+  )
+}
+
+const RENDER: Record<SectionId, (b: Builder) => React.ReactNode> = {
+  infos: (b) => <InfosSection b={b} />,
+  obligations: (b) => <ObligationsSection b={b} />,
+  formulaire: (b) => <FormulaireSection b={b} />,
+  photos: (b) => <PhotosSection b={b} />,
+  quantites: (b) => <QuantitesSection b={b} />,
+  description: (b) => <DescriptionSection b={b} />,
+  travaux: (b) => <TravauxSection b={b} />,
+  expertises: (b) => <ExpertisesSection b={b} />,
+  coutants: (b) => <CoutantsSection b={b} />,
+  budget: (b) => <BudgetSection b={b} />,
+  versions: (b) => <VersionsSection b={b} />,
+  garanties: (b) => <GarantiesSection b={b} />,
+  prix: (b) => <PrixSection b={b} />,
+  notes: (b) => <NotesSection b={b} />,
+  autres: (b) => <AutresSection b={b} />,
+  envoi: (b) => <EnvoiSection b={b} />,
+  suivi: (b) => <SuiviSection b={b} />,
+}
+
+/** The soumission editor (mockup: `d4`). Tabs and options differ per company (PDF item 11). */
+function QuoteBuilder({ quote }: { quote: QuoteRecord }) {
   const b = useQuoteBuilder(quote)
   const { sections, activeSection, done } = b
   return (
     <Page wide className="pb-24">
+      <OfflineBanner b={b} />
       <Header b={b} />
 
       {/* Section tabs (below 2xl) */}
@@ -148,16 +225,9 @@ function QuoteBuilder({ quote }: { quote: Quote }) {
         </aside>
 
         <div className="space-y-6 min-w-0">
-          <InfosSection b={b} />
-          <ObligationsSection b={b} />
-          {b.hasSection('travaux') && <TravauxSection b={b} />}
-          {b.hasSection('expertises') && <ExpertisesSection b={b} />}
-          <CoutantsSection b={b} />
-          {b.hasSection('garanties') && <GarantiesSection b={b} />}
-          <PrixSection b={b} />
-          <NotesSection b={b} />
-          <AutresSection b={b} />
-          <EnvoiSection b={b} />
+          {sections.map((s) => (
+            <div key={s.id}>{RENDER[s.id](b)}</div>
+          ))}
         </div>
 
         <SummaryRail b={b} />

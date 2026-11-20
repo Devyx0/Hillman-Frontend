@@ -6,20 +6,45 @@
  * Dd→SWATCH_CLASS  e5→SWATCHES  a5→FOLLOW_UP_EMAIL  s5→AUDIT_LOG
  */
 import type { CompanyId, ScopeSection } from '../../data/mock'
+import { commit } from '../../data/store'
+import { ROOF_DEFAULT_SCOPE, ROOF_SCOPE_SECTIONS } from '../../data/roofing-clauses'
 
+/**
+ * Signature Gouttières clauses. `{token}` placeholders fill themselves in from the quote's
+ * measurements (see GUTTER_TOKENS) when the clause is added to a quote.
+ */
 export const GUTTER_SCOPE: ScopeSection[] = [
-  { name: 'Gouttières', lines: ['Gouttières aluminium 5 po sans joint, formées sur place', 'Gouttières aluminium 6 po (modèles Distinction)', "Gouttières d'acier", 'Crochets vissés Suprême aux 16 po'] },
-  { name: 'Descentes et coudes', lines: ['Tuyaux de descente 2 × 3 po', 'Tuyaux de descente 3 × 4 po', 'Coudes A et B selon le parcours'] },
-  { name: 'Protège-gouttières', lines: ['ZONE DÉGAGÉE — T-Rex M-5200 (crochet continu)', 'ZONE DÉGAGÉE — T-Rex XL M-5800 (crochet continu)', 'ZONE AVEC DÉBRIS — DoublePro D-11500 (microfiltrant)', 'Pare-feuilles 5300 zip'] },
-  { name: 'Soffite et fascia', lines: ['Soffite ventilé aluminium', "Fascia 2 × 6 recouvert d'aluminium", 'Moulure J'] },
-  { name: 'Services', lines: ['Enlever les gouttières existantes (E.G.E.)', 'Nettoyage et vidange des gouttières', 'Réparation de fuites et réalignement'] },
+  { name: 'Gouttières', lines: ['Fourniture et installation de {pi_gouttieres} pi lin. de gouttières aluminium {modele} po sans joint, formées sur place', 'Gouttières aluminium 6 po (modèles Distinction)', "Gouttières d'acier", 'Crochets vissés Suprême aux 16 po ({nb_crochets} crochets)'] },
+  { name: 'Descentes et coudes', lines: ['{nb_descentes} descentes 2 × 3 po, total {pi_descentes} pi lin.', '{nb_descentes} descentes 3 × 4 po, total {pi_descentes} pi lin.', '{nb_coudes} coudes A et B selon le parcours'] },
+  { name: 'Protège-gouttières', lines: ['ZONE DÉGAGÉE — T-Rex M-5200 (crochet continu) sur {pi_protege} pi lin.', 'ZONE DÉGAGÉE — T-Rex XL M-5800 (crochet continu) sur {pi_protege} pi lin.', 'ZONE AVEC DÉBRIS — DoublePro D-11500 (microfiltrant) sur {pi_protege} pi lin.', 'Pare-feuilles 5300 zip'] },
+  { name: 'Soffite et fascia', lines: ['Soffite ventilé aluminium ({pi_soffite} pi lin.)', "Fascia 2 × 6 recouvert d'aluminium ({pi_fascia} pi lin.)", 'Moulure J'] },
+  { name: 'Services', lines: ['Enlever les gouttières existantes (E.G.E.) — {pi_gouttieres} pi lin.', 'Nettoyage et vidange des gouttières', 'Réparation de fuites et réalignement', 'Couleur : {couleur}'] },
 ]
 
+/** Tokens usable in gutter clauses: French label + sample value for previews. */
+export const GUTTER_TOKENS: Record<string, { label: string; sample: string }> = {
+  pi_gouttieres: { label: 'Pieds linéaires de gouttières', sample: '140' },
+  modele: { label: 'Modèle (5 ou 6 po)', sample: '5' },
+  nb_crochets: { label: 'Nombre de crochets', sample: '105' },
+  nb_descentes: { label: 'Nombre de descentes', sample: '4' },
+  pi_descentes: { label: 'Pieds linéaires de descentes', sample: '48' },
+  nb_coudes: { label: 'Nombre de coudes', sample: '12' },
+  pi_protege: { label: 'Pieds linéaires de protège-gouttières', sample: '140' },
+  pi_soffite: { label: 'Pieds linéaires de soffite', sample: '96' },
+  pi_fascia: { label: 'Pieds linéaires de fascia', sample: '140' },
+  couleur: { label: 'Couleur', sample: 'Blanc' },
+}
+
+/**
+ * Rénovations Hillman clauses — the single list used by the catalogue AND the quote builder
+ * (`src/data/quote-builder.ts` reads it through `scopeFor('reno')`).
+ */
 export const RENO_SCOPE: ScopeSection[] = [
-  { name: 'Préparation', lines: ['Plans et devis par un technologue', 'Demande de permis auprès de la Ville', 'Protection des aires existantes'] },
+  { name: 'Préparation', lines: ['Plans et devis par un technologue', 'Demande de permis auprès de la Ville', 'Protection des aires existantes', 'Protection des aires de travail', 'Démolition sélective', 'Conteneur 20 vg'] },
   { name: 'Charpente et menuiserie', lines: ['Fondation sur pieux vissés', 'Charpente murs 2 × 6', 'Fermes de toit préfabriquées'] },
-  { name: 'Enveloppe', lines: ['Isolation R-24 murs / R-60 entretoit', 'Pare-air et pare-vapeur', 'Revêtement extérieur (au choix du client)'] },
-  { name: 'Finition intérieure', lines: ['Gypse, joints et peinture 2 couches', 'Plancher flottant', 'Moulures et portes intérieures'] },
+  { name: 'Enveloppe', lines: ['Isolation R-24 murs / R-60 entretoit', 'Pare-air et pare-vapeur', 'Revêtement extérieur (au choix du client)', 'Isolation R-24 murs', 'Pare-air Tyvek', 'Revêtement Canexel agencé', 'Fenêtres PVC hybride'] },
+  { name: 'Finition intérieure', lines: ['Gypse, joints et peinture 2 couches', 'Plancher flottant', 'Moulures et portes intérieures', 'Gypse, tirage de joints et peinture', "Plancher de bois d'ingénierie", 'Moulures et portes'] },
+  { name: 'Exclusions', lines: ["Plans d'architecte", 'Permis municipal', 'Électricité (maître électricien)'] },
 ]
 
 export const WORK_KINDS: Record<CompanyId, string[]> = {
@@ -35,12 +60,14 @@ export const EXPERTISES: { name: string; opts: string[] }[] = [
   { name: 'Pontage', opts: ['Inclus', 'Non inclus', 'Vérifier le pontage · 64 pi² de bois inclus pour menuiserie', 'Vérifier le pontage · 32 pi² de bois inclus pour menuiserie', 'Vérifier que le pontage est prêt à recevoir les nouveaux matériaux'] },
 ]
 
-interface CostItem {
+export interface CostItem {
   id: string
   name: string
   unit: string
   cost: number
   sell: number
+  /** YouTube / Vimeo link shown to reps (installation, product demo). */
+  video?: string
 }
 
 /** General category → category → items. */
@@ -54,7 +81,7 @@ export const COST_ITEMS: CostCatalogue = {
       { id: 'b3', name: 'CertainTeed Shadow Ridge', unit: 'paq.', cost: 52, sell: 52 },
       { id: 'b4', name: 'Landmark Pro', unit: 'paq.', cost: 55, sell: 55 },
       { id: 'b5', name: 'Timberline GAF', unit: 'paq.', cost: 50, sell: 50 },
-      { id: 'b6', name: 'Timberline UHDZ GAF', unit: 'paq.', cost: 60, sell: 60 },
+      { id: 'b6', name: 'Timberline UHDZ GAF', unit: 'paq.', cost: 60, sell: 60, video: 'https://www.youtube.com/watch?v=5qap5aO4i9A' },
       { id: 'b7', name: 'Chapeau Seal-A-Ridge GAF', unit: 'paq.', cost: 63, sell: 63 },
       { id: 'b8', name: 'Départ Pro-Start GAF', unit: 'paq.', cost: 55, sell: 55 },
     ],
@@ -91,22 +118,59 @@ export const COST_ITEMS: CostCatalogue = {
       { id: 'g2', name: 'Modèles Distinction 6 po avec crochet', unit: 'pi', cost: 12.5, sell: 12.5 },
       { id: 'g3', name: 'Tuyaux 2 × 3 (descente)', unit: 'pi', cost: 10, sell: 10 },
       { id: 'g4', name: 'Coude A75', unit: 'unité', cost: 9.5, sell: 9.5 },
-      { id: 'g5', name: 'T-REX 5200', unit: 'pi', cost: 4, sell: 4 },
+      { id: 'g5', name: 'T-REX 5200', unit: 'pi', cost: 4, sell: 4, video: 'https://vimeo.com/76979871' },
       { id: 'g6', name: 'T-REX 5800', unit: 'pi', cost: 5, sell: 5 },
       { id: 'g7', name: 'T-REX 11500 DL PRO', unit: 'pi', cost: 5, sell: 5 },
     ],
   },
+  Rénovation: {
+    Structure: [
+      { id: 'r1', name: 'Bois de charpente (lot)', unit: 'lot', cost: 9800, sell: 12900 },
+      { id: 'r2', name: 'Pieux vissés', unit: 'unité', cost: 310, sell: 420 },
+    ],
+    Enveloppe: [
+      { id: 'r3', name: 'Isolation + pare-air', unit: 'lot', cost: 2400, sell: 3300 },
+      { id: 'r4', name: 'Revêtement Canexel', unit: 'pi²', cost: 5.4, sell: 8.2 },
+    ],
+    "Main-d'œuvre": [{ id: 'r5', name: 'Menuisiers CCQ', unit: 'h', cost: 68, sell: 98 }],
+  },
   Cabanon: {},
 }
 
-export const QUOTE_TEMPLATES = [
-  { name: 'Bardeaux · 1 étage standard', co: 'toit', lines: 31, items: 11, avg: 13900, margin: 31, used: 142, win: 46 },
-  { name: 'Bardeaux · 2 étages + Stormguard', co: 'toit', lines: 34, items: 13, avg: 19400, margin: 30, used: 88, win: 41 },
-  { name: 'Toit plat · élastomère 2 couches', co: 'toit', lines: 27, items: 9, avg: 16800, margin: 29, used: 61, win: 38 },
-  { name: 'Gouttières T-Rex M-5200 · bungalow', co: 'sg', lines: 8, items: 6, avg: 1650, margin: 47, used: 611, win: 55 },
-  { name: 'Gouttières + DoublePro · 2 étages', co: 'sg', lines: 9, items: 7, avg: 3420, margin: 45, used: 204, win: 49 },
-  { name: 'Nettoyage annuel', co: 'sg', lines: 2, items: 1, avg: 350, margin: 68, used: 932, win: 81 },
-  { name: 'Agrandissement 12 × 16', co: 'reno', lines: 12, items: 22, avg: 84000, margin: 26, used: 9, win: 33 },
+export interface QuoteTemplate {
+  id: string
+  name: string
+  company: CompanyId
+  workType: string
+  /** Scope lines pre-checked when the template is applied. */
+  checked: string[]
+  /** Cost lines (catalogue item id + quantity). */
+  costs: { itemId: string; qty: number }[]
+  /** Warranty group → chosen option. */
+  warranties: Record<string, string>
+  notes: string
+  /** Usage stats (read-only). */
+  used: number
+  win: number
+  /** Derived summary fields, kept for the create-quote flow (`QuoteFlow`). Refreshed on save. */
+  co: CompanyId
+  lines: number
+  items: number
+  avg: number
+  margin: number
+}
+
+const pick = (ids: [string, number][]) => ids.map(([itemId, qty]) => ({ itemId, qty }))
+
+type TemplateSeed = Omit<QuoteTemplate, 'co' | 'lines' | 'items' | 'avg' | 'margin'> & Partial<Pick<QuoteTemplate, 'avg' | 'margin'>>
+const SEEDS: TemplateSeed[] = [
+  { id: 't1', name: 'Bardeaux · 1 étage standard', company: 'toit', workType: 'Toit en pente', checked: [], costs: pick([['b5', 64], ['b7', 6], ['b8', 4], ['m2', 3], ['s2', 4], ['c1', 3], ['k1', 1], ['f1', 2], ['l1', 1]]), warranties: { 'Garantie du manufacturier — Bardeaux': 'Prolongée IKO ShieldPro Plus 20 ans', "Main-d'œuvre — Toitures": '10 ans', "Durée de l'offre": '30 jours' }, notes: 'Accès au terrain par l’entrée de garage. Prévoir la protection des plates-bandes.', used: 142, win: 46, avg: 13900, margin: 31 },
+  { id: 't2', name: 'Bardeaux · 2 étages + Stormguard', company: 'toit', workType: 'Toit en pente', checked: [], costs: pick([['b6', 80], ['b7', 8], ['b8', 5], ['m2', 6], ['s2', 5], ['c1', 4], ['k1', 1], ['f1', 3], ['l1', 1]]), warranties: { 'Garantie du manufacturier — Bardeaux': 'Prolongée BP 50 ans ferme', "Main-d'œuvre — Toitures": '10 ans', "Durée de l'offre": '30 jours' }, notes: '', used: 88, win: 41, avg: 19400, margin: 30 },
+  { id: 't3', name: 'Toit plat · élastomère 2 couches', company: 'toit', workType: 'Toit plat', checked: [], costs: pick([['p1', 12], ['p2', 12], ['p3', 40], ['k1', 1], ['f1', 3]]), warranties: { 'Garantie du manufacturier — Membranes': 'Voir le détail du fabricant', "Main-d'œuvre — Toitures": '10 ans', "Durée de l'offre": '30 jours' }, notes: '', used: 61, win: 38, avg: 16800, margin: 29 },
+  { id: 't4', name: 'Gouttières T-Rex M-5200 · bungalow', company: 'sg', workType: 'Gouttière', checked: [], costs: pick([['g1', 140], ['g3', 48], ['g4', 12], ['g5', 140]]), warranties: { 'Protège-gouttières (Signature)': 'Anti-obstruction 40 ans (T-Rex)', "Durée de l'offre": '30 jours' }, notes: '', used: 611, win: 55, avg: 1650, margin: 47 },
+  { id: 't5', name: 'Gouttières + DoublePro · 2 étages', company: 'sg', workType: 'Gouttière', checked: [], costs: pick([['g1', 180], ['g3', 72], ['g4', 16], ['g7', 180]]), warranties: { 'Protège-gouttières (Signature)': 'Anti-obstruction à vie (DoublePro)', "Durée de l'offre": '30 jours' }, notes: '', used: 204, win: 49, avg: 3420, margin: 45 },
+  { id: 't6', name: 'Nettoyage annuel', company: 'sg', workType: 'Gouttière', checked: [], costs: [], warranties: { "Durée de l'offre": '60 jours' }, notes: 'Nettoyage et vidange, rapport photo envoyé au client.', used: 932, win: 81, avg: 350, margin: 68 },
+  { id: 't7', name: 'Agrandissement 12 × 16', company: 'reno', workType: 'Rénovation', checked: [], costs: pick([['r1', 1], ['r2', 8], ['r3', 1], ['r4', 620], ['r5', 240]]), warranties: { "Main-d'œuvre — Rénovations": '5 ans', "Durée de l'offre": '60 jours' }, notes: 'Plans et permis à la charge du client.', used: 9, win: 33, avg: 84000, margin: 26 },
 ]
 
 export const WARRANTIES: { group: string; opts: string[] }[] = [
@@ -194,3 +258,125 @@ export const AUDIT_LOG: [string, string, string][] = [
   ['Hier 17 h 02', 'Hélène Petitpas', 'A déplacé un rendez-vous de Dany Pelletier'],
   ['Hier 9 h 40', 'Olivier Fontaine', 'A modifié le statut de G64251 (À rappeler → Signé)'],
 ]
+
+// ── Mutators (catalogue editing). Everything is in-memory until the backend exists. ──────────
+
+/** Scope clauses per company. Toitures reads the shared roofing clause list (also used by the builder). */
+export const scopeFor = (company: CompanyId): ScopeSection[] => (company === 'toit' ? ROOF_SCOPE_SECTIONS : company === 'sg' ? GUTTER_SCOPE : RENO_SCOPE)
+
+export function addScopeLine(company: CompanyId, section: number, line: string) {
+  scopeFor(company)[section]?.lines.push(line)
+  commit()
+}
+export function editScopeLine(company: CompanyId, section: number, index: number, line: string) {
+  const s = scopeFor(company)[section]
+  if (!s) return
+  const old = s.lines[index]
+  s.lines[index] = line
+  // Templates that pre-check the old wording follow the rename.
+  for (const tpl of QUOTE_TEMPLATES) tpl.checked = tpl.checked.map((l) => (l === old ? line : l))
+  commit()
+}
+export function removeScopeLine(company: CompanyId, section: number, index: number) {
+  const s = scopeFor(company)[section]
+  if (!s) return
+  const [old] = s.lines.splice(index, 1)
+  for (const tpl of QUOTE_TEMPLATES) tpl.checked = tpl.checked.filter((l) => l !== old)
+  commit()
+}
+export function moveScopeLine(company: CompanyId, section: number, index: number, dir: number) {
+  const lines = scopeFor(company)[section]?.lines
+  const target = index + dir
+  if (!lines || target < 0 || target >= lines.length) return
+  ;[lines[index], lines[target]] = [lines[target], lines[index]]
+  commit()
+}
+export function addScopeSection(company: CompanyId, name: string) {
+  scopeFor(company).push({ name, lines: [] })
+  commit()
+}
+
+export const allCostItems = () => Object.values(COST_ITEMS).flatMap((g) => Object.values(g).flat())
+export const costItemById = (id: string) => allCostItems().find((it) => it.id === id)
+/** Fixed company fees keep their price when a margin is applied. */
+export const isFixedFee = (it: CostItem) => /Frais fixes/.test(it.name)
+
+export function updateCostItem(id: string, patch: Partial<CostItem>) {
+  const it = costItemById(id)
+  if (it) Object.assign(it, patch)
+  commit()
+}
+export function addCostItem(general: string, category: string, item: Omit<CostItem, 'id'>) {
+  const list = (COST_ITEMS[general][category] ??= [])
+  const created = { ...item, id: 'i' + Date.now().toString(36) }
+  list.push(created)
+  commit()
+  return created
+}
+export function removeCostItem(general: string, category: string, id: string) {
+  const list = COST_ITEMS[general]?.[category]
+  if (!list) return
+  COST_ITEMS[general][category] = list.filter((it) => it.id !== id)
+  for (const tpl of QUOTE_TEMPLATES) tpl.costs = tpl.costs.filter((c) => c.itemId !== id)
+  commit()
+}
+export function addCostCategory(general: string, category: string) {
+  ;(COST_ITEMS[general] ??= {})[category] ??= []
+  commit()
+}
+/** Set every selling price to reach `margin` % (rounded up to the half dollar). */
+export function applyTargetMargin(margin: number) {
+  for (const it of allCostItems()) if (!isFixedFee(it)) it.sell = Math.ceil((it.cost / (1 - margin / 100)) * 2) / 2
+  commit()
+}
+
+/** Cost-catalogue general categories offered for a company's templates. */
+export const COST_GROUPS: Record<CompanyId, string[]> = { toit: ['Toit en pente', 'Toit plat'], sg: ['Gouttières'], reno: ['Rénovation', 'Cabanon'] }
+
+/** Scope lines a new quote of this company has checked by default. */
+export function defaultChecked(company: CompanyId): string[] {
+  if (company === 'toit') return [...ROOF_DEFAULT_SCOPE]
+  return scopeFor(company).flatMap((s) => s.lines.slice(0, 1))
+}
+
+
+/** Sell total and margin of a template's cost lines at catalogue prices. */
+export function templateTotals(costs: QuoteTemplate['costs']) {
+  let cost = 0
+  let sell = 0
+  for (const c of costs) {
+    const it = costItemById(c.itemId)
+    if (!it) continue
+    cost += it.cost * c.qty
+    sell += it.sell * c.qty
+  }
+  return { cost, sell, margin: sell > 0 ? ((sell - cost) / sell) * 100 : 0 }
+}
+
+function withSummary(tpl: TemplateSeed | QuoteTemplate, recompute: boolean): QuoteTemplate {
+  const totals = templateTotals(tpl.costs)
+  return {
+    ...tpl,
+    co: tpl.company,
+    lines: tpl.checked.length,
+    items: tpl.costs.length,
+    avg: recompute || tpl.avg === undefined ? Math.round(totals.sell) : tpl.avg,
+    margin: recompute || tpl.margin === undefined ? Math.round(totals.margin) : tpl.margin,
+  }
+}
+
+export const QUOTE_TEMPLATES: QuoteTemplate[] = SEEDS.map((s) => withSummary({ ...s, checked: s.checked.length ? s.checked : defaultChecked(s.company) }, false))
+
+export function saveQuoteTemplate(input: QuoteTemplate) {
+  const tpl = withSummary(input, true)
+  const i = QUOTE_TEMPLATES.findIndex((x) => x.id === tpl.id)
+  if (i >= 0) QUOTE_TEMPLATES[i] = tpl
+  else QUOTE_TEMPLATES.push(tpl)
+  commit()
+}
+export function removeQuoteTemplate(id: string) {
+  const i = QUOTE_TEMPLATES.findIndex((x) => x.id === id)
+  if (i >= 0) QUOTE_TEMPLATES.splice(i, 1)
+  commit()
+}
+export const templateById = (id?: string) => QUOTE_TEMPLATES.find((x) => x.id === id)

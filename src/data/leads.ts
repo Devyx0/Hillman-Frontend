@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import type { Icon } from '../components/ui'
 import { getLang, t } from '../i18n'
 import { formatHour } from '../lib/utils'
-import { LEADS, THREADS, type Lead, type Message, type Thread } from './mock'
+import { LEADS, THREADS, type CompanyId, type Lead, type Message, type Thread } from './mock'
 
 /** Brand icon (lucide-react no longer ships brand icons). */
 const FacebookIcon: Icon = ({ className }) =>
@@ -24,8 +24,21 @@ const EXTRA_LEADS: Lead[] = [
   { id: 'l14', name: 'Patrick Bélanger', phone: '418 931-5520', city: 'Lebourgneuf', company: 'toit', channel: 'Référence', received: '2026-10-18 11:40', ago: 'dim. 11 h 40', message: 'Référé par mon voisin (M. Simard). Toit en pente à refaire.', aiSummary: "Référence d'un client 2026 · toit en pente · même rue que le chantier H64026.", score: 85, status: 'RDV réservé', booked: 'Jeu. 22 oct. · 9 h 00', repId: 'jph' },
 ]
 
-/** All leads (mockup: `Md`). */
-export const ALL_LEADS: Lead[] = [...LEADS, ...EXTRA_LEADS]
+// The Leads module's extra leads join the shared collection once, so the store's `addLead` /
+// `updateLead` reach every lead and all screens (nav badge, Today, pipeline) see the same list.
+if (!LEADS.some((l) => l.id === EXTRA_LEADS[0].id)) LEADS.push(...EXTRA_LEADS)
+
+/** Lead with the links set when it is converted. */
+export type LeadRecord = Lead & {
+  /** Quote created from this lead. */
+  quoteId?: string
+  /** Client record the lead was converted into. */
+  clientId?: string
+}
+
+/** All leads (mockup: `Md`). Same array as `LEADS` in mock.ts: mutate only through the store. */
+export const ALL_LEADS: LeadRecord[] = LEADS
+export const leadById = (id?: string) => ALL_LEADS.find((l) => l.id === id)
 
 interface LeadProfile {
   address: string
@@ -59,29 +72,44 @@ export const LEAD_PROFILES: Record<string, LeadProfile> = {
 /** Lead funnel stages (mockup: `Ed`). */
 export const LEAD_STAGES = ['Nouveau', 'Contacté', 'Qualifié', 'RDV réservé', 'Soumission']
 
+/**
+ * Canonical lead status for each stage. Status flow: Nouveau → Contacté → Qualifié →
+ * RDV réservé (visit booked) → Converti (quote created); "Non qualifié" leaves the funnel.
+ * Older values from the mockup ("À contacter", "Qualifié par IA") map onto the same stages.
+ */
+export const LEAD_STATUS = ['Nouveau', 'Contacté', 'Qualifié', 'RDV réservé', 'Converti'] as const
+export const LEAD_LOST = 'Non qualifié'
+
 /** Stage index of a lead, -1 when disqualified (mockup: `Ui`). */
 export function leadStage(lead: Lead): number {
   switch (lead.status) {
     case 'Nouveau':
       return 0
     case 'À contacter':
+    case 'Contacté':
       return 1
     case 'Qualifié par IA':
+    case 'Qualifié':
       return 2
     case 'RDV réservé':
       return 3
+    case 'Converti':
+      return 4
     default:
       return -1
   }
 }
 
-export type LeadBucket = 'new' | 'qualified' | 'booked' | 'lost'
+export type LeadBucket = 'new' | 'qualified' | 'booked' | 'converted' | 'lost'
 
 /** Mockup: `bx`. */
 export const leadBucket = (lead: Lead): LeadBucket => {
   const s = leadStage(lead)
-  return s < 0 ? 'lost' : s === 3 ? 'booked' : s === 2 ? 'qualified' : 'new'
+  return s < 0 ? 'lost' : s === 4 ? 'converted' : s === 3 ? 'booked' : s === 2 ? 'qualified' : 'new'
 }
+
+/** Default rep for a company's new leads when none is chosen. */
+export const DEFAULT_LEAD_REP: Record<CompanyId, string> = { toit: 'jph', sg: 'plc', reno: 'pau' }
 
 const CHANNEL_STYLES: Record<string, { icon: Icon; tone: string }> = {
   'Site web': { icon: Globe, tone: 'bg-data-2 text-data-2-ink' },
@@ -116,9 +144,12 @@ export function threadForLead(lead: Lead): Thread {
       meta: lead.channel === 'Site web' ? t('Formulaire du site web') : lead.channel === 'Appel entrant' ? t('Appel entrant · 4 min 12 s') : t(lead.channel),
     },
   ]
+  // Demo AI replies exist only on the seeded mockup leads; a lead entered by hand has no AI history.
+  const seeded = !!LEAD_PROFILES[lead.id]
+  if (!seeded) return { id: 'lt-' + lead.id, name: lead.name, company: lead.company, channel: 'sms', unread: 0, last: messages[0].text, at, assigned: lead.repId ?? 'jph', messages }
   if (lead.status !== 'Non qualifié')
     messages.push({ id: lead.id + 'b', dir: 'out', channel: 'ai', at, by: aiAgent, text: t('Bonjour {first}, merci pour votre demande! Un estimateur peut passer voir les travaux sans frais. Préférez-vous un rendez-vous en semaine ou le samedi matin?', { first }) })
-  if (lead.status === 'Qualifié par IA' || lead.status === 'À contacter') messages.push({ id: lead.id + 'c', dir: 'in', channel: 'sms', at, text: t('En semaine, idéalement en après-midi. Merci!') })
+  if (['Qualifié par IA', 'À contacter', 'Contacté', 'Qualifié'].includes(lead.status)) messages.push({ id: lead.id + 'c', dir: 'in', channel: 'sms', at, text: t('En semaine, idéalement en après-midi. Merci!') })
   if (lead.status === 'Non qualifié')
     messages.push({ id: lead.id + 'd', dir: 'out', channel: 'ai', at, by: aiAgent, text: t("Bonjour {first}! Êtes-vous propriétaire de l'immeuble? Nos estimations se font avec le propriétaire.", { first }) })
   return { id: 'lt-' + lead.id, name: lead.name, company: lead.company, channel: 'sms', unread: 0, last: messages[messages.length - 1].text, at, assigned: lead.repId ?? 'jph', aiHandled: true, messages }
