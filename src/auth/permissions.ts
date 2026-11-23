@@ -13,44 +13,81 @@ export const ROLE_LABELS: Record<Role, string> = {
   rep: 'Représentant',
 }
 
+/**
+ * One permission per line of the access table (v1). Without a `*.viewAll` permission a user only
+ * sees their own records (see `useAccess()` in `./access.ts`): quotes and leads assigned to them,
+ * their appointments, their threads, the work days of their quotes, and the clients they work with.
+ */
 export type Permission =
-  | 'quotes.viewAll' // see every rep's quotes (otherwise only one's own)
-  | 'quotes.edit'
-  | 'quotes.costs' // see costs, margin and profit (Coûtants, Profit réel, margin columns)
+  | 'quotes.viewAll' // every rep's quotes (otherwise only one's own)
+  | 'quotes.edit' // create and edit quotes (info, scope, price, sending)
+  | 'quotes.costs' // Coûtants tab, margin panel, margin columns and cost lines
+  | 'quotes.profit' // Profit réel (actual profit once the work is done)
   | 'quotes.status' // change status by hand (accepted / refused / paid)
-  | 'quotes.delete'
   | 'payments.record'
+  | 'leads.viewAll' // every rep's leads (otherwise only those assigned to them)
   | 'leads.assign'
+  | 'clients.viewAll' // every client (otherwise only those with one of their quotes or leads)
   | 'clients.export'
-  | 'calendar.allReps' // see and book in every rep's calendar
-  | 'jobs.schedule' // put signed work on the calendar (jours de travaux)
+  | 'conversations.viewAll' // every thread (otherwise only those assigned to them)
+  | 'calendar.allReps' // see and book visits in every rep's calendar
+  | 'calendar.moveOthers' // move or cancel other reps' appointments
+  | 'jobs.schedule' // add and edit work days (jours de travaux)
+  | 'catalogue.view' // open the catalogue (read-only without catalogue.edit)
   | 'catalogue.edit'
-  | 'settings.manage' // companies, connections, follow-ups, statuses, numbering
+  | 'settings.manage' // companies, connections, follow-ups, statuses, numbering, sources
   | 'users.manage'
+  | 'audit.view' // change log and security
+  | 'delete' // every deletion (quotes, clients, notes, templates, catalogue lines…)
   | 'groupView' // Groupe Hillman view of all three companies
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   'quotes.viewAll': 'Voir les soumissions de tous les représentants',
   'quotes.edit': 'Créer et modifier des soumissions',
-  'quotes.costs': 'Voir les coûtants, la marge et le profit',
+  'quotes.costs': 'Voir les coûtants et la marge',
+  'quotes.profit': 'Voir le profit réel',
   'quotes.status': 'Changer le statut (accepté, refusé, payé)',
-  'quotes.delete': 'Supprimer des soumissions',
   'payments.record': 'Enregistrer des paiements',
+  'leads.viewAll': 'Voir les leads de tous les représentants',
   'leads.assign': 'Assigner les leads',
+  'clients.viewAll': 'Voir tous les clients',
   'clients.export': 'Exporter les clients',
+  'conversations.viewAll': 'Voir toutes les conversations',
   'calendar.allReps': "Voir et réserver l'agenda de tous",
+  'calendar.moveOthers': 'Déplacer les rendez-vous des autres',
   'jobs.schedule': 'Planifier les travaux au calendrier',
+  'catalogue.view': 'Consulter le catalogue',
   'catalogue.edit': 'Modifier le catalogue',
   'settings.manage': 'Gérer les paramètres des compagnies',
   'users.manage': 'Gérer les utilisateurs',
+  'audit.view': 'Voir le journal des modifications et la sécurité',
+  delete: 'Supprimer (soumissions, clients, notes, modèles…)',
   groupView: 'Vue Groupe Hillman (3 compagnies)',
 }
 
-/** Default permission table (editable by an admin). */
+/** Default permission table (editable by an admin in Settings → Users). */
 export const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
   admin: new Set(Object.keys(PERMISSION_LABELS) as Permission[]),
-  coordinator: new Set<Permission>(['quotes.viewAll', 'quotes.edit', 'quotes.status', 'payments.record', 'leads.assign', 'clients.export', 'calendar.allReps', 'jobs.schedule', 'groupView']),
-  rep: new Set<Permission>(['quotes.edit', 'quotes.status']),
+  coordinator: new Set<Permission>([
+    'quotes.viewAll',
+    'quotes.edit',
+    'quotes.costs',
+    'quotes.profit',
+    'quotes.status',
+    'payments.record',
+    'leads.viewAll',
+    'leads.assign',
+    'clients.viewAll',
+    'clients.export',
+    'conversations.viewAll',
+    'calendar.allReps',
+    'calendar.moveOthers',
+    'jobs.schedule',
+    'catalogue.view',
+    'catalogue.edit',
+    'groupView',
+  ]),
+  rep: new Set<Permission>(['quotes.edit', 'quotes.costs', 'quotes.status', 'catalogue.view']),
 }
 
 /** True when the permission table cell can't be changed (admins always keep every permission). */

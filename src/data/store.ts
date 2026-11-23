@@ -311,7 +311,7 @@ export function changeQuoteStatus(
   commit()
 }
 
-/** Delete quotes (needs the `quotes.delete` permission; confirm first). */
+/** Delete quotes (needs the `delete` permission; confirm first). */
 export function removeQuotes(ids: string[]) {
   for (const id of ids) {
     const i = QUOTES.findIndex((q) => q.id === id)

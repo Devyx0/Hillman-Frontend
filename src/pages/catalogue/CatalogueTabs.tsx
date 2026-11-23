@@ -43,7 +43,8 @@ export function ClauseText({ text, filled }: { text: string; filled?: boolean })
 export function WorkLinesTab() {
   useStore()
   const canEdit = useCanEditCatalogue()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
+  const canDelete = can('delete')
   const me = user?.name ?? '—'
   const [company, setCompany] = useScopeCompany()
   const [kind, setKind] = useState(WORK_KINDS[company][0])
@@ -192,9 +193,11 @@ export function WorkLinesTab() {
                           <button aria-label={t('Modifier')} onClick={() => setEditing({ index: i, text: line })} className="p-1.5 rounded-md hover:bg-stone">
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button aria-label={t('Supprimer')} onClick={() => remove(i)} className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {canDelete && (
+                            <button aria-label={t('Supprimer')} onClick={() => remove(i)} className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </span>
                       )}
                     </>
@@ -252,6 +255,7 @@ function AddOption({ onAdd }: { onAdd: (v: string) => void }) {
 export function ExpertisesTab() {
   useStore()
   const canEdit = useCanEditCatalogue()
+  const canDelete = useAuth().can('delete')
   const [, force] = useState(0)
   return (
     <div className="grid md:grid-cols-2 gap-4">
@@ -277,7 +281,7 @@ export function ExpertisesTab() {
               <li key={opt + i} className="group flex items-center gap-2 text-sm text-ink-secondary">
                 <span className="w-4 h-4 rounded border border-hairline-strong shrink-0" />
                 <span className="flex-1">{t(opt)}</span>
-                {canEdit && (
+                {canEdit && canDelete && (
                   <button
                     className="p-1 rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-tone-critical-soft hover:text-tone-critical-ink"
                     aria-label={t('Supprimer')}
@@ -302,6 +306,7 @@ export function ExpertisesTab() {
 export function WarrantiesTab() {
   useStore()
   const canEdit = useCanEditCatalogue()
+  const canDelete = useAuth().can('delete')
   const [, force] = useState(0)
   return (
     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -325,7 +330,7 @@ export function WarrantiesTab() {
             {w.opts.map((o, i) => (
               <span key={o + i} className="inline-flex items-center gap-1 text-xs font-medium pl-2.5 pr-1.5 py-1 rounded-md bg-sand text-ink-secondary">
                 {t(o)}
-                {canEdit && (
+                {canEdit && canDelete && (
                   <button
                     className="p-0.5 rounded hover:bg-stone"
                     aria-label={t('Supprimer')}

@@ -5,7 +5,7 @@ import { Select } from '../components/filters'
 import { LeadStageBadge } from '../components/leads'
 import { SkeletonRows } from '../components/states'
 import { Avatar, CompanyBadge, Empty, Page, PageHeader, RepAvatar, Tabs } from '../components/ui'
-import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { inScope, useApp } from '../context/AppContext'
 import { ALL_LEADS, LEAD_PROFILES, channelStyle, leadBucket, leadStage, type LeadBucket } from '../data/leads'
 import { repById } from '../data/mock'
@@ -21,7 +21,7 @@ type Filter = 'all' | LeadBucket
 export default function Leads() {
   useStore()
   const { scope } = useApp()
-  const { companies, can, user } = useAuth()
+  const access = useAccess()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
@@ -37,7 +37,8 @@ export default function Leads() {
 
   // Sources offered by the filter: the active list from Settings, plus any older source still on a lead.
   const sourceOptions = [...new Set([...activeSources(), ...ALL_LEADS.map((l) => l.channel)])]
-  const leads = ALL_LEADS.filter((l) => inScope(scope, l.company) && (companies.length === 0 || companies.includes(l.company)) && (can('quotes.viewAll') || !user || l.repId === user.repId))
+  // Without `leads.viewAll` a rep sees only the leads assigned to them (or that they created).
+  const leads = ALL_LEADS.filter((l) => inScope(scope, l.company) && access.lead(l))
   const inFunnel = (l: (typeof leads)[number]) => leadStage(l) >= 0 && leadStage(l) < 4
   const count = (f: Filter) => (f === 'all' ? leads.filter(inFunnel).length : leads.filter((l) => leadBucket(l) === f).length)
   const work = (l: (typeof leads)[number]) => (LEAD_PROFILES[l.id] ? t(LEAD_PROFILES[l.id].work) : l.message || '—')
@@ -49,7 +50,8 @@ export default function Leads() {
   return (
     <Page>
       <PageHeader
-        title={t('Leads')}
+        title={access.seesAll.leads ? t('Leads') : t('Vos leads')}
+        subtitle={access.seesAll.leads ? undefined : t('Les leads qui vous sont assignés')}
         actions={
           <button className="btn btn-sm btn-primary" onClick={() => openCreate('lead', { company: scope !== 'all' ? scope : undefined })}>
             <Plus className="w-4 h-4" />

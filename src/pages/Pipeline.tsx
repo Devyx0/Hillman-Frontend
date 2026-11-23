@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Ellipsis, MessageSquare, Pause, Phone } from 'lucide-react'
-import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { FilterBar, FilterField, Select, type SelectOption } from '../components/filters'
 import { ComposeDrawer, type MessageCtx, type MessageKind } from '../components/messaging'
 import { HoverTip, useChangeStatus } from '../components/quote-status'
@@ -10,6 +10,7 @@ import { Page, PageHeader, RepAvatar } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { REPS, clientById, clientLang, companyById } from '../data/mock'
 import { quoteByNo } from '../data/store'
+import { leadById } from '../data/leads'
 import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, QUOTE_COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type PipelineColumnId as ColumnId } from '../data/pipeline'
 import { request, useStore } from '../data/store'
 import { t } from '../i18n'
@@ -21,9 +22,9 @@ export default function Pipeline() {
   const { scope } = useApp()
   const navigate = useNavigate()
   const version = useStore()
-  const { user, can } = useAuth()
-  const viewAll = can('quotes.viewAll')
-  const myCompanies = useMemo(() => user?.companies ?? [], [user])
+  const access = useAccess()
+  // Rep filter only when the user sees more than their own cards.
+  const viewAll = access.seesAll.quotes || access.seesAll.leads
   const status = useChangeStatus({ via: 'pipeline' })
   const [params] = useSearchParams()
   const forceError = params.get('erreur') === '1'
@@ -58,9 +59,13 @@ export default function Pipeline() {
   const visible = useMemo(
     () =>
       deals.filter(
-        (d) => inScope(scope, d.company) && myCompanies.includes(d.company) && (viewAll || !d.quoteId || d.repId === user?.repId) && (rep === 'all' || d.repId === rep) && matchesAmount(d.amount, amountRange),
+        (d) =>
+          inScope(scope, d.company) &&
+          (d.quoteId ? access.quote(d) : access.lead({ repId: d.repId, company: d.company, createdBy: leadById(d.id)?.createdBy })) &&
+          (rep === 'all' || d.repId === rep) &&
+          matchesAmount(d.amount, amountRange),
       ),
-    [deals, scope, myCompanies, viewAll, user, rep, amountRange],
+    [deals, scope, access, rep, amountRange],
   )
   const inColumn = (col: ColumnId) => visible.filter((d) => d.col === col).sort((a, b) => a.days - b.days || b.amount - a.amount)
   const canDrag = (d: { quoteId?: string }) => !d.quoteId || status.canChange
@@ -99,9 +104,9 @@ export default function Pipeline() {
 
   return (
     <Page wide>
-      <PageHeader title={t('Pipeline')} />
+      <PageHeader title={viewAll ? t('Pipeline') : t('Votre pipeline')} />
       <FilterBar>
-        {reps.length > 1 && (
+        {viewAll && reps.length > 1 && (
           <FilterField label={t('Représentant')}>
             <Select value={rep} onChange={setRep} options={repOptions} className="w-52" />
           </FilterField>

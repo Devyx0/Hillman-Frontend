@@ -59,6 +59,8 @@ export function useQuoteBuilder(quote: QuoteRecord) {
   useStore()
   const { can } = useAuth()
   const canCosts = can('quotes.costs')
+  /** Profit réel (actual costs and profit once the work is done). */
+  const canProfit = can('quotes.profit')
   const conn = useConnectivity()
   const client = clientById(quote.clientId) ?? NO_CLIENT
   const company = companyById(quote.company)
@@ -260,7 +262,7 @@ export function useQuoteBuilder(quote: QuoteRecord) {
   ]
 
   return {
-    quote, client, company, rep, isDemo, defaults, scope, sections, hasSection, canCosts, target, tiered, conn,
+    quote, client, company, rep, isDemo, defaults, scope, sections, hasSection, canCosts, canProfit, target, tiered, conn,
     draft, setDraft, set, pricing, values, missing, schedule, suggested, applySuggested,
     status: quote.status, repId: quote.repId, setRepId,
     workKind: draft.workKind, setWorkKind: set('workKind'), dims, setDims: set('dims'), roofNote: draft.roofNote, setRoofNote: set('roofNote'),

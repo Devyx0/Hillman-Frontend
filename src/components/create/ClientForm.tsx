@@ -25,7 +25,8 @@ interface Props {
   /** Company the client is created for (fixed). When absent, the form asks for it. */
   company?: CompanyId
   /** Label of the button on a duplicate match. */
-  existingLabel: string
+  /** Button on each possible duplicate (a string, or per client). */
+  existingLabel: string | ((c: Client) => string)
   onUseExisting: (c: Client) => void
   onCreated: (c: Client) => void
   onCancel: () => void
@@ -34,7 +35,7 @@ interface Props {
 
 export default function ClientForm({ prefill = {}, company: fixedCompany, existingLabel, onUseExisting, onCreated, onCancel, cancelLabel }: Props) {
   useStore()
-  const { companies } = useAuth()
+  const { companies, user } = useAuth()
   const sources = activeSources()
   const name = splitName(prefill.name)
   const [company, setCompany] = useState<CompanyId>(fixedCompany ?? (prefill.company && companies.includes(prefill.company) ? prefill.company : undefined) ?? companies[0] ?? 'toit')
@@ -88,6 +89,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
       source: f.source,
       consentSms: f.consentSms,
       language: f.language,
+      createdBy: user?.repId,
     })
     registerClientCompany(c.id, company)
     toast(t('Client créé : {name}', { name: `${c.first} ${c.last}`.trim() }))
@@ -209,7 +211,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
                   c={c}
                   action={
                     <button type="button" onClick={() => onUseExisting(c)} className="btn btn-xs btn-secondary">
-                      {existingLabel}
+                      {typeof existingLabel === 'function' ? existingLabel(c) : existingLabel}
                     </button>
                   }
                 />

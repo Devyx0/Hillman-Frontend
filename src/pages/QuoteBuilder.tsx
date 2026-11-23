@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, CircleCheck, CircleDot, Copy, Ellipsis, Eye, FileQuestion, GitBranch, MapPin, Printer, Send, WifiOff } from 'lucide-react'
-import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { ActionsMenu, ComposeDrawer } from '../components/messaging'
 import { StatusPicker } from '../components/quote-shared'
 import { NoAccess } from '../components/states'
@@ -31,7 +31,7 @@ import type { SectionId } from '../data/quote-builder'
 export default function QuoteBuilderPage() {
   useStore()
   const { id } = useParams()
-  const { user, can, companies } = useAuth()
+  const access = useAccess()
   const quote = quoteById(id)
   if (!quote)
     return (
@@ -45,8 +45,7 @@ export default function QuoteBuilderPage() {
         </div>
       </Page>
     )
-  const mine = !!user && quote.repId === user.repId
-  if (!companies.includes(quote.company) || (!mine && !can('quotes.viewAll')))
+  if (!access.quote(quote))
     return (
       <Page>
         <div className="card">
@@ -60,6 +59,7 @@ export default function QuoteBuilderPage() {
 /** Title card: client, status, and the main actions. */
 function Header({ b }: { b: Builder }) {
   const navigate = useNavigate()
+  const access = useAccess()
   const { quote, client, company } = b
   const lead = leadById(quote.leadId)
   const copy = (asVersion: boolean) => {
@@ -100,7 +100,7 @@ function Header({ b }: { b: Builder }) {
               <RepAvatar id={b.repId} size="xs" />
               {b.rep.name}
             </span>
-            {lead && (
+            {lead && access.lead(lead) && (
               <Link to={`/leads/${lead.id}`} className="hover:text-ink underline-offset-2 hover:underline">
                 {t('Lead : {name}', { name: lead.name })}
               </Link>

@@ -83,7 +83,7 @@ function CatalogueView() {
       {!canEdit && (
         <Notice tone="info">
           <Lock className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
-          {t('Lecture seule : votre rôle ne permet pas de modifier le catalogue.')}
+          {t('Lecture seule : consultez le catalogue pour choisir les items de vos soumissions.')}
         </Notice>
       )}
       <CatalogueEditContext.Provider value={canEdit}>

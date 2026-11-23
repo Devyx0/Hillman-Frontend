@@ -105,9 +105,11 @@ export function TemplatesTab() {
                       <Copy className="w-3.5 h-3.5" />
                       {t('Dupliquer')}
                     </button>
-                    <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink ml-auto" aria-label={t('Supprimer')} onClick={() => remove(tpl)}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {can('delete') && (
+                      <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink ml-auto" aria-label={t('Supprimer')} onClick={() => remove(tpl)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </>
                 )}
               </div>

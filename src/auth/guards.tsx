@@ -15,20 +15,23 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 /**
  * Renders `NoAccess` unless the user has the permission (or, with an array, at least one of them).
- *   <RequirePermission perm={['catalogue.edit', 'settings.manage']}>…</RequirePermission>
+ *   <RequirePermission perm={['settings.manage', 'users.manage']}>…</RequirePermission>
  */
 export function RequirePermission({ perm, children, fallback }: { perm: Permission | Permission[]; children: ReactNode; fallback?: ReactNode }) {
   const { can } = useAuth()
   const ok = Array.isArray(perm) ? perm.some(can) : can(perm)
   if (ok) return <>{children}</>
+  return fallback ?? <NoAccessPage />
+}
+
+/** Full-page "Accès non autorisé" — e.g. another rep's record opened by URL. */
+export function NoAccessPage({ children }: { children?: ReactNode }) {
   return (
-    fallback ?? (
-      <Page>
-        <div className="card">
-          <NoAccess />
-        </div>
-      </Page>
-    )
+    <Page>
+      <div className="card">
+        <NoAccess>{children}</NoAccess>
+      </div>
+    </Page>
   )
 }
 

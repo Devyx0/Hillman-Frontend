@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Bot, CalendarCheck2, CalendarDays, Check, Eye, Phone, PhoneCall } from 'lucide-react'
 import { MessageButton } from '../components/messaging'
 import { AccentText, Card, Empty, Page, RepAvatar, Stat } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { firstName } from '../auth/session'
 import { useStore } from '../data/store'
 import { openCreate } from '../lib/create'
@@ -20,9 +21,10 @@ import { cn, formatHour, money } from '../lib/utils'
  * - rep: only their own visits, follow-ups, opened quotes and leads.
  */
 export default function Today() {
-  const version = useStore()
+  useStore()
   const { scope } = useApp()
   const { user, can } = useAuth()
+  const access = useAccess()
   const [done, setDone] = useState<Set<string>>(new Set())
   const mode: 'admin' | 'team' | 'own' = !user || user.role === 'admin' ? 'admin' : can('quotes.viewAll') ? 'team' : 'own'
   const myRepId = mode === 'admin' ? ME.id : user!.repId
@@ -31,26 +33,23 @@ export default function Today() {
   const scopeReps = REPS.filter((r) => r.company !== 'all' && inScope(scope, r.company)).map((r) => r.id)
   /** Row belongs to this dashboard (company scope, and the rep's own work in 'own' mode). */
   const mineOrTeam = (company: string, repId?: string) => inScope(scope, company) && (mode !== 'own' || repId === myRepId)
+  const canSeeQuote = (q: (typeof QUOTES)[number]) => mineOrTeam(q.company, q.repId) && access.quote(q)
   const showRep = mode === 'team'
 
-  const appointments = APPOINTMENTS.filter((a) => a.day === 2 && a.type !== 'Non dispo' && (mine ? a.repId === myRepId : scopeReps.includes(a.repId))).sort((a, b) => a.start - b.start)
+  const appointments = APPOINTMENTS.filter((a) => a.day === 2 && a.type !== 'Non dispo' && (mine ? a.repId === myRepId : scopeReps.includes(a.repId) && access.appointment(a))).sort((a, b) => a.start - b.start)
 
-  const followUps = useMemo(() => {
-    const pending = QUOTES.filter((q) => (q.status === 'À rappeler' || q.status === 'Rappel courriel envoyé') && mineOrTeam(q.company, q.repId))
+  const followUps = (() => {
+    const pending = QUOTES.filter((q) => (q.status === 'À rappeler' || q.status === 'Rappel courriel envoyé') && canSeeQuote(q))
     if (mode !== 'admin') return pending.slice(0, 6)
     const first = QUOTES[0]
-    return [first, ...pending.filter((q) => q.id !== first.id)].filter((q) => inScope(scope, q.company)).slice(0, 6)
-  }, [scope, mode, myRepId, version])
+    return [first, ...pending.filter((q) => q.id !== first.id)].filter((q) => inScope(scope, q.company) && access.quote(q)).slice(0, 6)
+  })()
 
-  const opened = useMemo(
-    () =>
-      QUOTES.filter((q) => q.views > 0 && q.lastViewed && (q.status === 'En soumission' || q.status === 'Rappel courriel envoyé') && mineOrTeam(q.company, q.repId))
-        .sort((a, b) => (b.lastViewed ?? '').localeCompare(a.lastViewed ?? '') || b.views - a.views)
-        .slice(0, 5),
-    [scope, mode, myRepId, version],
-  )
+  const opened = QUOTES.filter((q) => q.views > 0 && q.lastViewed && (q.status === 'En soumission' || q.status === 'Rappel courriel envoyé') && canSeeQuote(q))
+    .sort((a, b) => (b.lastViewed ?? '').localeCompare(a.lastViewed ?? '') || b.views - a.views)
+    .slice(0, 5)
 
-  const newLeads = LEADS.filter((l) => l.status !== 'Converti' && l.status !== 'Non qualifié' && (l.channel === 'Agent IA' || ['RDV réservé', 'Qualifié par IA', 'Qualifié', 'Nouveau'].includes(l.status))).filter((l) => mineOrTeam(l.company, l.repId))
+  const newLeads = LEADS.filter((l) => l.status !== 'Converti' && l.status !== 'Non qualifié' && (l.channel === 'Agent IA' || ['RDV réservé', 'Qualifié par IA', 'Qualifié', 'Nouveau'].includes(l.status))).filter((l) => inScope(scope, l.company) && access.lead(l))
 
   const toggleDone = (id: string) =>
     setDone((prev) => {

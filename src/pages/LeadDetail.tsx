@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Bot, CalendarCheck, CalendarClock, CalendarPlus, Check, FilePenLine, FileText, Flame, House, Inbox, Mail, MapPin, MessageSquare, Phone, RotateCcw, SearchX, Tag, UserRound, Wallet, Wrench } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
+import { NoAccessPage } from '../auth/guards'
 import { LeadStageBadge } from '../components/leads'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
@@ -37,6 +39,7 @@ export default function LeadDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { can } = useAuth()
+  const access = useAccess()
   const [tab, setTab] = useState<Tab>('conversation')
   const [booking, setBooking] = useState(false)
   const [slot, setSlot] = useState<string | null>(null)
@@ -58,6 +61,8 @@ export default function LeadDetail() {
         </div>
       </Page>
     )
+  // Another rep's lead opened by URL.
+  if (!access.lead(found)) return <NoAccessPage>{t("Ce lead est assigné à un autre représentant.")}</NoAccessPage>
   const lead = found
 
   const profile = LEAD_PROFILES[lead.id]
@@ -249,7 +254,7 @@ export default function LeadDetail() {
             />
             {tab === 'conversation' && <ThreadPanel thread={thread} phone={lead.phone} lang={lang} />}
             {tab === 'activite' && <Timeline items={activity} />}
-            {tab === 'notes' && <Notes initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
+            {tab === 'notes' && <Notes canDelete={access.canDelete} initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
           </>
         }
         right={
@@ -266,7 +271,7 @@ export default function LeadDetail() {
                   </div>
                   <p className="text-xs text-ink-mute mt-0.5 truncate">{t(quote.workType)}</p>
                 </Link>
-                {client && (
+                {client && access.client(client) && (
                   <Link to={`/clients/${client.id}`} className="mt-2 text-xs font-semibold text-primary-press inline-flex items-center gap-1">
                     <UserRound className="w-3.5 h-3.5" />
                     {t('Fiche client : {name}', { name: fullName(client) })}

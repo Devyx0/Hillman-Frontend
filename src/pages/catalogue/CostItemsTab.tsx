@@ -24,6 +24,7 @@ export function CostItemsTab() {
   const canEdit = useCanEditCatalogue()
   const { user, can } = useAuth()
   const me = user?.name ?? '—'
+  // Read-only users see cost and margin columns only with `quotes.costs`.
   const showCosts = can('quotes.costs') || canEdit
   const [general, setGeneral] = useState('Toit en pente')
   const [category, setCategory] = useState('Bardeaux')
@@ -197,7 +198,7 @@ export function CostItemsTab() {
                         )}
                       </td>
                       <td className="td text-right">
-                        {canEdit && (
+                        {canEdit && can('delete') && (
                           <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink" aria-label={t('Supprimer')} onClick={() => remove(it)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, ArrowUpDown, ArrowUpRight, ChevronLeft, ChevronRight, Download, Eye, FileSearch, Mail, MessageSquare, Pause, Play, Plus, Search, Tags, Trash2, UserCog, Workflow, X, Zap } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { FilterBar, FilterField, Select } from '../components/filters'
 import { MultiSelect } from '../components/multi-select'
 import { ComposeDrawer, type MessageCtx, type MessageKind } from '../components/messaging'
@@ -103,7 +104,8 @@ export default function Quotes() {
   const { user, can } = useAuth()
   const viewAll = can('quotes.viewAll')
   const costs = can('quotes.costs')
-  const canDelete = can('quotes.delete')
+  const canDelete = can('delete')
+  const access = useAccess()
   const me = user?.repId
   const myCompanies = useMemo(() => user?.companies ?? [], [user])
   const [params] = useSearchParams()
@@ -147,7 +149,8 @@ export default function Quotes() {
   }, [filterKey, attempt, forceError])
 
   const scoped = useMemo(
-    () => (QUOTES as Q[]).filter((q) => inScope(scope, q.company) && myCompanies.includes(q.company) && (viewAll || q.repId === me)),
+    // Without `quotes.viewAll` a rep sees only their own quotes (always within their companies).
+    () => (QUOTES as Q[]).filter((q) => inScope(scope, q.company) && access.quote(q)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [version, scope, myCompanies, viewAll, me],
   )
@@ -261,7 +264,7 @@ export default function Quotes() {
   return (
     <Page>
       <PageHeader
-        title={t('Soumissions')}
+        title={viewAll ? t('Soumissions') : t('Vos soumissions')}
         actions={
           <>
             <button className="btn btn-sm btn-secondary" disabled={!results.length} onClick={() => exportCsv(results, costs)}>

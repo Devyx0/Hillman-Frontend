@@ -11,6 +11,7 @@ import { NoAccess, Notice, confirmAction } from '../../components/states'
 import { Select } from '../../components/filters'
 import { inScope, useApp } from '../../context/AppContext'
 import { useAuth } from '../../auth/AuthContext'
+import { useAccess } from '../../auth/access'
 import { APPOINTMENTS, clientById, companyById, fullName, repById, type Quote, type Tone } from '../../data/mock'
 import { quoteById, quoteByNo, useStore } from '../../data/store'
 import { colourLine, getDraft } from '../../data/quote-builder'
@@ -51,9 +52,11 @@ const MATERIAL_TONE: Record<string, Tone> = { 'À commander': 'critical', Comman
 
 export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobRecord | null; onClose: () => void; onSchedule: (j: JobRecord) => void; onWorkOrder: (j: JobRecord) => void }) {
   const { can } = useAuth()
+  const access = useAccess()
   useStore()
-  if (!job) return null
-  const quote = jobQuote(job)
+  if (!job || !access.job(job)) return null
+  const found = jobQuote(job)
+  const quote = found && access.quote(found) ? found : undefined
   const remove = async () => {
     const ok = await confirmAction({ title: t('Retirer ce travail du calendrier?'), body: t('{client} · {no} retourne dans « À planifier ».', { client: job.client, no: job.quoteNo }), confirmLabel: t('Retirer'), danger: true })
     if (!ok) return
@@ -133,7 +136,7 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
             </p>
             <span className="text-sm font-semibold tnum">{money(quote.amount, false)}</span>
           </Link>
-        ) : (
+        ) : found ? null : (
           <p className="text-xs text-ink-mute">{t('Soumission {no} (historique, non disponible dans la démo)', { no: job.quoteNo })}</p>
         )}
         <div className="flex flex-wrap gap-2 pt-3 border-t border-hairline">
@@ -367,7 +370,7 @@ function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => v
               <Ban className="w-4 h-4" />
               {t('Enregistrer')}
             </button>
-            {editing && (
+            {editing && can('delete') && (
               <button className="btn btn-md btn-ghost hover:text-tone-critical-ink" onClick={remove}>
                 <Trash2 className="w-4 h-4" />
                 {t('Supprimer')}

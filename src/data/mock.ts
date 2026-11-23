@@ -139,6 +139,8 @@ export interface Client {
   type: string
   /** Language for everything sent to this client (portal, PDF, emails, texts). Default French. */
   language?: 'fr' | 'en'
+  /** Rep id of the user who created the record in the app (their "own" client until a quote exists). */
+  createdBy?: string
 }
 
 /** The client's communication language (French unless set). */
@@ -324,6 +326,8 @@ export interface Lead {
   status: string
   booked?: string
   repId?: string
+  /** Rep id of the user who created the lead in the app. */
+  createdBy?: string
 }
 
 export const LEADS: Lead[] = [

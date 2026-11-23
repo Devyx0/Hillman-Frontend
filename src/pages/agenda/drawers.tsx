@@ -11,7 +11,7 @@ import { ComingSoon, Notice, confirmAction } from '../../components/states'
 import { CLIENTS, QUOTES, clientById, clientLang, companyById, fullName, repById, type Quote, type Rep } from '../../data/mock'
 import { addAppointment, removeAppointment, updateAppointment } from '../../data/store'
 import { dayDate, dayFromIso, hourFromIso, isoAt, repConflicts, type AppointmentRecord } from '../../data/calendar'
-import { useAuth } from '../../auth/AuthContext'
+import { useAccess } from '../../auth/access'
 import { toast } from '../../lib/toast'
 import { cn, formatHour, money } from '../../lib/utils'
 import { DAY_END, DAY_NAMES, DAY_START, TODAY_INDEX, capitalize, type CalEvent } from './calendar'
@@ -21,14 +21,9 @@ import { inLang, locale, t } from '../../i18n'
 /** "Mardi 20 octobre" for a day index. */
 export const longDay = (day: number) => capitalize(dayDate(day).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }))
 
-/** Can the signed-in user edit this rep's calendar? */
-export function useCanBookFor() {
-  const { user, can } = useAuth()
-  return (repId: string) => can('calendar.allReps') || user?.repId === repId
-}
 
 export function AppointmentDrawer({ a, onClose, onEdit }: { a: CalEvent | null; onClose: () => void; onEdit: (a: AppointmentRecord) => void }) {
-  const canBookFor = useCanBookFor()
+  const access = useAccess()
   if (!a) {
     return (
       <Drawer open={false} onClose={onClose} title="">
@@ -42,7 +37,8 @@ export function AppointmentDrawer({ a, onClose, onEdit }: { a: CalEvent | null; 
   const isNew = !!a.notes // booked in the app: show what was typed instead of guessing a client
   const client = a.clientId ? clientById(a.clientId) : quote ? clientById(quote.clientId) : isAiLead || isNew ? undefined : (CLIENTS.find((c) => c.city === a.city) ?? CLIENTS[(a.id.charCodeAt(1) * 7) % CLIENTS.length])
   const name = client ? fullName(client) : isAiLead ? 'Catherine Drolet' : (a.notes?.split('\n')[0] ?? '—')
-  const canEdit = canBookFor(a.repId)
+  // Own appointments always; other reps' with `calendar.moveOthers`.
+  const canEdit = access.moveAppointment(a)
   const ctx: MessageCtx = {
     name,
     first: name.split(' ')[0],
@@ -131,7 +127,7 @@ export function AppointmentDrawer({ a, onClose, onEdit }: { a: CalEvent | null; 
             <p className="text-sm text-ink-secondary whitespace-pre-line rounded-lg bg-sand/60 p-3">{a.notes}</p>
           </div>
         )}
-        {quote && (
+        {quote && access.quote(quote) && (
           <Link to={`/soumissions/${quote.id}`} className="flex items-center gap-3 rounded-lg border border-hairline p-3 hover:border-primary">
             <FilePenLine className="w-5 h-5 text-ink-mute" />
             <p className="min-w-0 flex-1 text-sm font-semibold text-ink truncate">
@@ -151,7 +147,7 @@ export function AppointmentDrawer({ a, onClose, onEdit }: { a: CalEvent | null; 
             <Navigation className="w-3.5 h-3.5" />
             {t('Itinéraire')}
           </button>
-          {client && (
+          {client && access.client(client) && (
             <Link to={`/clients/${client.id}`} className="btn btn-sm btn-ghost">
               <UserRound className="w-3.5 h-3.5" />
               {t('Fiche client')}

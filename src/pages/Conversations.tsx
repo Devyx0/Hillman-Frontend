@@ -6,10 +6,11 @@ import { ComingSoon, SkeletonRows } from '../components/states'
 import { Avatar, Badge, CHANNEL_ICONS, CompanyBadge, Empty, StatusBadge, type Icon } from '../components/ui'
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { APPOINTMENTS, CLIENTS, LEADS, ME, QUOTES, THREADS, clientById, clientLang, companyById, fullName, repById, type CompanyId, type Thread } from '../data/mock'
 import { SENT_LOG, type SentRecord } from '../data/quote-builder'
 import { isOptedOut } from '../data/settings'
-import { quoteById, request, useStore } from '../data/store'
+import { quoteById, quoteByNo, request, useStore } from '../data/store'
 import { toast } from '../lib/toast'
 import { cn, formatHour, money } from '../lib/utils'
 import { getLang, t } from '../i18n'
@@ -73,8 +74,11 @@ for (const th of [...THREADS, ...DEMO_THREADS]) applyStopReplies(th.messages, th
 /** Contact card shown beside a thread (mockup: `Nx`). */
 function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => void }) {
   useStore()
+  const access = useAccess()
   const client = thread.clientId ? clientById(thread.clientId) : undefined
-  const quote = thread.quoteNo ? QUOTES.find((q) => q.no === thread.quoteNo) : undefined
+  const found = thread.quoteNo ? QUOTES.find((q) => q.no === thread.quoteNo) : undefined
+  // Links only to records the user may open.
+  const quote = found && access.quote(found) ? found : undefined
   const appt = APPOINTMENTS.find(
     (a) => (client && a.clientId === client.id) || (quote && a.quoteNo === quote.no) || (thread.id === 't2' && a.id === 'a6') || (thread.id === 't3' && a.id === 'c3') || (thread.id === 't5' && a.id === 'd3'),
   )
@@ -84,7 +88,8 @@ function ContactPanel({ thread, onClose }: { thread: Thread; onClose?: () => voi
   const optedOut = isOptedOut(phone)
   const email = client?.email ?? lead?.email ?? (thread.id === 't4' ? 'gestion@laurentia.ca' : thread.id === 't6' ? 'louis.bergeron@outlook.com' : undefined)
   const address = client ? `${client.no}, ${client.street}, ${client.city}` : lead ? lead.city : thread.id === 't4' ? '2600, boul. Laurier, Sainte-Foy' : thread.id === 't6' ? 'Sillery' : undefined
-  const recordHref = client ? `/clients/${client.id}` : leadId ? `/leads/${leadId}` : undefined
+  const leadRecord = leadId ? LEADS.find((l) => l.id === leadId) : undefined
+  const recordHref = client ? (access.client(client) ? `/clients/${client.id}` : undefined) : leadId && (!leadRecord || access.lead(leadRecord)) ? `/leads/${leadId}` : undefined
 
   return (
     <div className="p-5 space-y-5">
@@ -344,7 +349,8 @@ const VIEW_TABS: [view: 'threads' | 'sent', label: string, icon: Icon][] = [
 export default function Conversations() {
   useStore() // opt-out list
   const { scope } = useApp()
-  const { can, user } = useAuth()
+  const { user } = useAuth()
+  const access = useAccess()
   const [filter, setFilter] = useState<ThreadFilter>('all')
   const [query, setQuery] = useState('')
   const [threads, setThreads] = useState<ChatThread[]>(() => [...THREADS.filter((t) => t.id !== 't7'), ...DEMO_THREADS])
@@ -367,7 +373,13 @@ export default function Conversations() {
   const [sentId, setSentId] = useState('e7')
 
   // Sends logged by the quote builder (newest first), then the mock history.
-  const allSent: SentEmail[] = [...SENT_LOG.map(fromSentLog), ...SENT_EMAILS]
+  // Without `conversations.viewAll`: only emails about the rep's own quotes (or sent by them).
+  const ownSent = (e: SentEmail) => {
+    if (access.seesAll.conversations) return true
+    const q = quoteByNo(e.quoteNo)
+    return q ? access.quote(q) : e.by === user?.name
+  }
+  const allSent: SentEmail[] = [...SENT_LOG.map(fromSentLog), ...SENT_EMAILS].filter((e) => access.company(e.company) && ownSent(e))
   const sentRows = allSent
     .filter((e) => inScope(scope, e.company))
     .filter((e) => sentType === 'all' || e.type === sentType)
@@ -377,15 +389,16 @@ export default function Conversations() {
   const senders = [...new Set(allSent.filter((e) => inScope(scope, e.company)).map((e) => e.by))]
   const sent = sentRows.find((e) => e.id === sentId) ?? sentRows[0]
 
+  // Without `conversations.viewAll` a rep sees only the threads assigned to them.
+  const mine = useMemo(() => threads.filter((t) => inScope(scope, t.company) && access.thread(t)), [threads, scope, access])
   const visible = useMemo(
     () =>
-      threads
-        .filter((t) => inScope(scope, t.company) && (can('quotes.viewAll') || !user || t.assigned === user.repId))
+      mine
         .filter((t) => (filter === 'unread' ? t.unread > 0 : filter === 'ai' ? hasAI(t) : filter === 'mine' ? t.assigned === (user?.repId ?? ME.id) : filter === 'sms' || filter === 'email' || filter === 'call' ? t.channel === filter : true))
         .filter((t) => !query || (t.name + t.last).toLowerCase().includes(query.toLowerCase())),
-    [threads, scope, filter, query, can, user],
+    [mine, filter, query, user],
   )
-  const active = threads.find((t) => t.id === activeId) ?? visible[0]
+  const active = mine.find((t) => t.id === activeId) ?? visible[0]
 
   const openThread = (id: string) => {
     setActiveId(id)
@@ -408,15 +421,15 @@ export default function Conversations() {
   }, [active?.id, active?.messages.length, pane])
 
   const counts: Partial<Record<ThreadFilter, number>> = {
-    unread: threads.filter((t) => t.unread).length,
-    ai: threads.filter(hasAI).length,
+    unread: mine.filter((t) => t.unread).length,
+    ai: mine.filter(hasAI).length,
   }
 
   return (
     <div className="h-[calc(100vh-4rem)] flex bg-sand">
       <div className={cn('w-full md:w-80 lg:w-96 bg-white border-r border-hairline flex flex-col shrink-0', pane === 'thread' && 'hidden md:flex')}>
         <div className="p-4 border-b border-hairline space-y-3">
-          <h1 className="text-xl font-semibold text-ink">{t('Conversations')}</h1>
+          <h1 className="text-xl font-semibold text-ink">{access.seesAll.conversations ? t('Conversations') : t('Vos conversations')}</h1>
           <div className="grid grid-cols-2 gap-1 p-1 bg-sand rounded-lg" role="tablist">
             {VIEW_TABS.map(([v, label, IconC]) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)} className={cn('h-8 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5', view === v ? 'bg-white text-ink shadow-card' : 'text-ink-mute hover:text-ink')}>
@@ -453,7 +466,7 @@ export default function Conversations() {
             </div>
           ) : (
             <div className="flex gap-1 overflow-x-auto nav-scroll -mx-1 px-1 pb-1">
-              {THREAD_FILTERS.map((f) => (
+              {THREAD_FILTERS.filter((f) => f.v !== 'mine' || access.seesAll.conversations).map((f) => (
                 <button key={f.v} onClick={() => setFilter(f.v)} className={cn('h-7 px-2.5 rounded-md text-xs font-semibold whitespace-nowrap flex items-center gap-1 shrink-0', filter === f.v ? 'bg-ink text-white' : 'bg-sand text-ink-mute hover:text-ink')}>
                   {f.icon && <f.icon className="w-3 h-3" />}
                   {t(f.label)}

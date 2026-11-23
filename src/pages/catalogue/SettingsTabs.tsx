@@ -47,8 +47,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'modeles', label: 'Modèles de messages', hint: 'Textos et courriels avec champs de fusion', icon: FileText, component: MessageTemplatesTab, allowed: manage, group: 'Ventes' },
   { id: 'paiements', label: 'Calendriers de paiement', hint: 'Étapes de paiement par compagnie', icon: CalendarClock, component: PaymentSchedulesTab, allowed: manage, group: 'Ventes' },
   { id: 'loi25', label: 'Loi 25', hint: 'Responsable, consentements et demandes', icon: ShieldCheck, component: PrivacyTab, allowed: manage, group: 'Conformité' },
-  { id: 'logicia', label: 'Import Logicia', hint: "État de l'import des données", icon: DatabaseZap, component: LogiciaTab, allowed: (_can, user) => user?.role === 'admin', group: 'Conformité' },
-  { id: 'securite', label: 'Sécurité et journal', hint: 'Journal des modifications', icon: Lock, component: SecurityTab, allowed: manage, group: 'Conformité' },
+  { id: 'logicia', label: 'Import Logicia', hint: "État de l'import des données", icon: DatabaseZap, component: LogiciaTab, allowed: manage, group: 'Conformité' },
+  { id: 'securite', label: 'Sécurité et journal', hint: 'Journal des modifications', icon: Lock, component: SecurityTab, allowed: (can) => can('audit.view'), group: 'Conformité' },
 ]
 
 export const SETTINGS_GROUPS = ['Compte', 'Ventes', 'Opérations', 'Conformité'] as const

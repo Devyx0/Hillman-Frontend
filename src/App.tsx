@@ -27,12 +27,15 @@ const Profile = lazy(() => import('./pages/account/Profile'))
 const Invitation = lazy(() => import('./pages/account/Invitation'))
 const ResetPassword = lazy(() => import('./pages/account/ResetPassword'))
 
-/** `/catalogue` needs `catalogue.edit`; its Paramètres view (`?tab=parametres`) needs `settings.manage` or `users.manage`. */
+/**
+ * `/catalogue` needs `catalogue.view` (read-only) or `catalogue.edit`; its Paramètres view
+ * (`?tab=parametres`) needs `settings.manage`, `users.manage` or `audit.view`.
+ */
 function CatalogueRoute() {
   const [params] = useSearchParams()
   const settings = params.get('tab') === 'parametres'
   return (
-    <RequirePermission perm={settings ? ['settings.manage', 'users.manage'] : ['catalogue.edit', 'settings.manage']}>
+    <RequirePermission perm={settings ? ['settings.manage', 'users.manage', 'audit.view'] : ['catalogue.view', 'catalogue.edit']}>
       <Catalogue />
     </RequirePermission>
   )

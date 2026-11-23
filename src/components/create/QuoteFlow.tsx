@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, FilePlus2, FileText, Search, UserPlus, Users } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
+import { useAccess } from '../../auth/access'
 import { useApp } from '../../context/AppContext'
 import { LEAD_PROFILES, leadById } from '../../data/leads'
 import { CLIENTS, COMPANIES, QUOTES, REPS, WORK_TYPES, clientById, companyById, fullName, type Client, type CompanyId } from '../../data/mock'
@@ -31,6 +32,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   const navigate = useNavigate()
   const { scope } = useApp()
   const { user, companies, can } = useAuth()
+  const access = useAccess()
   const lead = leadById(prefill.leadId)
   const allowed = COMPANIES.filter((c) => companies.includes(c.id))
 
@@ -106,7 +108,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   const suggestedTemplate = templates.find((tp) => matchesWork(tp.workType))?.id ?? NO_TEMPLATE
   const templateId = templateChoice !== null && (templateChoice === NO_TEMPLATE || templates.some((tp) => tp.id === templateChoice)) ? templateChoice : suggestedTemplate
 
-  const repLocked = user?.role === 'rep' && companyReps.some((r) => r.id === user.repId)
+  // Without `quotes.viewAll` a rep creates quotes only for themselves.
+  const repLocked = !can('quotes.viewAll') && !!user && companyReps.some((r) => r.id === user.repId)
   const defaultRep = () => {
     if (user && companyReps.some((r) => r.id === user.repId)) return user.repId
     if (lead?.repId && companyReps.some((r) => r.id === lead.repId)) return lead.repId
@@ -118,12 +121,15 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     const q = normalize(query.trim())
     const digits = query.replace(/\D/g, '')
     if (!q) return []
+    // Search covers the clients the user may see; a returning client of another rep is found by the
+    // duplicate check of the new-client form ("Utiliser ce client").
     return CLIENTS.filter((c) => {
+      if (!access.client(c)) return false
       const hay = normalize(`${fullName(c)} ${c.company ?? ''} ${c.email} ${c.no} ${c.street} ${c.city}`)
       const phones = `${c.phone}${c.mobile ?? ''}`.replace(/\D/g, '')
       return hay.includes(q) || (digits.length >= 3 && phones.includes(digits))
     }).slice(0, 8)
-  }, [query])
+  }, [query, access])
 
   if (!can('quotes.edit')) return <NoAccess>{t('Votre rôle ne permet pas de créer des soumissions.')}</NoAccess>
   if (allowed.length === 0) return <NoAccess>{t("Votre compte n'est associé à aucune compagnie.")}</NoAccess>

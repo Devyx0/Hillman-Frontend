@@ -542,7 +542,7 @@ interface Note {
 }
 
 /** Internal notes list with add box (mockup: `X0`). */
-export function Notes({ initial }: { initial: Note[] }) {
+export function Notes({ initial, canDelete = false }: { initial: Note[]; canDelete?: boolean }) {
   const { user } = useAuth()
   const [notes, setNotes] = useState(initial)
   const [draft, setDraft] = useState('')
@@ -567,9 +567,9 @@ export function Notes({ initial }: { initial: Note[] }) {
           <li key={i} className="group rounded-lg bg-sand px-3.5 py-3">
             <p className="text-2xs text-ink-mute mb-1 flex items-center gap-1">
               <span className="font-semibold text-ink-secondary">{n.by}</span> · {n.at}
-              <button onClick={() => remove(i)} className="ml-auto p-1 rounded sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-white" aria-label={t('Supprimer la note')}>
+              {canDelete && <button onClick={() => remove(i)} className="ml-auto p-1 rounded sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:bg-white" aria-label={t('Supprimer la note')}>
                 <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              </button>}
             </p>
             <p className="text-sm text-ink-secondary">{n.text}</p>
           </li>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Download, Search, UserPlus, Users, Workflow, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { Select } from '../components/filters'
 import { SkeletonRows } from '../components/states'
 import { Avatar, CompanyBadge, Empty, Page, PageHeader } from '../components/ui'
@@ -19,6 +20,8 @@ export default function Clients() {
   const navigate = useNavigate()
   const { scope } = useApp()
   const { can } = useAuth()
+  const access = useAccess()
+  const all = access.seesAll.clients
   const [loading, setLoading] = useState(true)
   useEffect(() => {
     let live = true
@@ -37,7 +40,8 @@ export default function Clients() {
     setSelected(new Set())
   }, [scope])
 
-  const rows = CLIENTS.map((c) => ({ c, served: companiesServing(c) })).filter((r) => {
+  // Without `clients.viewAll` a rep sees only their clients (one of their quotes or leads, or created by them).
+  const rows = CLIENTS.filter((c) => access.client(c)).map((c) => ({ c, served: companiesServing(c) })).filter((r) => {
     if ((scope !== 'all' && !r.served.includes(scope)) || (company !== 'Toutes' && !r.served.includes(company as CompanyId)) || (type !== 'Tous' && r.c.type !== type)) return false
     if (query.trim()) {
       const q = normalize(query.trim())
@@ -60,7 +64,8 @@ export default function Clients() {
   return (
     <Page>
       <PageHeader
-        title={t('Clients')}
+        title={all ? t('Clients') : t('Vos clients')}
+        subtitle={all ? undefined : t('Les clients de vos soumissions et de vos leads')}
         actions={
           <>
             {can('clients.export') && (
@@ -100,10 +105,12 @@ export default function Clients() {
               <Workflow className="w-3.5 h-3.5" />
               {t('Relancer')}
             </button>
-            <button onClick={() => toast(t('Export de la sélection'))} className="btn btn-xs bg-white/15 text-white hover:bg-white/25">
-              <Download className="w-3.5 h-3.5" />
-              {t('Exporter')}
-            </button>
+            {can('clients.export') && (
+              <button onClick={() => toast(t('Export de la sélection'))} className="btn btn-xs bg-white/15 text-white hover:bg-white/25">
+                <Download className="w-3.5 h-3.5" />
+                {t('Exporter')}
+              </button>
+            )}
             <button onClick={() => setSelected(new Set())} className="p-1.5 rounded-md hover:bg-white/15" aria-label={t('Annuler la sélection')}>
               <X className="w-4 h-4" />
             </button>
@@ -167,9 +174,9 @@ export default function Clients() {
         </div>
         <div className="px-5 py-3 border-t border-hairline flex items-center justify-between text-xs text-ink-mute">
           <span className="tnum">
-            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(TOTAL_CLIENTS[scope] + Object.values(CLIENT_COMPANIES).filter((cs) => scope === 'all' || cs.includes(scope)).length) })}
+            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(all ? TOTAL_CLIENTS[scope] + Object.values(CLIENT_COMPANIES).filter((cs) => scope === 'all' || cs.includes(scope)).length : rows.length) })}
           </span>
-          <div className="flex items-center gap-1">
+          <div className={cn('flex items-center gap-1', !all && rows.length <= 25 && 'hidden')}>
             <button className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Page précédente')} disabled>
               <ChevronLeft className="w-4 h-4" />
             </button>

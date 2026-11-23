@@ -109,4 +109,27 @@ export const authEn: Record<string, string> = {
 
   /* misc */
   Calendrier: 'Calendar',
+
+  /* roles v1 */
+  'Voir les coûtants et la marge': 'See costs and margin',
+  'Voir le profit réel': 'See actual profit',
+  'Voir les leads de tous les représentants': "View all reps' leads",
+  'Voir tous les clients': 'View all clients',
+  'Voir toutes les conversations': 'View all conversations',
+  'Déplacer les rendez-vous des autres': "Move other reps' appointments",
+  'Consulter le catalogue': 'View the catalog',
+  'Voir le journal des modifications et la sécurité': 'View the change log and security',
+  'Supprimer (soumissions, clients, notes, modèles…)': 'Delete (quotes, clients, notes, templates…)',
+  'Vos leads': 'Your leads',
+  'Les leads qui vous sont assignés': 'Leads assigned to you',
+  'Votre pipeline': 'Your pipeline',
+  'Vos soumissions': 'Your quotes',
+  'Vos clients': 'Your clients',
+  'Les clients de vos soumissions et de vos leads': 'Clients from your quotes and leads',
+  'Vos conversations': 'Your conversations',
+  'Votre agenda': 'Your calendar',
+  'Ce lead est assigné à un autre représentant.': 'This lead is assigned to another rep.',
+  'Ce client n’est lié à aucune de vos soumissions ni à aucun de vos leads.': "This client isn't linked to any of your quotes or leads.",
+  'Lecture seule : consultez le catalogue pour choisir les items de vos soumissions.': 'Read-only: browse the catalog to pick items for your quotes.',
+  'Créer une soumission pour ce client': 'Create a quote for this client',
 }

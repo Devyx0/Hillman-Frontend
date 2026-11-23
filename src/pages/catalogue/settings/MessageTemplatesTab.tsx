@@ -19,7 +19,7 @@ const toDraft = (m: MessageTemplate): MessageTemplate => ({ ...m, name: t(m.name
 
 export function MessageTemplatesTab() {
   useStore()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const me = user?.name ?? '—'
   const [selected, setSelected] = useState<string | null>(MESSAGE_TEMPLATES[0]?.id ?? null)
   const [draft, setDraft] = useState<MessageTemplate | null>(() => (MESSAGE_TEMPLATES[0] ? toDraft(MESSAGE_TEMPLATES[0]) : null))
@@ -198,10 +198,12 @@ export function MessageTemplatesTab() {
                 </p>
               )}
               <div className="flex flex-wrap justify-end gap-2 pt-1">
-                <button className="btn btn-sm btn-ghost text-tone-critical-ink mr-auto" onClick={remove}>
-                  <Trash2 className="w-4 h-4" />
-                  {original ? t('Supprimer') : t('Abandonner')}
-                </button>
+                {(!original || can('delete')) && (
+                  <button className="btn btn-sm btn-ghost text-tone-critical-ink mr-auto" onClick={remove}>
+                    <Trash2 className="w-4 h-4" />
+                    {original ? t('Supprimer') : t('Abandonner')}
+                  </button>
+                )}
                 <button className="btn btn-sm btn-ghost" disabled={!dirty || !original} onClick={() => original && setDraft(toDraft(original))}>
                   {t('Annuler')}
                 </button>

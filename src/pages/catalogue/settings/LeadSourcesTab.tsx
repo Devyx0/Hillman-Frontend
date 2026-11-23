@@ -45,7 +45,7 @@ export function LeadSourcesTab() {
 // ── Editable source list ────────────────────────────────────────────────────
 function SourcesCard() {
   useStore()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const me = user?.name ?? '—'
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null)
@@ -137,9 +137,11 @@ function SourcesCard() {
               <button className="p-1.5 rounded-md hover:bg-stone" aria-label={t('Renommer')} onClick={() => setEditing({ id: s.id, name: s.name })}>
                 <Pencil className="w-3.5 h-3.5" />
               </button>
-              <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink" aria-label={t('Supprimer')} onClick={() => remove(s)}>
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              {can('delete') && (
+                <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink" aria-label={t('Supprimer')} onClick={() => remove(s)}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

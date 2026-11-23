@@ -48,6 +48,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
       message: f.message.trim(),
       status: 'Nouveau',
       repId,
+      createdBy: user?.repId,
     })
     toast(t('Lead ajouté : {name}', { name: lead.name }))
     onCreated(lead)

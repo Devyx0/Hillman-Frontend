@@ -1,9 +1,10 @@
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, ChevronRight, ChevronsUpDown, Columns3, Eye, FilePenLine, FileText, Inbox, Layers, LogOut, Menu, MessagesSquare, Plus, Search, Settings, Sun, Undo2, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { Avatar, CompanyLogo, StatusBadge, Wordmark, type Icon } from '../components/ui'
 import { inScope, useApp, type Scope } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { ACCOUNTS, ROLE_LABELS, type Account, type Permission } from '../auth/permissions'
 import { setViewAsOrigin, viewAsOrigin } from '../auth/session'
 import { useStore } from '../data/store'
@@ -42,23 +43,21 @@ const NAV_GROUPS: { label: string; items: NavEntry[] }[] = [
 ]
 
 const ADMIN_NAV: NavEntry[] = [
-  { name: 'Catalogue', href: '/catalogue', icon: BookOpen, perm: ['catalogue.edit'] },
-  { name: 'Paramètres', href: '/catalogue?tab=parametres', icon: Settings, perm: ['settings.manage', 'users.manage'] },
+  { name: 'Catalogue', href: '/catalogue', icon: BookOpen, perm: ['catalogue.view', 'catalogue.edit'] },
+  { name: 'Paramètres', href: '/catalogue?tab=parametres', icon: Settings, perm: ['settings.manage', 'users.manage', 'audit.view'] },
 ]
 
 function NavItem({ item }: { item: NavEntry }) {
   const location = useLocation()
   const { scope } = useApp()
-  const { user, can } = useAuth()
-  useStore()
+  const access = useAccess()
   const visible = (company: string) => scope === 'all' || scope === company
-  // Reps who can't see the whole team only count their own leads.
-  const own = (repId?: string) => can('quotes.viewAll') || repId === user?.repId
+  // Badges count only what the user may open (their own leads / threads without the "all" permissions).
   const count =
     item.href === '/leads'
-      ? LEADS.filter((l) => visible(l.company) && own(l.repId) && l.status !== 'Non qualifié' && l.status !== 'RDV réservé' && l.status !== 'Converti').length
+      ? LEADS.filter((l) => visible(l.company) && access.lead(l) && l.status !== 'Non qualifié' && l.status !== 'RDV réservé' && l.status !== 'Converti').length
       : item.href === '/conversations'
-        ? THREADS.filter((t) => visible(t.company)).reduce((n, t) => n + t.unread, 0)
+        ? THREADS.filter((t) => visible(t.company) && access.thread(t)).reduce((n, t) => n + t.unread, 0)
         : item.count
   const onSettings = location.pathname === '/catalogue' && location.search.includes('tab=parametres')
   const resolve = (isActive: boolean) => (item.href.includes('?') ? onSettings : item.href === '/catalogue' ? isActive && !onSettings : isActive)
@@ -85,6 +84,7 @@ function NavItem({ item }: { item: NavEntry }) {
 function CompanySwitcher({ onPick }: { onPick?: () => void }) {
   const { scope, setScope } = useApp()
   const { companies, can } = useAuth()
+  const access = useAccess()
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const current = scope === 'all' ? null : COMPANIES.find((c) => c.id === scope)
@@ -105,7 +105,7 @@ function CompanySwitcher({ onPick }: { onPick?: () => void }) {
     onPick?.()
     toast(s === 'all' ? t('Vue Groupe Hillman — les 3 compagnies') : t('Compte : {name}', { name: COMPANIES.find((c) => c.id === s)!.name }))
   }
-  const openQuotes = (id: CompanyId) => QUOTES.filter((q) => q.company === id && ['En soumission', 'À rappeler', 'Rappel courriel envoyé'].includes(q.status)).length
+  const openQuotes = (id: CompanyId) => QUOTES.filter((q) => q.company === id && access.quote(q) && ['En soumission', 'À rappeler', 'Rappel courriel envoyé'].includes(q.status)).length
   return (
     <div className="relative w-full">
       <button
@@ -211,24 +211,22 @@ function NewMenu() {
 
 function CommandPalette() {
   const { paletteOpen, setPaletteOpen, scope } = useApp()
-  const { user, can } = useAuth()
-  const version = useStore()
+  const access = useAccess()
+  useStore()
   const [query, setQuery] = useState('')
   const navigate = useNavigate()
-  const viewAll = can('quotes.viewAll')
-  const repId = user?.repId
   useEffect(() => {
     if (!paletteOpen) setQuery('')
   }, [paletteOpen])
-  const results = useMemo(() => {
+  const results = (() => {
     const q = normalize(query.trim())
-    // Scope first; reps without `quotes.viewAll` only find their own quotes.
-    const allowed = QUOTES.filter((x) => inScope(scope, x.company) && (viewAll || x.repId === repId))
+    // Scope first; without the "all" permissions a rep only finds their own quotes and clients.
+    const allowed = QUOTES.filter((x) => inScope(scope, x.company) && access.quote(x))
     const quotes = allowed.filter((x) => !q || normalize(`${x.no} ${fullName(clientById(x.clientId)!)} ${x.city} ${x.workType}`).includes(q)).slice(0, 5)
     const inScopeClient = (c: (typeof CLIENTS)[number]) => scope === 'all' || c.company === scope || QUOTES.some((x) => x.clientId === c.id && x.company === scope)
-    const clients = CLIENTS.filter((c) => inScopeClient(c) && (!q || normalize(`${fullName(c)} ${c.phone} ${c.mobile ?? ''} ${c.street} ${c.city} ${c.email}`).includes(q))).slice(0, 5)
+    const clients = CLIENTS.filter((c) => inScopeClient(c) && access.client(c) && (!q || normalize(`${fullName(c)} ${c.phone} ${c.mobile ?? ''} ${c.street} ${c.city} ${c.email}`).includes(q))).slice(0, 5)
     return { quotes, clients }
-  }, [query, scope, viewAll, repId, version])
+  })()
   if (!paletteOpen) return null
   const go = (to: string) => {
     setPaletteOpen(false)
@@ -500,7 +498,7 @@ export default function AppLayout() {
         ))}
       </nav>
       <div className="shrink-0 border-t border-hairline px-3 py-3 space-y-0.5">
-        {adminNav.length > 0 && <p className="label-caps px-3 pb-1.5">{t('Administration')}</p>}
+        {adminNav.some((it) => it.href.includes('?')) && <p className="label-caps px-3 pb-1.5">{t('Administration')}</p>}
         {adminNav.map((it) => (
           <NavItem key={it.name} item={it} />
         ))}

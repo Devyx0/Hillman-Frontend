@@ -247,7 +247,7 @@ export function SuiviSection({ b }: { b: Builder }) {
           <Payments b={b} />
         </div>
       </div>
-      {b.canCosts && <ActualProfit b={b} />}
+      {b.canProfit && <ActualProfit b={b} />}
     </BuilderSection>
   )
 }

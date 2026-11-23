@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useAccess } from '../../auth/access'
 import { leadById } from '../../data/leads'
 import { onCreate, type CreateKind, type CreatePrefill } from '../../lib/create'
 import { t } from '../../i18n'
@@ -12,6 +13,7 @@ import QuoteFlow from './QuoteFlow'
 /** Mounted once in the layout; renders the create flow requested through `openCreate()`. */
 export default function CreateHost() {
   const navigate = useNavigate()
+  const access = useAccess()
   const [state, setState] = useState<{ kind: CreateKind; prefill: CreatePrefill; key: number } | null>(null)
   useEffect(() => {
     onCreate((kind, prefill) => setState({ kind, prefill, key: Date.now() }))
@@ -36,10 +38,13 @@ export default function CreateHost() {
         <ClientForm
           key={state.key}
           prefill={state.prefill.leadId ? leadClientPrefill(leadById(state.prefill.leadId), state.prefill) : state.prefill}
-          existingLabel={t('Ouvrir la fiche existante')}
+          // A client the rep doesn't work with yet: start a quote for them instead of opening a record they can't see.
+          existingLabel={(c) => (access.client(c) ? t('Ouvrir la fiche existante') : t('Créer une soumission pour ce client'))}
           onUseExisting={(c) => {
-            close()
-            navigate(`/clients/${c.id}`)
+            if (access.client(c)) {
+              close()
+              navigate(`/clients/${c.id}`)
+            } else setState({ kind: 'quote', prefill: { clientId: c.id }, key: Date.now() })
           }}
           onCreated={(c) => {
             close()

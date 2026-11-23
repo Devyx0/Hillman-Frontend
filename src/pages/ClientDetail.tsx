@@ -6,6 +6,8 @@ import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, ThreadPanel, T
 import { ErrorState, SkeletonRows } from '../components/states'
 import { Badge, CompanyBadge, Drawer, Empty, Page, RepName, StatusBadge, Tabs } from '../components/ui'
 import { useApp } from '../context/AppContext'
+import { useAccess } from '../auth/access'
+import { NoAccessPage } from '../auth/guards'
 import { LOGICIA_TONE, logiciaForClient, type LogiciaQuote } from '../data/logicia'
 import { QUOTES, REPS, THREADS, clientById, clientLang, companyById, fullName, repById, type Client, type Quote, type Thread } from '../data/mock'
 import { isOptedOut } from '../data/settings'
@@ -171,6 +173,7 @@ function LogiciaHistory({ client }: { client: Client }) {
 export default function ClientDetail() {
   useStore()
   const { id = '' } = useParams()
+  const access = useAccess()
   const client = clientById(id)
   if (!client)
     return (
@@ -185,6 +188,8 @@ export default function ClientDetail() {
         </div>
       </Page>
     )
+  // A client the rep doesn't work with (no quote or lead of theirs), opened by URL.
+  if (!access.client(client)) return <NoAccessPage>{t('Ce client n’est lié à aucune de vos soumissions ni à aucun de vos leads.')}</NoAccessPage>
   return <ClientRecord key={client.id} client={client} />
 }
 
@@ -192,21 +197,24 @@ function ClientRecord({ client }: { client: Client }) {
   const version = useStore()
   const navigate = useNavigate()
   const { scope } = useApp()
+  const access = useAccess()
   const isDemo = client.id === 'c66700'
   const [tab, setTab] = useState<TabId>('conversation')
   const textPhone = client.mobile ?? client.phone
   const optedOut = isOptedOut(client.mobile) || isOptedOut(client.phone)
 
+  // Only the quotes the user may open (a rep sees their own quotes for this client).
   const quotes = useMemo<Quote[]>(
     () =>
-      isDemo
-        ? [
+      (isDemo
+        ? ([
             ...QUOTES.filter((q) => q.clientId === client.id),
             { ...QUOTES[0], id: 'qx1', no: 'G58114', company: 'sg', repId: 'bto', status: 'Payé', date: '2025-08-28', amount: 200, workType: 'Nettoyage de gouttières', views: 0 },
             { ...QUOTES[0], id: 'qx2', no: 'G31877', company: 'sg', repId: 'plc', status: 'Payé', date: '2021-04-30', amount: 2500, workType: 'Gouttières · T-Rex M-5200', views: 0 },
-          ]
-        : QUOTES.filter((q) => q.clientId === client.id),
-    [client.id, isDemo, version], // eslint-disable-line react-hooks/exhaustive-deps
+          ] as Quote[])
+        : QUOTES.filter((q) => q.clientId === client.id)
+      ).filter((q) => access.quote(q)),
+    [client.id, isDemo, version, access.seesAll.quotes], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const companies = [...new Set(quotes.map((q) => q.company))]
   const open = quotes.filter((q) => OPEN_STATUSES.includes(q.status))
@@ -221,7 +229,8 @@ function ClientRecord({ client }: { client: Client }) {
   const lifetime = isDemo ? 2700 : client.lifetime
 
   const thread = useMemo<Thread>(() => {
-    const existing = THREADS.find((t) => t.clientId === client.id)
+    // Another rep's thread with this client stays hidden without `conversations.viewAll`.
+    const existing = THREADS.find((t) => t.clientId === client.id && access.thread(t))
     if (existing) return existing
     const q = quotes[0]
     return {
@@ -458,7 +467,7 @@ function ClientRecord({ client }: { client: Client }) {
                 </table>
               </div>
             )}
-            {tab === 'notes' && <Notes initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
+            {tab === 'notes' && <Notes canDelete={access.canDelete} initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
             {tab === 'fichiers' && quotes.length === 0 && (
               <div className="bg-white rounded-xl shadow-card">
                 <Empty icon={FileText} title={t('Aucun fichier')} />

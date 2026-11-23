@@ -81,7 +81,7 @@ const cloneList = (c: CompanyId) => PAYMENT_SCHEDULE_OPTIONS[c].map((x) => ({ ..
  */
 export function PaymentSchedulesTab() {
   useStore()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const [company, setCompany] = useScopeCompany()
   const [list, setList] = useState<PaymentSchedule[]>(() => cloneList(company))
   const [defaultId, setDefaultId] = useState(DEFAULT_PAYMENT_SCHEDULE[company])
@@ -160,10 +160,10 @@ export function PaymentSchedulesTab() {
               <input type="radio" name="default-schedule" checked={sel.id === defaultId} onChange={() => setDefaultId(sel.id)} className="w-4 h-4 accent-[var(--color-primary)]" />
               {t('Par défaut pour les nouvelles soumissions')}
             </label>
-            <button className="btn btn-sm btn-ghost" disabled={sel.id === defaultId || list.length <= 1} onClick={removeSchedule} title={sel.id === defaultId ? t('Le calendrier par défaut ne peut pas être supprimé') : undefined}>
+            {can('delete') && <button className="btn btn-sm btn-ghost" disabled={sel.id === defaultId || list.length <= 1} onClick={removeSchedule} title={sel.id === defaultId ? t('Le calendrier par défaut ne peut pas être supprimé') : undefined}>
               <Trash2 className="w-4 h-4" />
               {t('Supprimer')}
-            </button>
+            </button>}
           </div>
           <ul className="divide-y divide-hairline">
             {steps.map((s, i) => (

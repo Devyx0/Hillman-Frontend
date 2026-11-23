@@ -5,6 +5,7 @@ import { Card, Empty, Page, PageHeader, RepAvatar, Tabs } from '../components/ui
 import { Loading } from '../components/states'
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
+import { useAccess } from '../auth/access'
 import { quoteById, quoteByNo, request, useStore } from '../data/store'
 import { ABSENCES, dayDate, jobById, type Absence, type AppointmentRecord, type JobRecord } from '../data/calendar'
 import { cn } from '../lib/utils'
@@ -25,6 +26,7 @@ export default function Agenda() {
   useStore()
   const { scope } = useApp()
   const { user, can } = useAuth()
+  const access = useAccess()
   const [params, setParams] = useSearchParams()
   const [view, setView] = useState<View>('semaine')
   const [weekStart, setWeekStart] = useState(0)
@@ -69,7 +71,8 @@ export default function Agenda() {
   useEffect(() => {
     if (!fromQuote) return
     const q = quoteById(fromQuote) ?? quoteByNo(fromQuote)
-    if (q) {
+    // Only from a quote the user may open (a rep: their own).
+    if (q && access.quote(q)) {
       const repId = allReps || q.repId === user?.repId ? q.repId : (user?.repId ?? q.repId)
       setForm({ prefill: prefillFromQuote(q, repId), editing: null })
       setFormKey((k) => k + 1)
@@ -110,7 +113,7 @@ export default function Agenda() {
   return (
     <Page>
       <PageHeader
-        title={t('Agenda')}
+        title={allReps ? t('Agenda') : t('Votre agenda')}
         actions={
           <>
             <button className="btn btn-sm btn-secondary" onClick={() => setAbsence('new')}>

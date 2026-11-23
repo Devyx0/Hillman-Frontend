@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { CalendarDays, ChevronDown, Copy, ExternalLink, FileText, Mail, Phone, Plus, Search } from 'lucide-react'
 import { Badge, Field, RepAvatar } from '../../components/ui'
+import { useAuth } from '../../auth/AuthContext'
 import { REPS, fullName } from '../../data/mock'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
@@ -15,6 +16,8 @@ const DAY_LABELS = ['Dim.', 'Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.']
 /** Client, job address, rep and appointments. */
 export function InfosSection({ b }: { b: Builder }) {
   const navigate = useNavigate()
+  // Without `quotes.viewAll` a rep can't hand their quote to another rep (they would lose access to it).
+  const canReassign = useAuth().can('quotes.viewAll')
   const { quote, client } = b
   return (
     <BuilderSection id="infos" title={t('Infos')}>
@@ -65,7 +68,7 @@ export function InfosSection({ b }: { b: Builder }) {
           </div>
           <div className="col-span-2">
             <p className="label-caps mb-0.5">{t('Représentant')}</p>
-            <Select value={b.repId} onChange={b.setRepId} options={REPS.filter((r) => r.company === quote.company || r.company === 'all').map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))} searchable={false} />
+            <Select value={b.repId} onChange={b.setRepId} options={REPS.filter((r) => r.company === quote.company || r.company === 'all').map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))} searchable={false} disabled={!canReassign} />
           </div>
         </div>
       </div>

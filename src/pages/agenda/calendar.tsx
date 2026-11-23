@@ -7,6 +7,7 @@ import type { CSSProperties } from 'react'
 import { Ban, CalendarOff, CalendarRange, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { RepAvatar } from '../../components/ui'
 import { inScope, useApp } from '../../context/AppContext'
+import { useAccess } from '../../auth/access'
 import { APPOINTMENTS, JOBS, REPS, companyById, repById } from '../../data/mock'
 import { ABSENCES, PROVIDER_LABEL, busyBlocksFor, calendarLink, dayDate, isScheduled, type AppointmentRecord, type JobRecord } from '../../data/calendar'
 import { cn, formatHour } from '../../lib/utils'
@@ -155,10 +156,11 @@ function DayColumn({ evts, onOpen, today, dot = true }: { evts: CalEvent[]; onOp
 
 /* ── Jours de travaux band ─────────────────────────────────────────────── */
 
-/** Scheduled jobs in the current company scope overlapping the given days. */
+/** Scheduled jobs in the current company scope overlapping the given days (a rep: only their own quotes' work days). */
 function useScopedJobs(first: number, last: number): JobRecord[] {
   const { scope } = useApp()
-  return (JOBS as JobRecord[]).filter((j) => inScope(scope, j.company) && isScheduled(j) && j.startDay! <= last && j.startDay! + j.days - 1 >= first)
+  const access = useAccess()
+  return (JOBS as JobRecord[]).filter((j) => inScope(scope, j.company) && access.job(j) && isScheduled(j) && j.startDay! <= last && j.startDay! + j.days - 1 >= first)
 }
 
 /**

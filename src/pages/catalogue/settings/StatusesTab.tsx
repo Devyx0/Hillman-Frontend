@@ -25,7 +25,7 @@ const TONES: { value: StatusDef['tone']; label: string }[] = [
 
 export function StatusesTab() {
   useStore()
-  const { user } = useAuth()
+  const { user, can } = useAuth()
   const me = user?.name ?? '—'
   // Draft list: `from` keeps the original name so renames can be applied to existing quotes.
   const [list, setList] = useState(() => STATUS_DEFS.map((s) => ({ ...s, from: s.name })))
@@ -95,11 +95,11 @@ export function StatusesTab() {
                 <span className="p-1.5 text-ink-faint" title={t('Statut du système')}>
                   <Lock className="w-3.5 h-3.5" />
                 </span>
-              ) : (
+              ) : can('delete') ? (
                 <button className="p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink" aria-label={t('Supprimer')} onClick={() => remove(i)}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
-              )}
+              ) : null}
             </li>
           ))}
         </ul>
@@ -133,6 +133,7 @@ export function StatusesTab() {
 
 function RefusalReasonsCard({ me }: { me: string }) {
   useStore()
+  const canDelete = useAuth().can('delete')
   const [draft, setDraft] = useState('')
   const add = () => {
     const r = draft.trim()
@@ -156,7 +157,7 @@ function RefusalReasonsCard({ me }: { me: string }) {
           {REFUSAL_REASONS.map((r) => (
             <li key={r} className="flex items-center gap-2 px-4 py-2 text-sm text-ink-secondary">
               <span className="flex-1">{t(r)}</span>
-              <button className={cn('p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink', r === 'Autre' && 'invisible')} aria-label={t('Supprimer')} onClick={() => remove(r)}>
+              <button className={cn('p-1.5 rounded-md hover:bg-tone-critical-soft hover:text-tone-critical-ink', (r === 'Autre' || !canDelete) && 'invisible')} aria-label={t('Supprimer')} onClick={() => remove(r)}>
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </li>
