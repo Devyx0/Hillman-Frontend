@@ -7,7 +7,6 @@ import { signIn } from '../../auth/session'
 import { Notice } from '../../components/states'
 import { Avatar, Badge, Field } from '../../components/ui'
 import { COMPANIES, repById } from '../../data/mock'
-import { crewById } from '../../data/crews'
 import { useStore } from '../../data/store'
 import { t } from '../../i18n'
 import { cn } from '../../lib/utils'
@@ -80,7 +79,7 @@ export default function Login() {
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold text-ink truncate">{a.name}</span>
                   <span className="block text-2xs text-ink-mute truncate">
-                    {t(ROLE_LABELS[a.role])} · {crewById(a.crewId) ? t(crewById(a.crewId)!.name) : a.companies.length === COMPANIES.length ? t('3 compagnies') : a.companies.map((c) => COMPANIES.find((x) => x.id === c)!.short).map((s) => t(s)).join(', ')}
+                    {t(ROLE_LABELS[a.role])} · {a.companies.length === COMPANIES.length ? t('3 compagnies') : a.companies.map((c) => COMPANIES.find((x) => x.id === c)!.short).map((s) => t(s)).join(', ')}
                   </span>
                 </span>
                 {a.status === 'invite' && <Badge tone="warn">{t('Invité')}</Badge>}

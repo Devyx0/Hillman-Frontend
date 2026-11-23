@@ -10,7 +10,7 @@ import { t } from '../../i18n'
 import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
 import { Field } from '../ui'
-import { DrawerFooter } from './shared'
+import { DrawerFooter, MissingNotice } from './shared'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -21,7 +21,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
   const [company, setCompany] = useState<CompanyId>(prefill.company && companies.includes(prefill.company) ? prefill.company : (companies[0] ?? 'toit'))
   const repsFor = (c: CompanyId) => REPS.filter((r) => r.company === c)
   const defaultRep = (c: CompanyId) => (user && repsFor(c).some((r) => r.id === user.repId) ? user.repId : DEFAULT_LEAD_REP[c])
-  const [repId, setRepId] = useState(defaultRep(company))
+  const [repId, setRepId] = useState(() => defaultRep(company) ?? repsFor(company)[0]?.id ?? '')
   const [f, setF] = useState({ name: prefill.name ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', city: prefill.city ?? '', source: prefill.source ?? sources[0] ?? 'Autre', message: '' })
   const [tried, setTried] = useState(false)
   const set = <K extends keyof typeof f>(k: K, v: string) => setF((prev) => ({ ...prev, [k]: v }))
@@ -90,7 +90,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
                 onChange={(e) => {
                   const c = e.target.value as CompanyId
                   setCompany(c)
-                  setRepId(defaultRep(c))
+                  setRepId(defaultRep(c) ?? repsFor(c)[0]?.id ?? '')
                 }}
               >
                 {COMPANIES.filter((c) => companies.includes(c.id)).map((c) => (
@@ -124,6 +124,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
         )}
       </div>
       <DrawerFooter>
+        {tried && invalid && <MissingNotice messages={Object.values(errors)} />}
         <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">
           {t('Annuler')}
         </button>

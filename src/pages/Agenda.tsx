@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Ban, CalendarOff, CalendarPlus, ChevronLeft, ChevronRight, HardHat } from 'lucide-react'
+import { Ban, CalendarOff, CalendarPlus, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Card, Empty, Page, PageHeader, RepAvatar, Tabs } from '../components/ui'
 import { Loading } from '../components/states'
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
 import { quoteById, quoteByNo, request, useStore } from '../data/store'
-import { ABSENCES, dayDate, jobById, type Absence, type AppointmentRecord, type JobRecord } from '../data/crews'
+import { ABSENCES, dayDate, jobById, type Absence, type AppointmentRecord, type JobRecord } from '../data/calendar'
 import { cn } from '../lib/utils'
 import { locale, t } from '../i18n'
 import { AGENDA_REPS, DayView, MonthView, TODAY_INDEX, WeekView, calendarEvents, capitalize, type CalEvent } from './agenda/calendar'
 import { AppointmentDrawer, AppointmentForm, prefillFromQuote, type AppointmentPrefill } from './agenda/drawers'
-import { AbsenceDrawer, AbsencesPanel, JobDrawer, ScheduleDrawer, UnscheduledPanel, WorkOrderDrawer, type ScheduleTarget } from './agenda/crews'
+import { AbsenceDrawer, AbsencesPanel, JobDrawer, ScheduleDrawer, UnscheduledPanel, WorkOrderDrawer, type ScheduleTarget } from './agenda/jobs'
 
 type View = 'jour' | 'semaine' | 'mois'
 
@@ -33,7 +33,7 @@ export default function Agenda() {
   const [selected, setSelected] = useState<CalEvent | null>(null)
   const [form, setForm] = useState<{ prefill: AppointmentPrefill | null; editing: AppointmentRecord | null } | null>(null)
   const [formKey, setFormKey] = useState(0)
-  const [showCrews, setShowCrews] = useState(true)
+  const [showJobs, setShowJobs] = useState(true)
   const [job, setJob] = useState<JobRecord | null>(null)
   const [schedule, setSchedule] = useState<ScheduleTarget | null>(null)
   const [workOrder, setWorkOrder] = useState<JobRecord | null>(null)
@@ -102,7 +102,7 @@ export default function Agenda() {
         ? `${fmt(weekStart, { day: 'numeric', month: 'short' })} – ${fmt(weekStart + 6, { day: 'numeric', month: 'short', year: 'numeric' })}`
         : capitalize(fmt(day, { weekday: 'long', day: 'numeric', month: 'long' }))
 
-  const viewProps = { evts, onOpen: openEvent, showCrews, onOpenJob: setJob, onOpenAbsence: (id: string) => setAbsence(ABSENCES.find((a) => a.id === id) ?? null) }
+  const viewProps = { evts, onOpen: openEvent, showJobs, onOpenJob: setJob }
   const rangeFrom = view === 'jour' ? day : weekStart
   const rangeTo = view === 'jour' ? day : weekStart + 6
   const connectedHint = user && reps.some((r) => r.id === user.repId)
@@ -173,9 +173,9 @@ export default function Agenda() {
                 {reps.length > 3 ? r.first : r.name}
               </button>
             ))}
-            <button onClick={() => setShowCrews((s) => !s)} aria-pressed={showCrews} className={cn('h-7 px-2.5 rounded-full text-xs font-semibold border flex items-center gap-1.5', showCrews ? 'border-hairline-strong bg-sand text-ink' : 'border-hairline text-ink-faint opacity-60')}>
-              <HardHat className="w-3.5 h-3.5" />
-              {t('Équipes')}
+            <button onClick={() => setShowJobs((s) => !s)} aria-pressed={showJobs} className={cn('h-7 px-2.5 rounded-full text-xs font-semibold border flex items-center gap-1.5', showJobs ? 'border-hairline-strong bg-sand text-ink' : 'border-hairline text-ink-faint opacity-60')}>
+              <CalendarRange className="w-3.5 h-3.5" />
+              {t('Jours de travaux')}
             </button>
           </div>
           {connectedHint && (
@@ -207,8 +207,8 @@ export default function Agenda() {
           </>
         )}
       </Card>
-      <div className={cn('grid gap-4 mt-4', can('crews.schedule') && 'lg:grid-cols-2')}>
-        {can('crews.schedule') && <UnscheduledPanel onPlan={setSchedule} />}
+      <div className={cn('grid gap-4 mt-4', can('jobs.schedule') && 'lg:grid-cols-2')}>
+        {can('jobs.schedule') && <UnscheduledPanel onPlan={setSchedule} />}
         <AbsencesPanel from={view === 'mois' ? 0 : rangeFrom} to={view === 'mois' ? 30 : rangeTo} repIds={reps.map((r) => r.id)} onOpen={setAbsence} onAdd={() => setAbsence('new')} />
       </div>
 
@@ -248,7 +248,7 @@ export default function Agenda() {
         target={schedule}
         onClose={() => setSchedule(null)}
         onSaved={(j) => {
-          setShowCrews(true)
+          setShowJobs(true)
           if (j.startDay !== undefined) {
             setWeekStart(Math.floor(j.startDay / 7) * 7)
             if (view === 'mois') setView('semaine')

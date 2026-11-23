@@ -10,18 +10,18 @@ import { COMPANIES, companyById, type Client, type CompanyId } from '../../data/
 import { PRIVACY, activeSources } from '../../data/settings'
 import { addClient, findDuplicateClients, useStore } from '../../data/store'
 import { langName, t, type Lang } from '../../i18n'
-import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
 import { cn } from '../../lib/utils'
 import { Field } from '../ui'
-import { ClientCard, DrawerFooter, splitName } from './shared'
+import { splitName, type ClientPrefill } from './prefill'
+import { ClientCard, DrawerFooter, MissingNotice } from './shared'
 
 const TYPES = ['Résidentiel', 'Commercial', 'Entrepreneur']
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const POSTAL_RE = /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/
 
 interface Props {
-  prefill?: CreatePrefill
+  prefill?: ClientPrefill
   /** Company the client is created for (fixed). When absent, the form asks for it. */
   company?: CompanyId
   /** Label of the button on a duplicate match. */
@@ -37,19 +37,19 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
   const { companies } = useAuth()
   const sources = activeSources()
   const name = splitName(prefill.name)
-  const [company, setCompany] = useState<CompanyId>(fixedCompany ?? prefill.company ?? companies[0] ?? 'toit')
+  const [company, setCompany] = useState<CompanyId>(fixedCompany ?? (prefill.company && companies.includes(prefill.company) ? prefill.company : undefined) ?? companies[0] ?? 'toit')
   const [f, setF] = useState({
     first: name.first,
     last: name.last,
-    company: '',
+    company: prefill.companyName ?? '',
     phone: prefill.phone ?? '',
     mobile: '',
     email: prefill.email ?? '',
-    no: '',
-    street: '',
+    no: prefill.no ?? '',
+    street: prefill.street ?? '',
     city: prefill.city ?? '',
-    postal: '',
-    type: 'Résidentiel',
+    postal: prefill.postal ?? '',
+    type: prefill.type && TYPES.includes(prefill.type) ? prefill.type : 'Résidentiel',
     source: prefill.source ?? sources[0] ?? 'Autre',
     consentSms: false,
     // Language for everything sent to the client (portal, PDF, emails, texts). French by default.
@@ -219,6 +219,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
         )}
       </div>
       <DrawerFooter>
+        {tried && invalid && <MissingNotice messages={Object.values(errors)} />}
         <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">
           {cancelLabel ?? t('Annuler')}
         </button>

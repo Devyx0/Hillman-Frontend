@@ -1,4 +1,4 @@
-import { crewG5En } from './crewG5'
+import { workOrderEn } from './workOrder'
 import { authEn } from './auth'
 import { createEn } from './create'
 import { quoteFlowEn } from './quoteFlow'
@@ -57,4 +57,4 @@ const foundation: Record<string, string> = {
 }
 
 /** All English translations, keyed by the French source string. */
-export const en: Record<string, string> = { ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...authEn, ...createEn, ...quoteFlowEn, ...portalFlowEn, ...calendarEn, ...settingsEn, ...foundation, ...crewG5En, ...shared }
+export const en: Record<string, string> = { ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...authEn, ...createEn, ...quoteFlowEn, ...portalFlowEn, ...calendarEn, ...settingsEn, ...foundation, ...workOrderEn, ...shared }

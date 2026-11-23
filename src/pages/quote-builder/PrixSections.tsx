@@ -1,5 +1,5 @@
 import { Equal, LoaderCircle, PlayCircle, Plus, Sparkles, Upload } from 'lucide-react'
-import { CrewNoteField } from './CrewNoteField'
+import { WorkOrderNoteField } from './WorkOrderNoteField'
 import { Field } from '../../components/ui'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
@@ -260,7 +260,7 @@ export function NotesSection({ b }: { b: Builder }) {
         </div>
       </div>
       <div className="mt-4">
-        <CrewNoteField b={b} />
+        <WorkOrderNoteField b={b} />
       </div>
     </BuilderSection>
   )

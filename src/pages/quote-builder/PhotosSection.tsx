@@ -9,7 +9,7 @@ import { BuilderSection } from '../../components/quote-shared'
 import { AnnotationEditor } from './AnnotationEditor'
 import type { Builder } from './useQuoteBuilder'
 
-/** Read an image file and shrink it to at most 1600 px (keeps the session light, like the upload will). Also used by the crew job page. */
+/** Read an image file and shrink it to at most 1600 px (keeps the session light, like the upload will). */
 export function readImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -59,7 +59,6 @@ function Tile({ photo, onAnnotate, onTake, onRemove }: { photo: QuotePhoto; onAn
           </span>
         )}
         {photo.shapes?.length ? <span className="badge bg-primary text-white">{t('Annotée')}</span> : null}
-        {photo.by === 'equipe' && <span className="badge bg-data-4 text-data-4-ink">{t("Photo de l'équipe")}</span>}
         <span className="flex-1" />
         {has && (
           <button onClick={onAnnotate} className="h-7 px-2 rounded-md bg-white/95 text-ink text-2xs font-semibold inline-flex items-center gap-1 shadow-card hover:bg-white" aria-label={t('Annoter {label}', { label: t(photo.label) })}>

@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { HashRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import { AuthProvider } from './auth/AuthContext'
-import { CrewOnly, RequireAuth, RequirePermission, StaffOnly } from './auth/guards'
+import { RequireAuth, RequirePermission } from './auth/guards'
 import { LanguageProvider } from './i18n/LanguageProvider'
 import { Loading } from './components/states'
 import Login from './pages/account/Login'
@@ -26,9 +26,6 @@ const Quotes = lazy(() => import('./pages/Quotes'))
 const Profile = lazy(() => import('./pages/account/Profile'))
 const Invitation = lazy(() => import('./pages/account/Invitation'))
 const ResetPassword = lazy(() => import('./pages/account/ResetPassword'))
-const CrewHome = lazy(() => import('./pages/crew/CrewHome'))
-const CrewCalendar = lazy(() => import('./pages/crew/CrewCalendar'))
-const CrewJob = lazy(() => import('./pages/crew/CrewJob'))
 
 /** `/catalogue` needs `catalogue.edit`; its Paramètres view (`?tab=parametres`) needs `settings.manage` or `users.manage`. */
 function CatalogueRoute() {
@@ -67,28 +64,19 @@ export default function App() {
               </RequireAuth>
             }
           >
-            {/* Office screens: field crew accounts are redirected to /equipe */}
-            <Route element={<StaffOnly />}>
-              <Route index element={<Today />} />
-              <Route path="leads" element={<Leads />} />
-              <Route path="leads/:id" element={<LeadDetail />} />
-              <Route path="pipeline" element={<Pipeline />} />
-              <Route path="soumissions" element={<Quotes />} />
-              <Route path="soumissions/:id" element={<QuoteBuilder />} />
-              <Route path="clients" element={<Clients />} />
-              <Route path="clients/:id" element={<ClientDetail />} />
-              <Route path="conversations" element={<Conversations />} />
-              <Route path="agenda" element={<Agenda />} />
-              <Route path="catalogue" element={<CatalogueRoute />} />
-              <Route path="*" element={<Today />} />
-            </Route>
-            {/* Field crew view (price-free): their jobs, their crew's calendar, work orders and photos */}
-            <Route path="equipe" element={<CrewOnly />}>
-              <Route index element={<CrewHome />} />
-              <Route path="calendrier" element={<CrewCalendar />} />
-              <Route path="chantier/:id" element={<CrewJob />} />
-            </Route>
+            <Route index element={<Today />} />
+            <Route path="leads" element={<Leads />} />
+            <Route path="leads/:id" element={<LeadDetail />} />
+            <Route path="pipeline" element={<Pipeline />} />
+            <Route path="soumissions" element={<Quotes />} />
+            <Route path="soumissions/:id" element={<QuoteBuilder />} />
+            <Route path="clients" element={<Clients />} />
+            <Route path="clients/:id" element={<ClientDetail />} />
+            <Route path="conversations" element={<Conversations />} />
+            <Route path="agenda" element={<Agenda />} />
+            <Route path="catalogue" element={<CatalogueRoute />} />
             <Route path="profil" element={<Profile />} />
+            <Route path="*" element={<Today />} />
           </Route>
         </Routes>
         </Suspense>

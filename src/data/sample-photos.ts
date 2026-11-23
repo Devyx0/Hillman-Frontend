@@ -1,6 +1,6 @@
 /**
  * Demo site photos for the mock data: drawn as SVG "photos" of Québec houses (siding, roof edge, gutters,
- * downspouts, windows, lawn) so the estimator → crew annotation flow can be shown without real image files.
+ * downspouts, windows, lawn) so the estimator's annotation flow (quote builder → work order) can be shown without real image files.
  * Each returns a data URL usable as `QuotePhoto.src`. Annotations stay separate (`QuotePhoto.shapes`).
  */
 

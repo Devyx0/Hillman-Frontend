@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AnnotatedPhoto } from '../../components/AnnotatedPhoto'
-import { CrewNoteField } from './CrewNoteField'
-import { ClipboardList, Plus, Printer, RotateCcw, Send, Trash2 } from 'lucide-react'
+import { WorkOrderNoteField } from './WorkOrderNoteField'
+import { ClipboardList, Plus, Printer, RotateCcw, Trash2 } from 'lucide-react'
 import { CompanyLogo, Drawer, Field } from '../../components/ui'
 import { BuilderSection, ToggleChip } from '../../components/quote-shared'
 import { fullName } from '../../data/mock'
@@ -152,7 +152,7 @@ export function FormulaireSection({ b }: { b: Builder }) {
           </div>
         </div>
 
-        <CrewNoteField b={b} />
+        <WorkOrderNoteField b={b} />
 
         <Field label={t('Note interne (représentant et bureau)')}>
           <textarea className="form-input h-auto py-2" rows={2} value={g.note} onChange={(e) => set({ note: e.target.value })} />
@@ -173,7 +173,7 @@ export function FormulaireSection({ b }: { b: Builder }) {
   )
 }
 
-/** Printable work order for the crew: quantities, form and photos — no prices (user story step 11). */
+/** Printable work order: quantities, form, colour, note and annotated photos — no prices (user story step 11). */
 function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: () => void }) {
   const { quote, client, gutter } = b
   const tot = gutterTotals(gutter)
@@ -238,10 +238,10 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
             ))}
           </ul>
         </div>
-        {b.crewNote && (
+        {b.workOrderNote && (
           <div>
-            <p className="label-caps mb-1">{t("Note pour l'équipe")}</p>
-            <p className="text-ink-secondary whitespace-pre-line">{t(b.crewNote)}</p>
+            <p className="label-caps mb-1">{t('Note pour le bon de travail')}</p>
+            <p className="text-ink-secondary whitespace-pre-line">{t(b.workOrderNote)}</p>
           </div>
         )}
         {photos.length > 0 && (
@@ -260,19 +260,9 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
           </div>
         )}
         <div className="flex flex-wrap gap-2 pt-2">
-          <button className="btn btn-sm btn-secondary" onClick={() => window.print()}>
+          <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
             <Printer className="w-4 h-4" />
-            {t('Imprimer')}
-          </button>
-          <button
-            className="btn btn-sm btn-primary"
-            onClick={() => {
-              toast(t("Bon de travail {no} envoyé à l'équipe", { no: quote.no }))
-              onClose()
-            }}
-          >
-            <Send className="w-4 h-4" />
-            {t("Envoyer à l'équipe")}
+            {t('Imprimer / PDF')}
           </button>
         </div>
       </div>
@@ -283,7 +273,7 @@ function WorkOrder({ b, open, onClose }: { b: Builder; open: boolean; onClose: (
 /**
  * Gouttières: quantities computed live from the form, the chosen tier and add-ons (no manual
  * recalculation). The rep can still type over a quantity; overridden rows are flagged and
- * "Rétablir les valeurs du formulaire" drops the overrides. It is the crew's work order, so it carries
+ * "Rétablir les valeurs du formulaire" drops the overrides. It is the work order, so it carries
  * no selling prices; costs show only with the `quotes.costs` permission.
  */
 export function QuantitesSection({ b }: { b: Builder }) {
@@ -365,7 +355,7 @@ export function QuantitesSection({ b }: { b: Builder }) {
         </div>
       )}
       <p className="text-xs text-ink-mute mt-3">
-        {t('Calculées automatiquement depuis le formulaire, l’option de protection et les ajouts choisis. Cette liste devient le bon de travail de l’équipe — sans prix.')}
+        {t('Calculées automatiquement depuis le formulaire, l’option de protection et les ajouts choisis. Cette liste devient le bon de travail — sans prix.')}
       </p>
       <WorkOrder b={b} open={orderOpen} onClose={() => setOrderOpen(false)} />
     </BuilderSection>

@@ -6,7 +6,6 @@ import { Select } from '../../../components/filters'
 import { Notice, confirmAction } from '../../../components/states'
 import { useAuth } from '../../../auth/AuthContext'
 import { ACCOUNTS, PERMISSION_LABELS, ROLE_LABELS, ROLE_PERMISSIONS, isPermissionLocked, saveAccount, setRolePermission, type Account, type Permission, type Role } from '../../../auth/permissions'
-import { CREWS, crewById } from '../../../data/crews'
 import { COMPANIES, type CompanyId } from '../../../data/mock'
 import { request, useStore } from '../../../data/store'
 import { toast } from '../../../lib/toast'
@@ -118,7 +117,6 @@ export function UsersTab() {
                     </td>
                     <td className="td text-ink-secondary">
                       {t(ROLE_LABELS[a.role])}
-                      {a.role === 'crew' && crewById(a.crewId) && <span className="block text-xs text-ink-mute">{t(crewById(a.crewId)!.name)}</span>}
                     </td>
                     <td className="td">
                       <span className="flex flex-wrap gap-1">
@@ -197,9 +195,6 @@ function UserDrawer({ account, onClose, onInvited, me }: { account: Account | 'n
   const [email, setEmail] = useState(base?.email ?? '')
   const [role, setRole] = useState<Role>(base?.role ?? 'rep')
   const [companies, setCompanies] = useState<CompanyId[]>(base?.companies ?? [])
-  const [crewId, setCrewId] = useState(base?.crewId ?? '')
-  const isCrew = role === 'crew'
-  const crewOptions = CREWS.filter((c) => c.active || c.id === base?.crewId)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -208,10 +203,7 @@ function UserDrawer({ account, onClose, onInvited, me }: { account: Account | 'n
     if (!name.trim()) return setError(t('Entrez le nom'))
     if (!/^\S+@\S+\.\S+$/.test(mail)) return setError(t('Courriel invalide'))
     if (ACCOUNTS.some((a) => a.email.toLowerCase() === mail && a.id !== base?.id)) return setError(t('Un utilisateur utilise déjà ce courriel'))
-    const crew = isCrew ? crewById(crewId) : undefined
-    if (isCrew && !crew) return setError(t("Choisissez l'équipe de cette personne"))
-    // A field crew account works for its crew's company only.
-    const comp: CompanyId[] = crew ? [crew.company] : companies
+    const comp: CompanyId[] = companies
     if (comp.length === 0) return setError(t('Choisissez au moins une compagnie'))
     if (base?.role === 'admin' && role !== 'admin' && ACCOUNTS.filter((a) => a.role === 'admin' && a.status === 'actif').length <= 1) return setError(t('Il doit rester au moins un administrateur actif'))
     setError('')
@@ -220,13 +212,13 @@ function UserDrawer({ account, onClose, onInvited, me }: { account: Account | 'n
       await request(null)
       if (isNew) {
         const id = 'u' + Date.now().toString(36)
-        const acc: Account = { id, repId: '', name: name.trim(), email: mail, role, companies: comp, status: 'invite', crewId: crew?.id }
+        const acc: Account = { id, repId: '', name: name.trim(), email: mail, role, companies: comp, status: 'invite' }
         saveAccount(acc)
         logChange(me, 'utilisateurs', 'A invité {name}', { name: acc.name })
         toast(t('Invitation envoyée à {email}', { email: mail }))
         onInvited(acc)
       } else if (base) {
-        saveAccount({ ...base, name: name.trim(), email: mail, role, companies: comp, crewId: crew?.id })
+        saveAccount({ ...base, name: name.trim(), email: mail, role, companies: comp })
         logChange(me, 'utilisateurs', 'A modifié le rôle ou les compagnies de {name}', { name: name.trim() })
         toast(t('Utilisateur enregistré'))
         onClose()
@@ -261,44 +253,32 @@ function UserDrawer({ account, onClose, onInvited, me }: { account: Account | 'n
                 <input type="radio" name="role" className="mt-0.5" checked={role === r} onChange={() => setRole(r)} />
                 <span>
                   <span className="block text-sm font-semibold text-ink">{t(ROLE_LABELS[r])}</span>
-                  <span className="block text-xs text-ink-mute">{r === 'crew' ? t('Ses chantiers, le calendrier de son équipe, les bons de travail et les photos. Aucun prix.') : t('{n} permissions', { n: ROLE_PERMISSIONS[r].size })}</span>
+                  <span className="block text-xs text-ink-mute">{t('{n} permissions', { n: ROLE_PERMISSIONS[r].size })}</span>
                 </span>
               </label>
             ))}
           </div>
         </div>
-        {isCrew ? (
-          <Field label={t('Équipe')}>
-            <Select<string>
-              value={crewId}
-              onChange={setCrewId}
-              searchable={false}
-              options={[{ value: '', label: t('Choisir une équipe') }, ...crewOptions.map((c) => ({ value: c.id, label: `${t(c.name)} · ${t(COMPANIES.find((x) => x.id === c.company)!.short)}` }))]}
-            />
-            <span className="text-xs text-ink-mute">{t("La personne voit seulement les chantiers et le calendrier de cette équipe, sans aucun prix. Sa compagnie suit celle de l'équipe.")}</span>
-          </Field>
-        ) : (
-          <div>
-            <p className="label-caps mb-1.5">{t('Compagnies')}</p>
-            <div className="flex flex-wrap gap-2">
-              {COMPANIES.map((c) => {
-                const on = companies.includes(c.id)
-                return (
-                  <button
-                    type="button"
-                    key={c.id}
-                    aria-pressed={on}
-                    onClick={() => setCompanies((prev) => (on ? prev.filter((k) => k !== c.id) : [...prev, c.id]))}
-                    className={cn('px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors flex items-center gap-1', on ? c.tone : 'border-dashed border-hairline-strong text-ink-mute hover:text-ink')}
-                  >
-                    {on && <Check className="w-3 h-3" />}
-                    {c.name}
-                  </button>
-                )
-              })}
-            </div>
+        <div>
+          <p className="label-caps mb-1.5">{t('Compagnies')}</p>
+          <div className="flex flex-wrap gap-2">
+            {COMPANIES.map((c) => {
+              const on = companies.includes(c.id)
+              return (
+                <button
+                  type="button"
+                  key={c.id}
+                  aria-pressed={on}
+                  onClick={() => setCompanies((prev) => (on ? prev.filter((k) => k !== c.id) : [...prev, c.id]))}
+                  className={cn('px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors flex items-center gap-1', on ? c.tone : 'border-dashed border-hairline-strong text-ink-mute hover:text-ink')}
+                >
+                  {on && <Check className="w-3 h-3" />}
+                  {c.name}
+                </button>
+              )
+            })}
           </div>
-        )}
+        </div>
         {error && <Notice tone="critical">{error}</Notice>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
@@ -319,7 +299,7 @@ function PermissionsCard({ me }: { me: string }) {
   const perms = Object.keys(PERMISSION_LABELS) as Permission[]
   return (
     <Card title={t('Permissions par rôle')} icon={KeyRound} pad={false}>
-      <p className="px-5 pt-3 text-xs text-ink-mute">{t("Les changements s'appliquent immédiatement à tous les utilisateurs du rôle. Les administrateurs gardent toujours toutes les permissions.")} {t("L'équipe terrain n'a aucune de ces permissions : elle voit seulement ses chantiers, sans prix.")}</p>
+      <p className="px-5 pt-3 text-xs text-ink-mute">{t("Les changements s'appliquent immédiatement à tous les utilisateurs du rôle. Les administrateurs gardent toujours toutes les permissions.")}</p>
       <div className="relative overflow-x-auto">
         <table className="w-full text-sm min-w-[560px]">
           <thead className="border-b border-hairline">
@@ -328,7 +308,7 @@ function PermissionsCard({ me }: { me: string }) {
               {ROLES.map((r) => (
                 <th key={r} className="th text-center">
                   <span className="inline-flex items-center gap-1">
-                    {(r === 'admin' || r === 'crew') && <Lock className="w-3 h-3" />}
+                    {r === 'admin' && <Lock className="w-3 h-3" />}
                     {t(ROLE_LABELS[r])}
                   </span>
                 </th>
@@ -341,7 +321,7 @@ function PermissionsCard({ me }: { me: string }) {
                 <td className="td text-ink-secondary">{t(PERMISSION_LABELS[p])}</td>
                 {ROLES.map((role) => {
                   const on = ROLE_PERMISSIONS[role].has(p)
-                  const locked = isPermissionLocked(role, p)
+                  const locked = isPermissionLocked(role)
                   return (
                     <td key={role} className="td text-center">
                       <button
@@ -349,7 +329,6 @@ function PermissionsCard({ me }: { me: string }) {
                         aria-checked={on}
                         aria-label={`${t(PERMISSION_LABELS[p])} — ${t(ROLE_LABELS[role])}`}
                         disabled={locked}
-                        title={locked && role === 'crew' ? t("L'équipe terrain ne voit jamais les prix, les coûtants ni les paramètres") : undefined}
                         onClick={() => {
                           setRolePermission(role, p, !on)
                           logChange(me, 'utilisateurs', '{role} : permission « {p} » {state}', { role: ROLE_LABELS[role], p: PERMISSION_LABELS[p], state: on ? 'retirée' : 'accordée' })

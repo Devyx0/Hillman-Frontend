@@ -171,4 +171,15 @@ export const createEn: Record<string, string> = {
   'Suivi de votre soumission H64252': 'Follow-up on your quote H64252',
   'Suivi de votre soumission G64236': 'Follow-up on your quote G64236',
   'Confirmation des travaux du 22 octobre': 'Work confirmation for October 22',
+  /* create v2 */
+  'Choisissez une compagnie pour continuer.': 'Choose a company to continue.',
+  'Choisissez un client existant ou créez une nouvelle fiche pour continuer.': 'Choose an existing client or create a new record to continue.',
+  'Choisissez le type de travaux pour continuer.': 'Choose the type of work to continue.',
+  'Choisissez un représentant pour continuer.': 'Choose a sales rep to continue.',
+  'Aucun représentant pour cette compagnie.': 'No sales rep for this company.',
+  'Client existant qui correspond au lead': 'Existing client matching the lead',
+  'Un problème est survenu sur cet écran': 'Something went wrong on this screen',
+  "Rechargez la page ou revenez à l'accueil.": 'Reload the page or go back to the home screen.',
+  'Recharger': 'Reload',
+  "Retour à l'accueil": 'Back to home',
 }

@@ -7,8 +7,8 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, FilePlus2, FileText, Search, UserPlus, Users } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useApp } from '../../context/AppContext'
-import { leadById } from '../../data/leads'
-import { CLIENTS, COMPANIES, REPS, WORK_TYPES, clientById, companyById, fullName, type Client, type CompanyId } from '../../data/mock'
+import { LEAD_PROFILES, leadById } from '../../data/leads'
+import { CLIENTS, COMPANIES, QUOTES, REPS, WORK_TYPES, clientById, companyById, fullName, type Client, type CompanyId } from '../../data/mock'
 import { addQuote, findDuplicateClients, updateLead, useStore } from '../../data/store'
 import { t } from '../../i18n'
 import type { CreatePrefill } from '../../lib/create'
@@ -18,9 +18,13 @@ import { QUOTE_TEMPLATES, templateById } from '../../pages/catalogue/data'
 import { NoAccess } from '../states'
 import { CompanyBadge, Empty, RepAvatar } from '../ui'
 import ClientForm from './ClientForm'
-import { ClientCard, DrawerFooter, Steps, splitName } from './shared'
+import { leadClientPrefill, splitName } from './prefill'
+import { ClientCard, DrawerFooter, MissingNotice, Steps } from './shared'
 
 const NO_TEMPLATE = ''
+
+/** Words of a work type worth matching against a lead's text ("Toit plat · Élastomère" → toit, plat, elastomere). */
+const workTokens = (w: string) => normalize(w).split(/[^a-z0-9-]+/).filter((x) => x.length >= 4)
 
 export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill; onClose: () => void }) {
   useStore()
@@ -30,44 +34,85 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   const lead = leadById(prefill.leadId)
   const allowed = COMPANIES.filter((c) => companies.includes(c.id))
 
+  // Everything the lead (or the caller) knows about the person, for the new-client form.
+  const contact = leadClientPrefill(lead, prefill)
+  const contactName = splitName(contact.name)
+  const findMatches = () => (contact.name || contact.phone || contact.email ? findDuplicateClients({ first: contactName.first, last: contactName.last, phone: contact.phone, email: contact.email, no: contact.no, street: contact.street }) : [])
+  const contactMatches = useMemo(
+    findMatches,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contact.name, contact.phone, contact.email, contact.no, contact.street],
+  )
+
   const initialCompany = (): CompanyId | undefined => {
     const wanted = prefill.company ?? lead?.company ?? (scope !== 'all' ? scope : undefined)
     if (wanted && companies.includes(wanted)) return wanted
     return companies.length === 1 ? companies[0] : undefined
   }
+  const passedClient = clientById(prefill.clientId ?? lead?.clientId)?.id
   const [company, setCompany] = useState<CompanyId | undefined>(initialCompany)
-  const [clientId, setClientId] = useState<string | undefined>(prefill.clientId ?? lead?.clientId)
+  // A lead whose contact matches exactly one existing client starts with that client selected.
+  const [autoMatchId] = useState<string | undefined>(() => {
+    if (passedClient || !lead) return undefined
+    const m = findMatches()
+    return m.length === 1 ? m[0].id : undefined
+  })
+  const [clientId, setClientId] = useState<string | undefined>(passedClient ?? autoMatchId)
   const [clientMode, setClientMode] = useState<'search' | 'new'>('search')
   const [query, setQuery] = useState('')
-  const [workType, setWorkType] = useState('')
-  const [templateId, setTemplateId] = useState(NO_TEMPLATE)
-  const [repId, setRepId] = useState('')
-  const [step, setStep] = useState(() => (initialCompany() ? (prefill.clientId || lead?.clientId ? 2 : 1) : 0))
+  // Explicit picks; `null` follows the suggested default.
+  const [workChoice, setWorkChoice] = useState<string | null>(null)
+  const [templateChoice, setTemplateChoice] = useState<string | null>(null)
+  const [repChoice, setRepChoice] = useState<string | null>(null)
+  const [step, setStepRaw] = useState(() => (initialCompany() ? (passedClient ? 2 : 1) : 0))
+  // Set when Continuer is clicked while something is still missing on the step.
+  const [nudge, setNudge] = useState(false)
+  const setStep = (i: number) => {
+    setNudge(false)
+    setStepRaw(i)
+  }
 
   const client = clientById(clientId)
   const companyReps = company ? REPS.filter((r) => r.company === company) : []
+  const workTypes = company ? [...new Set(WORK_TYPES[company])] : []
+
+  /** Job type: what the lead asks for (keywords), else the client's last quote with this company, else the first type. */
+  const suggestedWork = (): string => {
+    if (!company) return ''
+    if (lead) {
+      const hay = normalize([lead.message, lead.aiSummary, LEAD_PROFILES[lead.id]?.work ?? ''].join(' '))
+      let best = ''
+      let bestScore = 0
+      for (const w of workTypes) {
+        const score = workTokens(w).filter((tok) => hay.includes(tok)).length
+        if (score > bestScore) {
+          best = w
+          bestScore = score
+        }
+      }
+      if (best) return best
+    }
+    if (client) {
+      const last = QUOTES.filter((q) => q.clientId === client.id && q.company === company).sort((a, b) => b.date.localeCompare(a.date))[0]
+      if (last && workTypes.includes(last.workType)) return last.workType
+    }
+    return workTypes[0] ?? ''
+  }
+  const workType = workChoice && workTypes.includes(workChoice) ? workChoice : suggestedWork()
+
+  // The company's templates; those for the chosen job type first.
+  const matchesWork = (kind: string) => !!workType && normalize(workType).startsWith(normalize(kind))
+  const templates = company ? QUOTE_TEMPLATES.filter((tp) => tp.company === company).sort((a, b) => Number(matchesWork(b.workType)) - Number(matchesWork(a.workType))) : []
+  const suggestedTemplate = templates.find((tp) => matchesWork(tp.workType))?.id ?? NO_TEMPLATE
+  const templateId = templateChoice !== null && (templateChoice === NO_TEMPLATE || templates.some((tp) => tp.id === templateChoice)) ? templateChoice : suggestedTemplate
+
+  const repLocked = user?.role === 'rep' && companyReps.some((r) => r.id === user.repId)
   const defaultRep = () => {
     if (user && companyReps.some((r) => r.id === user.repId)) return user.repId
     if (lead?.repId && companyReps.some((r) => r.id === lead.repId)) return lead.repId
     return companyReps[0]?.id ?? ''
   }
-  const repLocked = user?.role === 'rep' && companyReps.some((r) => r.id === user.repId)
-
-  // Contact details carried from a lead (or the caller) for the client step.
-  const contact: CreatePrefill = {
-    name: prefill.name ?? lead?.name,
-    phone: prefill.phone ?? lead?.phone,
-    email: prefill.email ?? lead?.email,
-    city: prefill.city ?? lead?.city,
-    source: prefill.source ?? lead?.channel,
-    company,
-  }
-  const contactName = splitName(contact.name)
-  const contactMatches = useMemo(
-    () => (contact.name || contact.phone || contact.email ? findDuplicateClients({ first: contactName.first, last: contactName.last, phone: contact.phone, email: contact.email }) : []),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [contact.name, contact.phone, contact.email],
-  )
+  const repId = repLocked ? user!.repId : repChoice && companyReps.some((r) => r.id === repChoice) ? repChoice : defaultRep()
 
   const results = useMemo(() => {
     const q = normalize(query.trim())
@@ -80,20 +125,27 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     }).slice(0, 8)
   }, [query])
 
-  const workTypes = company ? [...new Set(WORK_TYPES[company])] : []
-  // The company's templates; those for the chosen job type first.
-  const matchesWork = (kind: string) => !!workType && normalize(workType).startsWith(normalize(kind))
-  const templates = company ? QUOTE_TEMPLATES.filter((tp) => tp.company === company).sort((a, b) => Number(matchesWork(b.workType)) - Number(matchesWork(a.workType))) : []
-
   if (!can('quotes.edit')) return <NoAccess>{t('Votre rôle ne permet pas de créer des soumissions.')}</NoAccess>
   if (allowed.length === 0) return <NoAccess>{t("Votre compte n'est associé à aucune compagnie.")}</NoAccess>
 
   const steps = [t('Compagnie'), t('Client'), t('Travaux'), t('Modèle'), t('Représentant')]
-  const canNext = [!!company, !!client, !!workType, true, !!repId][step]
+  /** What still blocks a step, as a message (empty when the step is complete). */
+  const missingAt = (i: number): string => {
+    if (i >= 0 && !company) return t('Choisissez une compagnie pour continuer.')
+    if (i >= 1 && !client) return t('Choisissez un client existant ou créez une nouvelle fiche pour continuer.')
+    if (i >= 2 && !workType) return t('Choisissez le type de travaux pour continuer.')
+    if (i >= 4 && !repId) return companyReps.length ? t('Choisissez un représentant pour continuer.') : t('Aucun représentant pour cette compagnie.')
+    return ''
+  }
+  const missing = missingAt(step)
 
-  const go = (i: number) => {
-    if (i === 4 && !repId) setRepId(defaultRep())
-    setStep(i)
+  const go = (i: number) => setStep(i)
+  const next = () => {
+    if (missing) {
+      setNudge(true)
+      return
+    }
+    go(step + 1)
   }
   const pickClient = (c: Client) => {
     setClientId(c.id)
@@ -102,7 +154,11 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   }
 
   const create = () => {
-    if (!company || !client || !workType || !repId) return
+    const blocker = missingAt(4)
+    if (blocker || !company || !client) {
+      setNudge(true)
+      return
+    }
     const q = addQuote({ clientId: client.id, company, repId, workType, templateId: templateId || undefined, leadId: lead?.id, source: lead?.channel ?? client.source, city: client.city })
     if (lead) updateLead(lead.id, { status: 'Converti', quoteId: q.id, clientId: client.id })
     toast(t('Soumission {no} créée', { no: q.no }))
@@ -118,7 +174,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           <Steps steps={steps} current={step} onPick={go} />
           <p className="text-sm font-semibold text-ink mt-4">{t('Nouveau client')}</p>
         </div>
-        <ClientForm prefill={contact} company={company} existingLabel={t('Utiliser ce client')} onUseExisting={pickClient} onCreated={pickClient} onCancel={() => setClientMode('search')} cancelLabel={t('Retour')} />
+        <ClientForm prefill={{ ...contact, company }} company={company} existingLabel={t('Utiliser ce client')} onUseExisting={pickClient} onCreated={pickClient} onCancel={() => setClientMode('search')} cancelLabel={t('Retour')} />
       </div>
     )
 
@@ -141,11 +197,12 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 aria-checked={company === c.id}
                 onClick={() => {
                   if (company !== c.id) {
-                    setWorkType('')
-                    setTemplateId(NO_TEMPLATE)
-                    setRepId('')
+                    setWorkChoice(null)
+                    setTemplateChoice(null)
+                    setRepChoice(null)
                   }
                   setCompany(c.id)
+                  setNudge(false)
                 }}
                 className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors', company === c.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}
               >
@@ -164,7 +221,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           <div className="space-y-4">
             {client && (
               <div className="space-y-1.5">
-                <p className="label-caps">{t('Client sélectionné')}</p>
+                <p className="label-caps">{clientId === autoMatchId ? t('Client existant qui correspond au lead') : t('Client sélectionné')}</p>
                 <ClientCard c={client} selected onClick={() => go(2)} />
               </div>
             )}
@@ -176,8 +233,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 ))}
               </div>
             )}
-            {contact.name && !client && (
-              <button onClick={() => setClientMode('new')} className="btn btn-sm btn-primary w-full">
+            {contact.name && (
+              <button onClick={() => setClientMode('new')} className={cn('btn btn-sm w-full', client ? 'btn-secondary' : 'btn-primary')}>
                 <UserPlus className="w-4 h-4" />
                 {t('Créer la fiche de {name}', { name: contact.name })}
               </button>
@@ -209,7 +266,11 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
         {step === 2 && company && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label={t('Type de travaux')}>
             {workTypes.map((w) => (
-              <button key={w} role="radio" aria-checked={workType === w} onClick={() => setWorkType(w)} className={cn('flex items-center gap-2 rounded-lg border px-3.5 py-3 text-left text-sm font-semibold transition-colors', workType === w ? 'border-primary bg-primary-wash text-primary-press' : 'border-hairline text-ink hover:border-primary')}>
+              <button key={w} role="radio" aria-checked={workType === w} onClick={() => {
+                  setWorkChoice(w)
+                  setTemplateChoice(null)
+                  setNudge(false)
+                }} className={cn('flex items-center gap-2 rounded-lg border px-3.5 py-3 text-left text-sm font-semibold transition-colors', workType === w ? 'border-primary bg-primary-wash text-primary-press' : 'border-hairline text-ink hover:border-primary')}>
                 <span className="flex-1">{t(w)}</span>
                 {workType === w && <Check className="w-4 h-4 shrink-0" />}
               </button>
@@ -219,13 +280,13 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
 
         {step === 3 && (
           <div className="space-y-2" role="radiogroup" aria-label={t('Modèle')}>
-            <button role="radio" aria-checked={templateId === NO_TEMPLATE} onClick={() => setTemplateId(NO_TEMPLATE)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === NO_TEMPLATE ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
+            <button role="radio" aria-checked={templateId === NO_TEMPLATE} onClick={() => setTemplateChoice(NO_TEMPLATE)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === NO_TEMPLATE ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
               <FilePlus2 className="w-4 h-4 text-ink-mute" />
               <span className="flex-1 text-sm font-semibold text-ink">{t('Aucun modèle · soumission vierge')}</span>
               {templateId === NO_TEMPLATE && <Check className="w-4 h-4 text-primary-press" />}
             </button>
             {templates.map((tp) => (
-              <button key={tp.id} role="radio" aria-checked={templateId === tp.id} onClick={() => setTemplateId(tp.id)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === tp.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
+              <button key={tp.id} role="radio" aria-checked={templateId === tp.id} onClick={() => setTemplateChoice(tp.id)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === tp.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
                 <FileText className="w-4 h-4 text-ink-mute shrink-0" />
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-semibold text-ink">{t(tp.name)}</span>
@@ -245,7 +306,10 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           <div className="space-y-4">
             <div className="space-y-2" role="radiogroup" aria-label={t('Représentant')}>
               {companyReps.map((r) => (
-                <button key={r.id} role="radio" aria-checked={repId === r.id} disabled={repLocked && r.id !== user?.repId} onClick={() => setRepId(r.id)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-2.5 text-left disabled:opacity-40', repId === r.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
+                <button key={r.id} role="radio" aria-checked={repId === r.id} disabled={repLocked && r.id !== user?.repId} onClick={() => {
+                    setRepChoice(r.id)
+                    setNudge(false)
+                  }} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-2.5 text-left disabled:opacity-40', repId === r.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
                   <RepAvatar id={r.id} size="md" />
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-semibold text-ink truncate">{r.name}</span>
@@ -283,13 +347,14 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
             {t('Annuler')}
           </button>
         )}
+        {nudge && missing && <MissingNotice messages={[missing]} />}
         {step < 4 ? (
-          <button onClick={() => go(step + 1)} disabled={!canNext} className="btn btn-sm btn-primary">
+          <button onClick={next} aria-disabled={!!missing} className={cn('btn btn-sm btn-primary', missing && 'opacity-60')}>
             {t('Continuer')}
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
-          <button onClick={create} disabled={!repId} className="btn btn-sm btn-primary">
+          <button onClick={create} aria-disabled={!!missing} className={cn('btn btn-sm btn-primary', missing && 'opacity-60')}>
             <FilePlus2 className="w-4 h-4" />
             {t('Créer la soumission')}
           </button>

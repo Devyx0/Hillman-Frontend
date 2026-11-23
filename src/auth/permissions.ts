@@ -5,13 +5,12 @@
 import { commit } from '../data/store'
 import type { CompanyId } from '../data/mock'
 
-export type Role = 'admin' | 'coordinator' | 'rep' | 'crew'
+export type Role = 'admin' | 'coordinator' | 'rep'
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrateur',
   coordinator: 'Coordonnatrice',
   rep: 'Représentant',
-  crew: 'Équipe terrain',
 }
 
 export type Permission =
@@ -24,7 +23,7 @@ export type Permission =
   | 'leads.assign'
   | 'clients.export'
   | 'calendar.allReps' // see and book in every rep's calendar
-  | 'crews.schedule'
+  | 'jobs.schedule' // put signed work on the calendar (jours de travaux)
   | 'catalogue.edit'
   | 'settings.manage' // companies, connections, follow-ups, statuses, numbering
   | 'users.manage'
@@ -40,7 +39,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'leads.assign': 'Assigner les leads',
   'clients.export': 'Exporter les clients',
   'calendar.allReps': "Voir et réserver l'agenda de tous",
-  'crews.schedule': 'Planifier les équipes',
+  'jobs.schedule': 'Planifier les travaux au calendrier',
   'catalogue.edit': 'Modifier le catalogue',
   'settings.manage': 'Gérer les paramètres des compagnies',
   'users.manage': 'Gérer les utilisateurs',
@@ -50,23 +49,15 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 /** Default permission table (editable by an admin). */
 export const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
   admin: new Set(Object.keys(PERMISSION_LABELS) as Permission[]),
-  coordinator: new Set<Permission>(['quotes.viewAll', 'quotes.edit', 'quotes.status', 'payments.record', 'leads.assign', 'clients.export', 'calendar.allReps', 'crews.schedule', 'groupView']),
+  coordinator: new Set<Permission>(['quotes.viewAll', 'quotes.edit', 'quotes.status', 'payments.record', 'leads.assign', 'clients.export', 'calendar.allReps', 'jobs.schedule', 'groupView']),
   rep: new Set<Permission>(['quotes.edit', 'quotes.status']),
-  // Field crew: no permission at all. Their view (/equipe) is driven by the role and `crewId`,
-  // never shows prices, costs or settings, and every permission stays locked off.
-  crew: new Set<Permission>(),
 }
 
-/** Permissions that can't be turned on for a role (the field crew never sees prices, costs or settings). */
-export const LOCKED_OFF: Partial<Record<Role, Set<Permission>>> = {
-  crew: new Set(Object.keys(PERMISSION_LABELS) as Permission[]),
-}
-
-/** True when the permission table cell can't be changed (admin: always on; crew: always off). */
-export const isPermissionLocked = (role: Role, p: Permission) => role === 'admin' || !!LOCKED_OFF[role]?.has(p)
+/** True when the permission table cell can't be changed (admins always keep every permission). */
+export const isPermissionLocked = (role: Role) => role === 'admin'
 
 export function setRolePermission(role: Role, p: Permission, on: boolean) {
-  if (isPermissionLocked(role, p)) return // admins keep everything; crews never get price/settings access
+  if (isPermissionLocked(role)) return // admins keep everything
   if (on) ROLE_PERMISSIONS[role].add(p)
   else ROLE_PERMISSIONS[role].delete(p)
   commit()
@@ -83,12 +74,7 @@ export interface Account {
   companies: CompanyId[]
   status: 'actif' | 'invite' | 'desactive'
   lastLogin?: string
-  /** Field crew accounts (role `crew`): the crew they belong to (CREWS id in data/crews.ts). */
-  crewId?: string
 }
-
-/** True for a field crew account (restricted, price-free view at /equipe). */
-export const isCrewRole = (a?: Pick<Account, 'role'> | null) => a?.role === 'crew'
 
 /**
  * Demo accounts. Sign in with any active email and the demo password from `DEMO_PASSWORD`
@@ -103,9 +89,6 @@ export const ACCOUNTS: Account[] = [
   { id: 'u6', repId: 'pau', name: 'Philippe Audet', email: 'philippe@renovationshillman.com', role: 'rep', companies: ['reno'], status: 'actif' },
   { id: 'u7', repId: 'dpe', name: 'Dany Pelletier', email: 'dany@signaturegouttieres.com', role: 'rep', companies: ['sg'], status: 'actif' },
   { id: 'u8', repId: 'bto', name: 'Benoit Tondreau', email: 'benoit@signaturegouttieres.com', role: 'rep', companies: ['sg'], status: 'invite' },
-  // Field crews (no REPS entry): lead of Gouttières F1 and a member of Toitures — équipe A.
-  { id: 'u9', repId: '', name: 'Mathieu Lessard', email: 'mathieu@signaturegouttieres.com', role: 'crew', companies: ['sg'], status: 'actif', crewId: 'f1', lastLogin: '2026-10-20 06:20' },
-  { id: 'u10', repId: '', name: 'Kevin Bédard', email: 'kevin@toitureshillman.com', role: 'crew', companies: ['toit'], status: 'actif', crewId: 'ta' },
 ]
 
 /** Mock-only shared password for the demo accounts. */

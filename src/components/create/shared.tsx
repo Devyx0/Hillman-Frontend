@@ -7,13 +7,6 @@ import { t } from '../../i18n'
 import { cn } from '../../lib/utils'
 import { Avatar, CompanyBadge } from '../ui'
 
-/** "Isabelle Gagnon" → { first: 'Isabelle', last: 'Gagnon' }. */
-export function splitName(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length <= 1) return { first: parts[0] ?? '', last: '' }
-  return { first: parts[0], last: parts.slice(1).join(' ') }
-}
-
 /** Step progress for multi-step flows. Earlier steps are clickable. */
 export function Steps({ steps, current, onPick }: { steps: string[]; current: number; onPick: (i: number) => void }) {
   return (
@@ -59,9 +52,7 @@ export function ClientCard({ c, selected, action, onClick }: { c: Client; select
           </span>
           <span className="inline-flex items-center gap-1 min-w-0">
             <MapPin className="w-3 h-3 shrink-0" />
-            <span className="truncate">
-              {c.no}, {c.street}, {c.city}
-            </span>
+            <span className="truncate">{[c.no, c.street, c.city].filter(Boolean).join(', ') || '—'}</span>
           </span>
         </span>
         <span className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -91,6 +82,17 @@ export function ClientCard({ c, selected, action, onClick }: { c: Client; select
       <div className="flex items-start gap-3 min-w-0 flex-1">{body}</div>
       {action && <div className="shrink-0 flex flex-wrap gap-1.5 sm:pt-0.5">{action}</div>}
     </div>
+  )
+}
+
+/** Footer note listing what still blocks the primary action (instead of a disabled button). */
+export function MissingNotice({ messages }: { messages: string[] }) {
+  const list = messages.filter(Boolean)
+  if (!list.length) return null
+  return (
+    <p role="alert" className="mr-auto basis-full sm:basis-auto sm:flex-1 min-w-0 text-2xs font-semibold text-tone-critical-ink">
+      {list.join(' ')}
+    </p>
   )
 }
 

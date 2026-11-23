@@ -3,12 +3,11 @@
  * required permission) for the sub-navigation in `Catalogue.tsx`. Ids are stable: they are used in
  * `/catalogue?tab=parametres&section=<id>`.
  */
-import { Building2, CalendarClock, CalendarSync, DatabaseZap, FileText, Hash, ListOrdered, Lock, ShieldCheck, Tags, UserCog, Users, Workflow } from 'lucide-react'
+import { Building2, CalendarClock, CalendarSync, DatabaseZap, FileText, Hash, ListOrdered, Lock, ShieldCheck, Tags, UserCog, Workflow } from 'lucide-react'
 import type { ComponentType } from 'react'
 import type { Icon } from '../../components/ui'
 import type { Account, Permission } from '../../auth/permissions'
 import { CalendarConnectTab } from './CalendarConnectTab'
-import { CrewsTab } from './CrewsTab'
 import { CompaniesTab } from './settings/CompaniesTab'
 import { FollowUpsTab } from './settings/FollowUpsTab'
 import { LeadSourcesTab } from './settings/LeadSourcesTab'
@@ -20,7 +19,7 @@ import { SecurityTab } from './settings/SecurityTab'
 import { StatusesTab } from './settings/StatusesTab'
 import { UsersTab } from './settings/UsersTab'
 
-export type SettingsSectionId = 'compagnies' | 'utilisateurs' | 'equipes' | 'agenda' | 'sources' | 'statuts' | 'numerotation' | 'suivis' | 'modeles' | 'paiements' | 'loi25' | 'logicia' | 'securite'
+export type SettingsSectionId = 'compagnies' | 'utilisateurs' | 'agenda' | 'sources' | 'statuts' | 'numerotation' | 'suivis' | 'modeles' | 'paiements' | 'loi25' | 'logicia' | 'securite'
 
 export interface SettingsSection {
   id: SettingsSectionId
@@ -40,7 +39,6 @@ const manage = (can: (p: Permission) => boolean) => can('settings.manage')
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'compagnies', label: 'Compagnies', hint: 'Identité, PDF, taxes et connexions (texto, courriel)', icon: Building2, component: CompaniesTab, allowed: manage, group: 'Compte' },
   { id: 'utilisateurs', label: 'Utilisateurs & permissions', hint: 'Invitations, rôles, compagnies et permissions', icon: UserCog, component: UsersTab, allowed: (can) => can('users.manage'), group: 'Compte' },
-  { id: 'equipes', label: 'Équipes', hint: 'Équipes de travail et absences', icon: Users, component: CrewsTab, allowed: (can) => can('settings.manage') || can('crews.schedule'), group: 'Opérations' },
   { id: 'agenda', label: 'Agendas connectés', hint: 'Google Agenda et Outlook', icon: CalendarSync, component: CalendarConnectTab, allowed: () => true, group: 'Opérations' },
   { id: 'sources', label: 'Sources de leads', hint: 'Liste des sources et réception des leads', icon: Tags, component: LeadSourcesTab, allowed: manage, group: 'Ventes' },
   { id: 'statuts', label: 'Statuts', hint: 'Statuts de soumission et raisons de refus', icon: ListOrdered, component: StatusesTab, allowed: manage, group: 'Ventes' },

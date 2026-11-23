@@ -1,14 +1,14 @@
 /**
  * Agenda calendar pieces: week / day / month views, rep columns and the
- * "Équipes" band (crews as rows with their scheduled job days and absences).
- * Day numbers are absolute indexes from dim. 18 oct. 2026 (see data/crews.ts).
+ * "Jours de travaux" band (scheduled work days of signed jobs, each linked to its quote).
+ * Day numbers are absolute indexes from dim. 18 oct. 2026 (see data/calendar.ts).
  */
 import type { CSSProperties } from 'react'
-import { Ban, CalendarOff, ChevronLeft, ChevronRight, HardHat, Sparkles } from 'lucide-react'
+import { Ban, CalendarOff, CalendarRange, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { RepAvatar } from '../../components/ui'
 import { inScope, useApp } from '../../context/AppContext'
-import { APPOINTMENTS, JOBS, REPS, repById } from '../../data/mock'
-import { ABSENCES, CREWS, PROVIDER_LABEL, busyBlocksFor, calendarLink, dayDate, isScheduled, type AppointmentRecord, type Crew, type JobRecord } from '../../data/crews'
+import { APPOINTMENTS, JOBS, REPS, companyById, repById } from '../../data/mock'
+import { ABSENCES, PROVIDER_LABEL, busyBlocksFor, calendarLink, dayDate, isScheduled, type AppointmentRecord, type JobRecord } from '../../data/calendar'
 import { cn, formatHour } from '../../lib/utils'
 import { getLang, t } from '../../i18n'
 
@@ -32,10 +32,10 @@ export type CalEvent = AppointmentRecord & { kind?: 'appt' | 'absence' | 'busy';
 /** Appointments + rep absences + imported busy blocks for the given reps. */
 export function calendarEvents(repIds: string[]): CalEvent[] {
   const appts: CalEvent[] = (APPOINTMENTS as AppointmentRecord[]).filter((a) => repIds.includes(a.repId)).map((a) => ({ ...a, kind: 'appt' }))
-  const absences: CalEvent[] = ABSENCES.filter((a) => a.target === 'rep' && repIds.includes(a.targetId)).flatMap((a) =>
+  const absences: CalEvent[] = ABSENCES.filter((a) => repIds.includes(a.repId)).flatMap((a) =>
     Array.from({ length: a.days }, (_, i) => ({
       id: `abs-${a.id}-${i}`,
-      repId: a.targetId,
+      repId: a.repId,
       day: a.day + i,
       start: a.start ?? DAY_START,
       end: a.end ?? DAY_END,
@@ -153,72 +153,57 @@ function DayColumn({ evts, onOpen, today, dot = true }: { evts: CalEvent[]; onOp
   )
 }
 
-/* ── Équipes band ──────────────────────────────────────────────────────── */
+/* ── Jours de travaux band ─────────────────────────────────────────────── */
 
-/** Crews in the current company scope (active only). */
-export function useScopedCrews(): Crew[] {
+/** Scheduled jobs in the current company scope overlapping the given days. */
+function useScopedJobs(first: number, last: number): JobRecord[] {
   const { scope } = useApp()
-  return CREWS.filter((c) => c.active && inScope(scope, c.company))
+  return (JOBS as JobRecord[]).filter((j) => inScope(scope, j.company) && isScheduled(j) && j.startDay! <= last && j.startDay! + j.days - 1 >= first)
 }
 
 /**
- * Crews as rows over the given days: scheduled jobs as bars (click → job drawer), crew absences
- * as hatched "Non dispo" blocks.
+ * Scheduled work days over the given days: one bar per job (click → job drawer), packed into as few
+ * rows as possible, coloured by company.
  */
-export function CrewBand({ days, onOpenJob, onOpenAbsence }: { days: number[]; onOpenJob: (j: JobRecord) => void; onOpenAbsence: (id: string) => void }) {
-  const crews = useScopedCrews()
+export function JobsBand({ days, onOpenJob }: { days: number[]; onOpenJob: (j: JobRecord) => void }) {
   const first = days[0]
   const last = days[days.length - 1]
+  const jobs = useScopedJobs(first, last).sort((a, b) => a.startDay! - b.startDay! || b.days - a.days)
+  // Pack bars into rows: a job goes into the first row whose last job has ended.
+  const rows: JobRecord[][] = []
+  for (const j of jobs) {
+    const row = rows.find((r) => r[r.length - 1].startDay! + r[r.length - 1].days <= j.startDay!)
+    if (row) row.push(j)
+    else rows.push([j])
+  }
   const grid = { display: 'grid', gridTemplateColumns: `repeat(${days.length}, minmax(0,1fr))`, gridAutoRows: '24px', rowGap: 3 } as const
+  const span = (start: number, len: number) => {
+    const from = Math.max(first, start)
+    const to = Math.min(last, start + len - 1)
+    return { gridColumn: `${from - first + 1} / span ${to - from + 1}`, cutLeft: start < first, cutRight: start + len - 1 > last }
+  }
   return (
     <div className="border-b border-hairline bg-sand/60">
       <div className="flex items-center gap-1.5 px-2 pt-1.5 text-2xs font-semibold text-ink-mute">
-        <HardHat className="w-3.5 h-3.5" />
-        {t('Équipes')}
+        <CalendarRange className="w-3.5 h-3.5" />
+        {t('Jours de travaux')}
       </div>
-      {crews.length === 0 && <p className="px-14 py-2 text-2xs text-ink-mute">{t('Aucune équipe active pour cette compagnie.')}</p>}
-      {crews.map((crew) => {
-        const jobs = (JOBS as JobRecord[]).filter((j) => j.crewId === crew.id && isScheduled(j) && j.startDay! <= last && j.startDay! + j.days - 1 >= first)
-        const absences = ABSENCES.filter((a) => a.target === 'crew' && a.targetId === crew.id && a.day <= last && a.day + a.days - 1 >= first)
-        const span = (start: number, len: number) => {
-          const from = Math.max(first, start)
-          const to = Math.min(last, start + len - 1)
-          return { gridColumn: `${from - first + 1} / span ${to - from + 1}`, cutLeft: start < first, cutRight: start + len - 1 > last }
-        }
-        return (
-          <div key={crew.id} className="flex py-1">
-            <div className="w-12 shrink-0 flex items-center justify-end pr-1.5">
-              <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border', `bg-${crew.color} text-${crew.color}-ink border-${crew.color}-edge`)} title={t(crew.name)}>
-                {crew.code}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0" style={grid}>
-              {absences.map((a) => {
-                const s = span(a.day, a.days)
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => onOpenAbsence(a.id)}
-                    style={{ gridColumn: s.gridColumn, gridRow: 1 }}
-                    className="mx-0.5 rounded px-1.5 text-2xs font-semibold text-ink-mute truncate flex items-center gap-1 border border-hairline-strong bg-[repeating-linear-gradient(135deg,var(--color-sand)_0_6px,var(--color-stone)_6px_12px)]"
-                    title={`${t(crew.name)} · ${t(a.reason)}`}
-                  >
-                    <Ban className="w-3 h-3 shrink-0" />
-                    <span className="truncate">
-                      {t('Non dispo')} · {t(a.reason)}
-                    </span>
-                  </button>
-                )
-              })}
-              {jobs.map((j) => {
+      {rows.length === 0 && <p className="px-14 py-2 text-2xs text-ink-mute">{t('Aucun travail planifié pour cette période.')}</p>}
+      {rows.length > 0 && (
+        <div className="flex py-1">
+          <div className="w-12 shrink-0" />
+          <div className="flex-1 min-w-0" style={grid}>
+            {rows.flatMap((row, r) =>
+              row.map((j) => {
                 const s = span(j.startDay!, j.days)
+                const company = companyById(j.company)
                 return (
                   <button
                     key={j.id}
                     onClick={() => onOpenJob(j)}
-                    style={{ gridColumn: s.gridColumn }}
-                    className={cn('mx-0.5 rounded px-1.5 text-2xs font-semibold truncate flex items-center gap-1 border text-left hover:shadow-elevated', `bg-${crew.color} text-${crew.color}-ink border-${crew.color}-edge`)}
-                    title={`${t(crew.name)} · ${j.client} · ${j.quoteNo}`}
+                    style={{ gridColumn: s.gridColumn, gridRow: r + 1 }}
+                    className={cn('mx-0.5 rounded px-1.5 text-2xs font-semibold truncate flex items-center gap-1 border text-left hover:shadow-elevated', company.tone)}
+                    title={`${t(company.short)} · ${j.client} · ${j.quoteNo} · ${t(j.work)}`}
                   >
                     {s.cutLeft && <ChevronLeft className="w-3 h-3 shrink-0 -ml-1" />}
                     <span className="truncate flex-1">
@@ -227,11 +212,11 @@ export function CrewBand({ days, onOpenJob, onOpenAbsence }: { days: number[]; o
                     {s.cutRight && <ChevronRight className="w-3 h-3 shrink-0 -mr-1" />}
                   </button>
                 )
-              })}
-            </div>
+              }),
+            )}
           </div>
-        )
-      })}
+        </div>
+      )}
     </div>
   )
 }
@@ -241,12 +226,11 @@ export function CrewBand({ days, onOpenJob, onOpenAbsence }: { days: number[]; o
 interface ViewProps {
   evts: CalEvent[]
   onOpen: (a: CalEvent) => void
-  showCrews: boolean
+  showJobs: boolean
   onOpenJob: (j: JobRecord) => void
-  onOpenAbsence: (id: string) => void
 }
 
-export function WeekView({ weekStart, evts, onOpen, showCrews, onOpenJob, onOpenAbsence }: ViewProps & { weekStart: number }) {
+export function WeekView({ weekStart, evts, onOpen, showJobs, onOpenJob }: ViewProps & { weekStart: number }) {
   const days = Array.from({ length: 7 }, (_, i) => weekStart + i)
   const inWeek = evts.filter((e) => days.includes(e.day))
   const noAppointments = !inWeek.some((e) => e.type !== 'Non dispo')
@@ -265,7 +249,7 @@ export function WeekView({ weekStart, evts, onOpen, showCrews, onOpenJob, onOpen
             )
           })}
         </div>
-        {showCrews && <CrewBand days={days} onOpenJob={onOpenJob} onOpenAbsence={onOpenAbsence} />}
+        {showJobs && <JobsBand days={days} onOpenJob={onOpenJob} />}
         <div className="relative flex pt-2 max-h-[620px] overflow-y-auto">
           <HourGutter />
           {days.map((d) => (
@@ -280,7 +264,7 @@ export function WeekView({ weekStart, evts, onOpen, showCrews, onOpenJob, onOpen
   )
 }
 
-export function DayView({ day, evts, reps, onOpen, showCrews, onOpenJob, onOpenAbsence }: ViewProps & { day: number; reps: string[] }) {
+export function DayView({ day, evts, reps, onOpen, showJobs, onOpenJob }: ViewProps & { day: number; reps: string[] }) {
   const today = day === TODAY_INDEX
   return (
     <div className="relative overflow-x-auto">
@@ -295,7 +279,7 @@ export function DayView({ day, evts, reps, onOpen, showCrews, onOpenJob, onOpenA
             </div>
           ))}
         </div>
-        {showCrews && <CrewBand days={[day]} onOpenJob={onOpenJob} onOpenAbsence={onOpenAbsence} />}
+        {showJobs && <JobsBand days={[day]} onOpenJob={onOpenJob} />}
         <div className="flex pt-2 max-h-[620px] overflow-y-auto">
           <HourGutter />
           {reps.map((id, i) => (

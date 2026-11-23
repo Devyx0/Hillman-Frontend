@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, CalendarDays, KeyRound, Languages, LoaderCircle, LogOut, UserRound } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
-import { ACCOUNTS, ROLE_LABELS, isCrewRole, saveAccount } from '../../auth/permissions'
+import { ACCOUNTS, ROLE_LABELS, saveAccount } from '../../auth/permissions'
 import { checkPassword, passwordIsStrong, profileExtras, saveProfileExtras, setPassword as storePassword, setViewAsOrigin, type NotificationEvent } from '../../auth/session'
 import { Notice } from '../../components/states'
 import { CalendarConnectTab } from '../catalogue/CalendarConnectTab'
@@ -64,17 +64,16 @@ export default function Profile() {
       <InfoCard key={`info-${user.id}`} refresh={() => impersonate(user.id)} avatarColor={rep?.color} />
       <LanguageCard />
       <PasswordCard key={`pw-${user.id}`} />
-      {/* Field crew: no sales notifications or booking calendar (they only see their crew's jobs). */}
-      {!isCrewRole(user) && <NotificationsCard key={`notif-${user.id}`} />}
+      <NotificationsCard key={`notif-${user.id}`} />
 
       {/* Every user connects their own Google / Outlook calendar here (no admin permission needed). */}
-      {!isCrewRole(user) && <section>
+      <section>
         <h2 className="text-md font-semibold text-ink flex items-center gap-2 mb-3">
           <CalendarDays className="w-4 h-4 text-ink-mute" />
           {t('Agenda connecté')}
         </h2>
         <CalendarConnectTab />
-      </section>}
+      </section>
 
       <div className="flex justify-end md:hidden">
         <button className="btn btn-sm btn-secondary w-full" onClick={signOut}>

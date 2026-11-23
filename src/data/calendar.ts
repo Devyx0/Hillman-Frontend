@@ -1,5 +1,5 @@
 /**
- * Calendar-area data: crews (équipes), job scheduling, absences, appointment extras and the
+ * Calendar-area data: work days of signed jobs (jours de travaux), rep absences, appointment extras and the
  * connection of each user's Google / Outlook calendar (mock). Every write calls `commit()` from
  * the store so screens using `useStore()` re-render.
  *
@@ -35,59 +35,13 @@ export const hourFromIso = (iso: string) => {
 /** datetime-local value for a day index and decimal hour. */
 export const isoAt = (day: number, hour: number) => `${dayIso(day)}T${pad2(Math.floor(hour))}:${pad2(Math.round((hour % 1) * 60))}`
 
-// ── Crews ───────────────────────────────────────────────────────────────────
-export interface Crew {
-  id: string
-  name: string
-  /** Two-letter code shown in the calendar band (TA, F1…). */
-  code: string
-  company: CompanyId
-  lead: string
-  members: string[]
-  /** Palette token: data-1 … data-10. */
-  color: string
-  phone?: string
-  active: boolean
-}
-
-export const CREWS: Crew[] = [
-  { id: 'ta', name: 'Toitures — équipe A', code: 'TA', company: 'toit', lead: 'Marc-André Roy', members: ['Marc-André Roy', 'Kevin Bédard', 'Samuel Tremblay', 'Jonathan Côté'], color: 'data-5', phone: '418 555-0141', active: true },
-  { id: 'tb', name: 'Toitures — équipe B', code: 'TB', company: 'toit', lead: 'Steve Gauthier', members: ['Steve Gauthier', 'Maxime Pelletier', 'Alexis Morin'], color: 'data-10', phone: '418 555-0187', active: true },
-  { id: 'f1', name: 'Gouttières F1', code: 'F1', company: 'sg', lead: 'Mathieu Lessard', members: ['Mathieu Lessard', 'Olivier Gingras'], color: 'data-6', phone: '418 555-0122', active: true },
-  { id: 'f2', name: 'Gouttières F2', code: 'F2', company: 'sg', lead: 'Yannick Poulin', members: ['Yannick Poulin', 'Félix Bouchard'], color: 'data-1', phone: '418 555-0164', active: true },
-  { id: 'm1', name: 'Rénovations M1', code: 'M1', company: 'reno', lead: 'Éric Dufour', members: ['Éric Dufour', 'Luc Fortin', 'Gabriel Vachon', 'Patrick Giroux'], color: 'data-7', phone: '418 555-0199', active: true },
-]
-
-export const crewById = (id?: string) => CREWS.find((c) => c.id === id)
-
-export function addCrew(input: Omit<Crew, 'id'>): Crew {
-  const crew = { ...input, id: 'cr' + Date.now() }
-  CREWS.push(crew)
-  commit()
-  return crew
-}
-
-export function updateCrew(id: string, patch: Partial<Crew>) {
-  const c = crewById(id)
-  if (c) Object.assign(c, patch)
-  commit()
-}
-
-/** Deletes a crew. Crews with scheduled jobs should be deactivated instead (`updateCrew(id, { active: false })`). */
-export function removeCrew(id: string) {
-  const i = CREWS.findIndex((c) => c.id === id)
-  if (i >= 0) CREWS.splice(i, 1)
-  commit()
-}
-
 // ── Jobs (jours de travaux) ─────────────────────────────────────────────────
 /** Job + fields the mock `Job` type doesn't carry yet. */
 export type JobRecord = Job & {
   /** Quote id when the job was created from a signed quote. */
   quoteId?: string
+  /** Scheduling note (access, parking…), printed on the work order. */
   notes?: string
-  /** When the Gouttières work order was sent to the crew. */
-  workOrderSentAt?: string
 }
 
 export const MATERIAL_STATUSES = ['À commander', 'Commandés', 'Livrés']
@@ -96,9 +50,7 @@ export const JOB_STAGES = ['À planifier', 'Planifié', 'En cours', 'Terminé', 
 
 export const jobById = (id?: string) => JOBS.find((j) => j.id === id) as JobRecord | undefined
 export const jobQuote = (j: Job): Quote | undefined => QUOTES.find((q) => q.no === j.quoteNo)
-export const isScheduled = (j: Job) => j.startDay !== undefined && !!j.crewId
-/** True if the job occupies `day`. */
-export const jobOn = (j: Job, day: number) => isScheduled(j) && day >= j.startDay! && day < j.startDay! + j.days
+export const isScheduled = (j: Job) => j.startDay !== undefined
 
 /** "F. Paradis" from a client, like the JOBS seed. */
 const shortClient = (clientId: string) => {
@@ -140,7 +92,6 @@ export function unscheduledWork(inScope: (company: CompanyId) => boolean): Unsch
 export interface ScheduleInput {
   jobId?: string
   quoteId?: string
-  crewId: string
   startDay: number
   days: number
   weather?: string
@@ -149,10 +100,9 @@ export interface ScheduleInput {
   notes?: string
 }
 
-/** Puts a job on a crew's calendar. Updates the job, or creates it from a signed quote. */
+/** Puts a job on the calendar (work days linked to its quote). Updates the job, or creates it from a signed quote. */
 export function scheduleJob(input: ScheduleInput): JobRecord | undefined {
   const patch = {
-    crewId: input.crewId,
     startDay: input.startDay,
     days: Math.max(1, input.days),
     weather: input.weather || undefined,
@@ -183,7 +133,6 @@ export function updateJob(id: string, patch: Partial<JobRecord>) {
 export function unscheduleJob(id: string) {
   const j = jobById(id)
   if (!j) return
-  j.crewId = undefined
   j.startDay = undefined
   j.stage = 'À planifier'
   commit()
@@ -192,11 +141,11 @@ export function unscheduleJob(id: string) {
 // ── Absences ────────────────────────────────────────────────────────────────
 export const ABSENCE_REASONS = ['Congé', 'Vacances', 'Maladie', 'Formation', 'Autre']
 
+/** A rep's absence: shown as "Non dispo" in their calendar and blocks booking. */
 export interface Absence {
   id: string
-  target: 'rep' | 'crew'
-  /** Rep id or crew id. */
-  targetId: string
+  /** REPS id. */
+  repId: string
   day: number
   /** Number of consecutive days. */
   days: number
@@ -208,17 +157,12 @@ export interface Absence {
 }
 
 export const ABSENCES: Absence[] = [
-  { id: 'ab1', target: 'crew', targetId: 'tb', day: 5, days: 1, reason: 'Formation', note: 'Formation SST travail en hauteur' },
-  { id: 'ab2', target: 'rep', targetId: 'dps', day: 4, days: 1, reason: 'Congé' },
-  { id: 'ab3', target: 'rep', targetId: 'pau', day: 3, days: 1, start: 13, end: 17, reason: 'Autre', note: 'Rendez-vous médical' },
-  { id: 'ab4', target: 'crew', targetId: 'f2', day: 8, days: 5, reason: 'Vacances' },
-  { id: 'ab5', target: 'rep', targetId: 'plc', day: 9, days: 3, reason: 'Vacances' },
+  { id: 'ab2', repId: 'dps', day: 4, days: 1, reason: 'Congé' },
+  { id: 'ab3', repId: 'pau', day: 3, days: 1, start: 13, end: 17, reason: 'Autre', note: 'Rendez-vous médical' },
+  { id: 'ab5', repId: 'plc', day: 9, days: 3, reason: 'Vacances' },
 ]
 
 export const absenceOn = (a: Absence, day: number) => day >= a.day && day < a.day + a.days
-/** Absences touching a day (optionally for one rep or crew). */
-export const absencesOn = (day: number, target?: { kind: 'rep' | 'crew'; id: string }) =>
-  ABSENCES.filter((a) => absenceOn(a, day) && (!target || (a.target === target.kind && a.targetId === target.id)))
 
 export function addAbsence(input: Omit<Absence, 'id'>): Absence {
   const a = { ...input, id: 'ab' + Date.now() }
@@ -327,49 +271,18 @@ export function repConflicts(repId: string, day: number, start: number, end: num
   return {
     appointments: (APPOINTMENTS as AppointmentRecord[]).filter((a) => a.repId === repId && a.id !== excludeId && a.day === day && a.type !== 'Non dispo' && overlaps(a.start, a.end, start, end)),
     unavailable: (APPOINTMENTS as AppointmentRecord[]).filter((a) => a.repId === repId && a.id !== excludeId && a.day === day && a.type === 'Non dispo' && overlaps(a.start, a.end, start, end)),
-    absences: ABSENCES.filter((a) => a.target === 'rep' && a.targetId === repId && absenceOn(a, day) && overlaps(a.start ?? 0, a.end ?? 24, start, end)),
+    absences: ABSENCES.filter((a) => a.repId === repId && absenceOn(a, day) && overlaps(a.start ?? 0, a.end ?? 24, start, end)),
     busy: busyBlocksFor(repId).filter((b) => b.day === day && overlaps(b.start, b.end, start, end)),
   }
 }
 
-/** Jobs and absences of a crew overlapping `days` days from `startDay`. */
-export function crewConflicts(crewId: string, startDay: number, days: number, excludeJobId?: string) {
-  const end = startDay + Math.max(1, days)
-  return {
-    jobs: (JOBS as JobRecord[]).filter((j) => j.crewId === crewId && j.id !== excludeJobId && isScheduled(j) && j.startDay! < end && j.startDay! + j.days > startDay),
-    absences: ABSENCES.filter((a) => a.target === 'crew' && a.targetId === crewId && a.day < end && a.day + a.days > startDay),
-  }
-}
-
-/** First day from `from` on which the crew is free for `days` days. */
-export function firstFreeDay(crewId: string, days: number, from: number, excludeJobId?: string) {
-  for (let d = from; d < from + 60; d++) {
-    const c = crewConflicts(crewId, d, days, excludeJobId)
-    if (!c.jobs.length && !c.absences.length) return d
-  }
-  return from
-}
-
-// ── Start status shown to the crew (no amounts, ever) ─────────────────────────────────
+// ── Deposit ─────────────────────────────────────────────────────────────────
 /**
  * Whether the job's quote uses a payment schedule with a deposit. Gutters (100 % at end of work) has none,
- * so the crew and the work order never show a deposit state for it.
+ * so the job drawer and the scheduling drawer never show a deposit state for it.
  */
 export function jobHasDeposit(job: { quoteNo: string; company: string }): boolean {
   const q = quoteByNo(job.quoteNo)
   if (!q) return job.company !== 'sg'
   return !!depositStep(quoteSchedule(q))
 }
-
-/**
- * "Don't start" signal for the crew: only for jobs whose schedule has a deposit (Roofs 15 %, Reno 10 %),
- * shown as a status — "Feu vert du bureau" / "En attente du feu vert du bureau" — never as an amount.
- * `undefined` = nothing to show (Gutters, or no deposit on the schedule).
- */
-export function crewStartStatus(job: { quoteNo: string; company: string; deposit: boolean }): 'go' | 'wait' | undefined {
-  if (!CREW_SEES_START_STATUS || !jobHasDeposit(job)) return undefined
-  return job.deposit ? 'go' : 'wait'
-}
-
-/** Open question for the client (Abeel): should crews see a start status at all? Flip to hide it everywhere. */
-export const CREW_SEES_START_STATUS = true

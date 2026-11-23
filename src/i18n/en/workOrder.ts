@@ -1,28 +1,28 @@
-/** English for the field-crew work order follow-up (plan G5): crew view, crew notes, annotated photos. */
-export const crewG5En: Record<string, string> = {
-  /* crew view */
+/** English for the work order (plan G5): colour line, contact, work order notes, annotated photos. */
+export const workOrderEn: Record<string, string> = {
+  /* work order */
+  'Note pour le bon de travail': 'Work order note',
+  'Imprimée sur le bon de travail. Les notes internes n’y apparaissent jamais.': 'Printed on the work order. Internal notes never appear on it.',
+  'Imprimer / PDF': 'Print / PDF',
+  'Date des travaux': 'Work dates',
+  'Travaux complétés — signature': 'Work completed — signature',
+  'Calculées automatiquement depuis le formulaire, l’option de protection et les ajouts choisis. Cette liste devient le bon de travail — sans prix.':
+    'Calculated automatically from the form, the protection option and the chosen add-ons. This list becomes the work order — without prices.',
+
+  /* agenda: work days */
+  'Aucun travail planifié pour cette période.': 'No work scheduled for this period.',
+  '{client} planifié · {when}': '{client} scheduled · {when}',
+  'Seuls les administrateurs et la coordonnatrice peuvent planifier les travaux.': 'Only administrators and the coordinator can schedule work.',
+  'Notes de planification': 'Scheduling notes',
+  'Imprimées sur le bon de travail.': 'Printed on the work order.',
+  'Les soumissions signées apparaîtront ici pour être planifiées au calendrier.': 'Signed quotes will show up here so you can put them on the calendar.',
+  'Planifier les travaux au calendrier': 'Schedule work on the calendar',
   'Couleur : {c}': 'Colour: {c}',
   'Gouttières : {g} · Descentes : {d}': 'Gutters: {g} · Downspouts: {d}',
   'Contact sur place : {name}': 'On-site contact: {name}',
-  'Appeler le contact': 'Call the contact',
-  'Aucun téléphone au dossier : appelez le bureau.': 'No phone on file: call the office.',
-  'Équipe :': 'Crew:',
-  "Chef d'équipe :": 'Crew lead:',
-  'Chef d’équipe : {name}': 'Crew lead: {name}',
-  'Membres :': 'Members:',
-  "Note pour l'équipe": 'Note for the crew',
   "Aucune note de l'estimateur pour ce chantier.": 'No note from the estimator for this job.',
-  'Note du bureau (planification)': 'Office note (scheduling)',
-  "Photos de l'estimateur (annotées lors de la visite)": "Estimator's photos (annotated during the visit)",
-  "Photos de l'équipe": 'Crew photos',
-  "Photo de l'équipe": 'Crew photo',
-  "Aucune photo prise par l'équipe pour l'instant.": 'No crew photos yet.',
-  'Aucune photo de la visite.': 'No photos from the visit.',
   'Photo principale': 'Main photo',
-  'Photo principale · estimateur': 'Main photo · estimator',
   Estimateur: 'Estimator',
-  'En attente du feu vert du bureau — ne pas commencer': "Waiting for the office's OK — don't start",
-  'Feu vert du bureau : vous pouvez commencer': 'Office OK: you can start',
   'Photos annotées': 'Annotated photos',
 
   /* builder */
@@ -32,7 +32,6 @@ export const crewG5En: Record<string, string> = {
   'Même couleur que les gouttières': 'Same colour as the gutters',
   'Note interne (représentant et bureau)': 'Internal note (rep and office)',
   'Instructions de chantier : accès, stationnement, couleur, sortie des descentes…': 'Job-site instructions: access, parking, colour, downspout outlets…',
-  "Imprimée sur le bon de travail et visible par l'équipe terrain. Les notes internes ne sont jamais montrées à l'équipe.": 'Printed on the work order and shown to the field crew. Internal notes are never shown to the crew.',
   'Gouttières {size} po · {material}': '{size} in gutters · {material}',
 
   /* data: contact role, photo labels, annotations */
@@ -63,7 +62,7 @@ export const crewG5En: Record<string, string> = {
   'Puits de lumière': 'Skylight',
   'Accès voisin à garder libre': "Keep the neighbour's access clear",
 
-  /* data: crew notes */
+  /* data: work order notes */
   'Bardeaux Timberline HDZ Charbon. Remplacer le solin de la cheminée. Conteneur dans l’entrée, côté gauche.': 'Timberline HDZ Charcoal shingles. Replace the chimney flashing. Container in the driveway, left side.',
   'Timberline Charbon sur OSB ½ neuf (pontage complet). Chien dans la cour arrière : garder la clôture fermée.': 'Timberline Charcoal on new ½ OSB (full decking). Dog in the backyard: keep the gate closed.',
   'Élastomère 2 couches. Deux drains à remplacer (côté rue). Accès au toit par la cour arrière seulement.': '2-ply elastomeric. Two drains to replace (street side). Roof access from the backyard only.',

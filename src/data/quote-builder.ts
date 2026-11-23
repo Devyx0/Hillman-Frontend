@@ -53,7 +53,7 @@ import { MATERIAL_LINES, QUOTES, TODAY, type CompanyId, type MaterialLine, type 
 import { ROOF_DEFAULT_SCOPE, ROOF_SCOPE_SECTIONS } from './roofing-clauses'
 import { COST_ITEMS, costItemById, scopeFor, templateById as catalogueTemplateById, tierCatalogueVideo } from '../pages/catalogue/data'
 import { addQuote, commit, quoteById, updateQuote, type QuoteRecord } from './store'
-import { crewJobPhotos, crewJobQuote } from './crew-jobs'
+import { jobQuotePhotos, jobQuoteSeed } from './job-quotes'
 import { paymentScheduleById, depositStep, type PaymentStep } from './settings'
 import {
   ADDON_RATE,
@@ -574,10 +574,6 @@ export interface QuotePhoto {
   /** Seeded demo photo without an image. */
   placeholder?: boolean
   main?: boolean
-  /** Who took it: the estimator during the visit (default) or the field crew on the job. */
-  by?: 'estimateur' | 'equipe'
-  /** When a crew photo was taken (ISO). */
-  takenAt?: string
 }
 
 export interface Attachment {
@@ -602,10 +598,10 @@ export interface QuoteDraft {
   /** Gouttières: quantities the rep typed over the form-derived ones, by French item name. */
   qtyOverrides: Record<string, number>
   warranties: Record<string, string>
-  /** Internal note (rep and office only). Never shown to the crew. */
+  /** Internal note (rep and office only). Never printed on the work order. */
   note: string
-  /** Note for the crew, printed on the work order and shown in the crew view (French or as typed). */
-  crewNote: string
+  /** Note printed on the work order (French or as typed). */
+  workOrderNote: string
   attachments: Attachment[]
   actuals: Actuals
   gutter: GutterForm
@@ -700,7 +696,7 @@ export function templateById(id?: string): StartTemplate | undefined {
   if (SCOPE_TEMPLATES[id]) return { id, company: 'toit', name: id, workType: 'Toit en pente · Bardeaux', scope: SCOPE_TEMPLATES[id] }
 }
 
-// ── Gutter quantities (the crew's work order) ────────────────────────────────────────
+// ── Gutter quantities (the work order) ──────────────────────────────────────────────
 /** Quantities derived from the draft's gutter form, tier and chosen add-ons — before the rep's overrides. */
 export function formGutterLines(q: Pick<Quote, 'company' | 'workType'>, d: Pick<QuoteDraft, 'gutter' | 'tier' | 'tiers' | 'addons'>): MaterialLine[] {
   const kind = gutterKind(q.workType)
@@ -749,12 +745,12 @@ export const missingPhotos = (d: QuoteDraft) => d.photos.filter((p) => p.require
 
 function seedPhotos(q: Quote, seeded: boolean): QuotePhoto[] {
   const req = requiredPhotos(q)
-  const crewJob = crewJobPhotos(q.no)
-  if (crewJob.length) {
-    // Quotes behind the crews' jobs: the estimator's annotated photos, then the other required ones (not taken).
-    const taken = new Set(crewJob.map((p) => p.label))
+  const jobPhotos = jobQuotePhotos(q.no)
+  if (jobPhotos.length) {
+    // Quotes behind the scheduled jobs: the estimator's annotated photos, then the other required ones (not taken).
+    const taken = new Set(jobPhotos.map((p) => p.label))
     return [
-      ...crewJob.map((p) => ({ ...p, required: req.includes(p.label), by: 'estimateur' as const })),
+      ...jobPhotos.map((p) => ({ ...p, required: req.includes(p.label) })),
       ...req.filter((l) => !taken.has(l)).map((label, i) => ({ id: 'r' + i, label, required: true, placeholder: true })),
     ]
   }
@@ -905,8 +901,8 @@ function createDraft(q: QuoteRecord): QuoteDraft {
     const seed = GUTTER_SEEDS.get(q.id)
     if (seed && !fresh) {
       Object.assign(gutter, structuredClone(seed.form), { note: gutter.note })
-      const crewJob = crewJobQuote(q.no)
-      if (crewJob?.color) Object.assign(gutter, { color: crewJob.color, downspoutColor: crewJob.downspoutColor })
+      const jobSeed = jobQuoteSeed(q.no)
+      if (jobSeed?.color) Object.assign(gutter, { color: jobSeed.color, downspoutColor: jobSeed.downspoutColor })
       if (tiered && seed.tier) {
         tier = seed.tier
         tiers = seededTiers(seed.tier, seed.tierPrice)
@@ -957,7 +953,7 @@ function createDraft(q: QuoteRecord): QuoteDraft {
     renoArea: seeded ? '192' : '',
     renoDays: seeded ? '18' : '',
     photos: seedPhotos(q, seeded),
-    crewNote: crewJobQuote(q.no)?.crewNote ?? '',
+    workOrderNote: jobQuoteSeed(q.no)?.workOrderNote ?? '',
   }
 }
 
@@ -1149,7 +1145,7 @@ export function logSent(r: Omit<SentRecord, 'id' | 'at'>) {
 }
 
 
-// ── Colour line for work orders (crew view, builder, agenda) ─────────────────────────
+// ── Colour line for work orders (builder, agenda) ────────────────────────────────────
 /**
  * "Couleur : Blanc" — or "Gouttières : Blanc · Descentes : Brun commercial" when the downspouts differ.
  * French; translate with `t()` at render (`colourLine(g, t)`).

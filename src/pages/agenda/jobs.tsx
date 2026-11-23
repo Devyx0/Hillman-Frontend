@@ -1,10 +1,11 @@
 /**
- * Agenda production pieces: job drawer, "Planifier" drawer (crew scheduling), absences,
- * the "À planifier" and absences panels, and the Gouttières work order (bon de travail).
+ * Agenda production pieces: job drawer (jour de travaux), "Planifier" drawer (work days linked to a
+ * signed quote), rep absences, the "À planifier" and absences panels, and the Gouttières work order
+ * (bon de travail).
  */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Ban, CalendarCheck2, CalendarRange, CalendarX2, ClipboardList, CloudRain, FilePenLine, HardHat, ImageIcon, MapPin, Package, Pencil, Phone, Printer, Send, Trash2, Wallet } from 'lucide-react'
+import { Ban, CalendarCheck2, CalendarRange, CalendarX2, ClipboardList, CloudRain, FilePenLine, ImageIcon, MapPin, Package, Pencil, Phone, Printer, Trash2 } from 'lucide-react'
 import { Badge, Card, CompanyBadge, Drawer, Empty, Field, RepAvatar } from '../../components/ui'
 import { NoAccess, Notice, confirmAction } from '../../components/states'
 import { Select } from '../../components/filters'
@@ -15,30 +16,24 @@ import { quoteById, quoteByNo, useStore } from '../../data/store'
 import { colourLine, getDraft } from '../../data/quote-builder'
 import { AnnotatedPhoto, orderPhotos } from '../../components/AnnotatedPhoto'
 import {
-  crewStartStatus,
   jobHasDeposit,
   ABSENCES,
   ABSENCE_REASONS,
-  CREWS,
   MATERIAL_STATUSES,
   addAbsence,
-  crewById,
-  crewConflicts,
   dayDate,
   dayFromIso,
   dayIso,
-  firstFreeDay,
   jobQuote,
   removeAbsence,
   scheduleJob,
   unscheduleJob,
   unscheduledWork,
   updateAbsence,
-  updateJob,
   type Absence,
   type JobRecord,
   type UnscheduledItem,
-} from '../../data/crews'
+} from '../../data/calendar'
 import { toast } from '../../lib/toast'
 import { cn, formatHour, money } from '../../lib/utils'
 import { locale, t } from '../../i18n'
@@ -58,7 +53,6 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
   const { can } = useAuth()
   useStore()
   if (!job) return null
-  const crew = crewById(job.crewId)
   const quote = jobQuote(job)
   const remove = async () => {
     const ok = await confirmAction({ title: t('Retirer ce travail du calendrier?'), body: t('{client} · {no} retourne dans « À planifier ».', { client: job.client, no: job.quoteNo }), confirmLabel: t('Retirer'), danger: true })
@@ -73,13 +67,13 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
       onClose={onClose}
       title={
         <span className="flex items-center gap-2">
-          <HardHat className="w-4 h-4" />
+          <CalendarRange className="w-4 h-4" />
           {t('Jour de travaux')}
         </span>
       }
     >
       <div className="p-5 space-y-5">
-        <div className={cn('rounded-xl p-4 border-l-4', crew ? `bg-${crew.color} text-${crew.color}-ink border-${crew.color}-ink` : 'bg-sand text-ink border-hairline-strong')}>
+        <div className={cn('rounded-xl p-4 border-l-4', companyById(job.company).tone)}>
           <p className="text-lg font-semibold">
             {job.client} · {job.quoteNo}
           </p>
@@ -96,14 +90,8 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
           <Badge tone={STAGE_TONE[job.stage] ?? 'neutral'} dot>
             {t(job.stage)}
           </Badge>
-          {job.workOrderSentAt && <Badge tone="good">{t('Bon de travail envoyé')}</Badge>}
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <p className="label-caps mb-1">{t('Équipe')}</p>
-            <p className="font-semibold text-ink">{crew ? t(crew.name) : '—'}</p>
-            {crew && <p className="text-xs text-ink-mute">{t('Chef d’équipe : {name}', { name: crew.lead })}</p>}
-          </div>
           <div>
             <p className="label-caps mb-1">{t('Ville')}</p>
             <p className="font-semibold text-ink flex items-center gap-1">
@@ -155,7 +143,7 @@ export function JobDrawer({ job, onClose, onSchedule, onWorkOrder }: { job: JobR
               {t('Bon de travail')}
             </button>
           )}
-          {can('crews.schedule') && (
+          {can('jobs.schedule') && (
             <>
               <button className="btn btn-sm btn-secondary" onClick={() => onSchedule(job)}>
                 <Pencil className="w-4 h-4" />
@@ -188,25 +176,19 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
   const { can } = useAuth()
   const { job, quote } = target
   const company = job?.company ?? quote!.company
-  const crews = CREWS.filter((c) => c.active && c.company === company)
-  const initialCrew = job?.crewId && crewById(job.crewId)?.active ? job.crewId : (crews[0]?.id ?? '')
-  const initialDays = job?.days ?? defaultDays(company)
-  const [crewId, setCrewId] = useState(initialCrew)
-  const [days, setDays] = useState(initialDays)
-  const [start, setStart] = useState(dayIso(job?.startDay ?? (initialCrew ? firstFreeDay(initialCrew, initialDays, TODAY_INDEX + 1, job?.id) : TODAY_INDEX + 1)))
+  const [days, setDays] = useState(job?.days ?? defaultDays(company))
+  const [start, setStart] = useState(dayIso(job?.startDay ?? TODAY_INDEX + 1))
   const [weather, setWeather] = useState(job?.weather ?? '')
   const [materials, setMaterials] = useState(job?.materials ?? 'À commander')
   const [deposit, setDeposit] = useState(job?.deposit ?? false)
   const [notes, setNotes] = useState(job?.notes ?? '')
   const title = job ? `${job.client} · ${job.quoteNo}` : `${fullName(clientById(quote!.clientId)!)} · ${quote!.no}`
   const startDay = start ? dayFromIso(start) : TODAY_INDEX
-  const conflicts = crewId ? crewConflicts(crewId, startDay, days, job?.id) : { jobs: [], absences: [] }
-  const hasConflict = conflicts.jobs.length + conflicts.absences.length > 0
 
   const save = () => {
-    const saved = scheduleJob({ jobId: job?.id, quoteId: quote?.id, crewId, startDay, days, weather, materials, deposit, notes })
+    const saved = scheduleJob({ jobId: job?.id, quoteId: quote?.id, startDay, days, weather, materials, deposit, notes })
     if (!saved) return
-    toast(t('{client} planifié · {crew}, {when}', { client: saved.client, crew: t(crewById(crewId)!.name), when: shortDay(startDay) }))
+    toast(t('{client} planifié · {when}', { client: saved.client, when: shortDay(startDay) }))
     onSaved(saved)
     onClose()
   }
@@ -222,8 +204,8 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
         </span>
       }
     >
-      {!can('crews.schedule') ? (
-        <NoAccess>{t('Seuls les administrateurs et la coordonnatrice peuvent planifier les équipes.')}</NoAccess>
+      {!can('jobs.schedule') ? (
+        <NoAccess>{t('Seuls les administrateurs et la coordonnatrice peuvent planifier les travaux.')}</NoAccess>
       ) : (
         <div className="p-5 space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
@@ -231,17 +213,6 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
             <p className="text-sm font-semibold text-ink">{title}</p>
           </div>
           <p className="text-xs text-ink-mute -mt-2">{t(job?.work ?? quote!.workType)}</p>
-          {crews.length === 0 ? (
-            <Notice>{t('Aucune équipe active pour cette compagnie. Ajoutez-en une dans Paramètres → Équipes.')}</Notice>
-          ) : (
-            <Field label={t('Équipe')}>
-              <Select
-                value={crewId}
-                onChange={setCrewId}
-                options={crews.map((c) => ({ value: c.id, label: `${t(c.name)} · ${c.lead}`, icon: <span className={cn('w-2.5 h-2.5 rounded-full', `bg-${c.color}-ink`)} /> }))}
-              />
-            </Field>
-          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('Début')}>
               <input type="date" className="form-input" value={start} onChange={(e) => setStart(e.target.value)} />
@@ -251,28 +222,6 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
             </Field>
           </div>
           {start && <p className="text-xs text-ink-mute -mt-2">{dayRange(startDay, days)}</p>}
-          {hasConflict && (
-            <Notice>
-              <p className="font-semibold">{t('Conflit avec l’horaire de l’équipe :')}</p>
-              <ul className="list-disc pl-4 mt-1 space-y-0.5">
-                {conflicts.jobs.map((j) => (
-                  <li key={j.id}>
-                    {j.client} · {j.quoteNo} ({dayRange(j.startDay!, j.days)})
-                  </li>
-                ))}
-                {conflicts.absences.map((a) => (
-                  <li key={a.id}>
-                    {t('Non dispo')} · {t(a.reason)} ({dayRange(a.day, a.days)})
-                  </li>
-                ))}
-              </ul>
-              {crewId && (
-                <button className="underline mt-1.5 font-semibold" onClick={() => setStart(dayIso(firstFreeDay(crewId, days, startDay, job?.id)))}>
-                  {t('Prendre la prochaine date libre')}
-                </button>
-              )}
-            </Notice>
-          )}
           <Field label={t('Météo')}>
             <input className="form-input" value={weather} placeholder={t('Ex. : Pluie 60 % jeudi — prévoir bâches')} onChange={(e) => setWeather(e.target.value)} />
           </Field>
@@ -289,12 +238,13 @@ function ScheduleForm({ target, onClose, onSaved }: { target: ScheduleTarget; on
               {!deposit && <p className="text-xs text-tone-warn-ink -mt-2">{t('Le dépôt n’est pas encore reçu.')}</p>}
             </>
           )}
-          <Field label={t('Notes pour l’équipe')}>
+          <Field label={t('Notes de planification')}>
             <textarea rows={3} className="form-input h-auto py-2.5" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('Accès, stationnement, chien, code de porte…')} />
+            <span className="text-xs text-ink-mute">{t('Imprimées sur le bon de travail.')}</span>
           </Field>
-          <button className="btn btn-md btn-primary w-full" disabled={!crewId || !start} onClick={save}>
+          <button className="btn btn-md btn-primary w-full" disabled={!start} onClick={save}>
             <CalendarCheck2 className="w-4 h-4" />
-            {hasConflict ? t('Planifier quand même') : t('Planifier')}
+            {t('Planifier')}
           </button>
         </div>
       )}
@@ -310,9 +260,7 @@ const fromHhmm = (s: string) => {
   return h + (m || 0) / 60
 }
 
-export function absenceTargetName(a: Pick<Absence, 'target' | 'targetId'>) {
-  return a.target === 'rep' ? (repById(a.targetId)?.name ?? a.targetId) : t(crewById(a.targetId)?.name ?? a.targetId)
-}
+const absenceRepName = (a: Pick<Absence, 'repId'>) => repById(a.repId)?.name ?? a.repId
 
 /** Create or edit an absence. `editing === 'new'` opens an empty form. */
 export function AbsenceDrawer({ editing, onClose }: { editing: Absence | 'new' | null; onClose: () => void }) {
@@ -323,11 +271,9 @@ export function AbsenceDrawer({ editing, onClose }: { editing: Absence | 'new' |
 function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => void }) {
   const { user, can } = useAuth()
   const { scope } = useApp()
-  const manager = can('crews.schedule') || can('calendar.allReps')
-  const repOptions = AGENDA_REPS.filter((r) => (manager ? r.company === 'all' || inScope(scope, r.company) || r.id === editing?.targetId : r.id === user?.repId))
-  const crewOptions = can('crews.schedule') ? CREWS.filter((c) => c.active && (inScope(scope, c.company) || c.id === editing?.targetId)) : []
-  const [target, setTarget] = useState<'rep' | 'crew'>(editing?.target ?? 'rep')
-  const [targetId, setTargetId] = useState(editing?.targetId ?? (repOptions.find((r) => r.id === user?.repId) ?? repOptions[0])?.id ?? '')
+  const manager = can('jobs.schedule') || can('calendar.allReps')
+  const repOptions = AGENDA_REPS.filter((r) => (manager ? r.company === 'all' || inScope(scope, r.company) || r.id === editing?.repId : r.id === user?.repId))
+  const [repId, setRepId] = useState(editing?.repId ?? (repOptions.find((r) => r.id === user?.repId) ?? repOptions[0])?.id ?? '')
   const [reason, setReason] = useState(editing?.reason ?? 'Congé')
   const [start, setStart] = useState(dayIso(editing?.day ?? TODAY_INDEX + 1))
   const [days, setDays] = useState(editing?.days ?? 1)
@@ -335,31 +281,22 @@ function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => v
   const [from, setFrom] = useState(hhmm(editing?.start ?? 8))
   const [to, setTo] = useState(hhmm(editing?.end ?? 12))
   const [note, setNote] = useState(editing?.note ?? '')
-  const canEdit = !editing || manager || (editing.target === 'rep' && editing.targetId === user?.repId)
+  const canEdit = !editing || manager || editing.repId === user?.repId
 
   const day = start ? dayFromIso(start) : TODAY_INDEX
   const len = partial ? 1 : days
-  const affected =
-    target === 'rep'
-      ? APPOINTMENTS.filter((a) => a.repId === targetId && a.type !== 'Non dispo' && a.day >= day && a.day < day + len && (!partial || (a.start < fromHhmm(to) && a.end > fromHhmm(from))))
-      : []
-  const crewJobs = target === 'crew' && targetId ? crewConflicts(targetId, day, len).jobs : []
-
-  const switchTarget = (v: 'rep' | 'crew') => {
-    setTarget(v)
-    setTargetId(v === 'rep' ? (repOptions[0]?.id ?? '') : (crewOptions[0]?.id ?? ''))
-  }
+  const affected = APPOINTMENTS.filter((a) => a.repId === repId && a.type !== 'Non dispo' && a.day >= day && a.day < day + len && (!partial || (a.start < fromHhmm(to) && a.end > fromHhmm(from))))
 
   const save = () => {
-    const fields = { target, targetId, reason, day, days: len, start: partial ? fromHhmm(from) : undefined, end: partial ? fromHhmm(to) : undefined, note: note.trim() || undefined }
+    const fields = { repId, reason, day, days: len, start: partial ? fromHhmm(from) : undefined, end: partial ? fromHhmm(to) : undefined, note: note.trim() || undefined }
     if (editing) updateAbsence(editing.id, fields)
     else addAbsence(fields)
-    toast(editing ? t('Absence mise à jour') : t('Absence ajoutée · {name}', { name: absenceTargetName(fields) }))
+    toast(editing ? t('Absence mise à jour') : t('Absence ajoutée · {name}', { name: absenceRepName(fields) }))
     onClose()
   }
   const remove = async () => {
     if (!editing) return
-    if (!(await confirmAction({ title: t('Supprimer cette absence?'), body: `${absenceTargetName(editing)} · ${dayRange(editing.day, editing.days)}`, confirmLabel: t('Supprimer'), danger: true }))) return
+    if (!(await confirmAction({ title: t('Supprimer cette absence?'), body: `${absenceRepName(editing)} · ${dayRange(editing.day, editing.days)}`, confirmLabel: t('Supprimer'), danger: true }))) return
     removeAbsence(editing.id)
     toast(t('Absence supprimée'))
     onClose()
@@ -377,21 +314,8 @@ function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => v
       }
     >
       <div className="p-5 space-y-4">
-        {crewOptions.length > 0 && (
-          <div className="inline-flex p-1 bg-sand rounded-lg">
-            {(['rep', 'crew'] as const).map((v) => (
-              <button key={v} disabled={!canEdit} onClick={() => switchTarget(v)} className={cn('px-3 h-8 rounded-md text-sm font-semibold', target === v ? 'bg-white shadow-card text-ink' : 'text-ink-mute')}>
-                {v === 'rep' ? t('Représentant') : t('Équipe')}
-              </button>
-            ))}
-          </div>
-        )}
-        <Field label={target === 'rep' ? t('Représentant') : t('Équipe')}>
-          {target === 'rep' ? (
-            <Select value={targetId} onChange={setTargetId} disabled={!canEdit || repOptions.length < 2} options={repOptions.map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))} />
-          ) : (
-            <Select value={targetId} onChange={setTargetId} disabled={!canEdit} options={crewOptions.map((c) => ({ value: c.id, label: t(c.name), icon: <span className={cn('w-2.5 h-2.5 rounded-full', `bg-${c.color}-ink`)} /> }))} />
-          )}
+        <Field label={t('Représentant')}>
+          <Select value={repId} onChange={setRepId} disabled={!canEdit || repOptions.length < 2} options={repOptions.map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))} />
         </Field>
         <Field label={t('Motif')}>
           <Select value={reason} onChange={setReason} disabled={!canEdit} options={ABSENCE_REASONS.map((r) => ({ value: r, label: t(r) }))} />
@@ -436,22 +360,10 @@ function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => v
             </ul>
           </Notice>
         )}
-        {crewJobs.length > 0 && (
-          <Notice>
-            {t('Travaux déjà planifiés pour cette équipe — à replanifier :')}
-            <ul className="list-disc pl-4 mt-1">
-              {crewJobs.map((j) => (
-                <li key={j.id}>
-                  {j.client} · {j.quoteNo} ({dayRange(j.startDay!, j.days)})
-                </li>
-              ))}
-            </ul>
-          </Notice>
-        )}
         {partial && fromHhmm(to) <= fromHhmm(from) && <Notice tone="critical">{t('L’heure de fin doit être après l’heure de début.')}</Notice>}
         {canEdit && (
           <div className="flex gap-2">
-            <button className="btn btn-md btn-primary flex-1" disabled={!targetId || !start || (partial && fromHhmm(to) <= fromHhmm(from))} onClick={save}>
+            <button className="btn btn-md btn-primary flex-1" disabled={!repId || !start || (partial && fromHhmm(to) <= fromHhmm(from))} onClick={save}>
               <Ban className="w-4 h-4" />
               {t('Enregistrer')}
             </button>
@@ -481,7 +393,7 @@ export function UnscheduledPanel({ onPlan }: { onPlan: (target: ScheduleTarget) 
     <Card title={t('À planifier')} icon={CalendarCheck2} pad={false} actions={<span className="text-xs text-ink-mute tnum">{items.length}</span>}>
       {items.length === 0 ? (
         <Empty icon={CalendarCheck2} title={t('Tout est planifié')}>
-          {t('Les soumissions signées apparaîtront ici pour être planifiées avec une équipe.')}
+          {t('Les soumissions signées apparaîtront ici pour être planifiées au calendrier.')}
         </Empty>
       ) : (
         <ul className="divide-y divide-hairline">
@@ -515,13 +427,10 @@ export function UnscheduledPanel({ onPlan }: { onPlan: (target: ScheduleTarget) 
   )
 }
 
-/** Absences in the displayed range, for the reps and crews in scope (Hélène's overview). */
+/** Rep absences in the displayed range (Hélène's overview). */
 export function AbsencesPanel({ from, to, repIds, onOpen, onAdd }: { from: number; to: number; repIds: string[]; onOpen: (a: Absence) => void; onAdd: () => void }) {
   useStore()
-  const { scope } = useApp()
-  const list = ABSENCES.filter((a) => a.day <= to && a.day + a.days - 1 >= from)
-    .filter((a) => (a.target === 'rep' ? repIds.includes(a.targetId) : inScope(scope, crewById(a.targetId)?.company ?? '')))
-    .sort((a, b) => a.day - b.day)
+  const list = ABSENCES.filter((a) => a.day <= to && a.day + a.days - 1 >= from && repIds.includes(a.repId)).sort((a, b) => a.day - b.day)
   return (
     <Card
       title={t('Absences')}
@@ -538,17 +447,12 @@ export function AbsencesPanel({ from, to, repIds, onOpen, onAdd }: { from: numbe
       ) : (
         <ul className="divide-y divide-hairline">
           {list.map((a) => {
-            const crew = a.target === 'crew' ? crewById(a.targetId) : undefined
             return (
               <li key={a.id}>
                 <button className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-sand/60" onClick={() => onOpen(a)}>
-                  {a.target === 'rep' && repById(a.targetId) ? (
-                    <RepAvatar id={a.targetId} />
-                  ) : (
-                    <span className={cn('w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0', crew ? `bg-${crew.color} text-${crew.color}-ink` : 'bg-sand')}>{crew?.code ?? '?'}</span>
-                  )}
+                  {repById(a.repId) ? <RepAvatar id={a.repId} /> : <span className="w-6 h-6 rounded-full bg-sand shrink-0" />}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-ink truncate">{absenceTargetName(a)}</p>
+                    <p className="text-sm font-semibold text-ink truncate">{absenceRepName(a)}</p>
                     <p className="text-xs text-ink-mute truncate">
                       {t(a.reason)} · {dayRange(a.day, a.days)}
                       {a.start !== undefined && ` · ${formatHour(a.start)} – ${formatHour(a.end ?? a.start)}`}
@@ -568,12 +472,12 @@ export function AbsencesPanel({ from, to, repIds, onOpen, onAdd }: { from: numbe
 /* ── Gouttières work order ─────────────────────────────────────────────── */
 
 /**
- * Quantities for the crew (no prices). For a job linked to a quote: the builder's quantities list
+ * Quantities for the work order (no prices). For a job linked to a quote: the builder's quantities list
  * (`getDraft(q).costs`, the same list as the Quantités tab and the builder's Bon de travail,
  * computed live from the gutter form by `gutterLines()`). Jobs without a quote fall back to an estimate
  * parsed from the job description.
  */
-export function workOrderLines(job: JobRecord) {
+function workOrderLines(job: JobRecord) {
   const q = quoteByNo(job.quoteNo)
   if (q) {
     // Same list as the builder's Quantités / Bon de travail: derived from the gutter form (+ tier, chosen
@@ -601,16 +505,12 @@ export function workOrderLines(job: JobRecord) {
 export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClose: () => void }) {
   useStore()
   if (!job) return null
-  const crew = crewById(job.crewId)
   const company = companyById(job.company)
   const quote = jobQuote(job)
   const client = quote ? clientById(quote.clientId) : undefined
   const rep = quote ? repById(quote.repId) : undefined
   const lines = workOrderLines(job)
-  const send = () => {
-    updateJob(job.id, { workOrderSentAt: new Date().toISOString() })
-    toast(crew ? t('Bon de travail envoyé à {crew} ({lead})', { crew: t(crew.name), lead: crew.lead }) : t('Bon de travail envoyé à l’équipe'))
-  }
+  const draft = quote ? getDraft(quoteById(quote.id)!) : undefined
   return (
     <Drawer
       open
@@ -625,15 +525,10 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
     >
       <style>{`@media print { body * { visibility: hidden !important; } #work-order, #work-order * { visibility: visible !important; } #work-order { position: absolute; inset: 0 auto auto 0; width: 100%; padding: 24px; } .no-print { display: none !important; } }`}</style>
       <div className="no-print px-5 py-3 border-b border-hairline flex flex-wrap gap-2 items-center">
-        <button className="btn btn-sm btn-primary" onClick={send}>
-          <Send className="w-4 h-4" />
-          {t('Envoyer à l’équipe')}
-        </button>
-        <button className="btn btn-sm btn-secondary" onClick={() => window.print()}>
+        <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
           <Printer className="w-4 h-4" />
-          {t('Imprimer')}
+          {t('Imprimer / PDF')}
         </button>
-        {job.workOrderSentAt && <span className="text-xs text-tone-good-ink">{t('Envoyé le {date}', { date: new Date(job.workOrderSentAt).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) })}</span>}
       </div>
       <div id="work-order" className="p-5 sm:p-8 space-y-6 text-sm text-ink">
         <header className="flex flex-wrap items-start justify-between gap-3 border-b border-hairline pb-4">
@@ -668,14 +563,8 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
             {rep && <p className="text-xs text-ink-mute mt-1">{t('Estimateur : {name}', { name: rep.name })}</p>}
           </div>
           <div>
-            <p className="label-caps mb-1">{t('Équipe et date')}</p>
-            <p className="font-semibold">{crew ? t(crew.name) : t('Équipe à confirmer')}</p>
-            {crew && (
-              <p className="text-ink-secondary">
-                {t('Chef d’équipe : {name}', { name: crew.lead })} · {crew.members.filter((m) => m !== crew.lead).join(', ')}
-              </p>
-            )}
-            <p className="text-ink-secondary flex items-center gap-1.5">
+            <p className="label-caps mb-1">{t('Date des travaux')}</p>
+            <p className="font-semibold flex items-center gap-1.5">
               <CalendarRange className="w-3.5 h-3.5 text-ink-mute" />
               {job.startDay !== undefined ? dayRange(job.startDay, job.days) : t('Date à confirmer')}
             </p>
@@ -684,7 +573,7 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
         <section>
           <p className="label-caps mb-2">{t('Travaux')}</p>
           <p className="font-semibold mb-1">{t(job.work)}</p>
-          {job.company === 'sg' && quote && <p className="font-semibold text-ink mb-2">{colourLine(getDraft(quoteById(quote.id)!).gutter, t)}</p>}
+          {job.company === 'sg' && draft && <p className="font-semibold text-ink mb-2">{colourLine(draft.gutter, t)}</p>}
           <table className="w-full text-sm border border-hairline rounded-lg overflow-hidden">
             <thead className="bg-sand text-left">
               <tr>
@@ -716,12 +605,6 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
               <Package className="w-3.5 h-3.5 text-ink-mute" />
               {t(job.materials)}
             </p>
-            {crewStartStatus(job) && (
-              <p className={cn('flex items-center gap-1.5 mt-1', crewStartStatus(job) === 'wait' ? 'text-tone-warn-ink font-semibold' : 'text-tone-good-ink')}>
-                <Wallet className="w-3.5 h-3.5" />
-                {crewStartStatus(job) === 'wait' ? t('En attente du feu vert du bureau — ne pas commencer') : t('Feu vert du bureau : vous pouvez commencer')}
-              </p>
-            )}
             {job.weather && (
               <p className="flex items-center gap-1.5 mt-1">
                 <CloudRain className="w-3.5 h-3.5 text-ink-mute" />
@@ -730,16 +613,16 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
             )}
           </div>
           <div>
-            <p className="label-caps mb-1">{t("Note pour l'équipe")}</p>
-            {/* Only the crew note and the office's scheduling note: internal sales notes never go on the work order. */}
-            <p className="whitespace-pre-line text-ink-secondary">{quote && getDraft(quoteById(quote.id)!).crewNote ? t(getDraft(quoteById(quote.id)!).crewNote) : t("Aucune note de l'estimateur pour ce chantier.")}</p>
+            <p className="label-caps mb-1">{t('Note pour le bon de travail')}</p>
+            {/* Only the quote's work order note and the office's scheduling note: internal sales notes never go on the work order. */}
+            <p className="whitespace-pre-line text-ink-secondary">{draft?.workOrderNote ? t(draft.workOrderNote) : t("Aucune note de l'estimateur pour ce chantier.")}</p>
             {job.notes && <p className="whitespace-pre-line text-ink-secondary mt-1.5">{t(job.notes)}</p>}
           </div>
         </section>
         <section>
           <p className="label-caps mb-2">{t('Photos annotées')}</p>
           {(() => {
-            const shots = quote ? orderPhotos(getDraft(quoteById(quote.id)!).photos.filter((p) => p.annotated || p.src)).estimator : []
+            const shots = draft ? orderPhotos(draft.photos.filter((p) => p.annotated || p.src)) : []
             return shots.length ? (
               <div className="grid grid-cols-3 gap-3">
                 {shots.slice(0, 6).map((p) => (
@@ -767,7 +650,7 @@ export function WorkOrderDrawer({ job, onClose }: { job: JobRecord | null; onClo
           })()}
         </section>
         <section className="grid sm:grid-cols-2 gap-6 pt-6">
-          <div className="border-t border-ink pt-1.5 text-xs text-ink-mute">{t('Travaux complétés — signature du chef d’équipe')}</div>
+          <div className="border-t border-ink pt-1.5 text-xs text-ink-mute">{t('Travaux complétés — signature')}</div>
           <div className="border-t border-ink pt-1.5 text-xs text-ink-mute">{t('Date')}</div>
         </section>
       </div>

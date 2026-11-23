@@ -268,7 +268,7 @@ export function useQuoteBuilder(quote: QuoteRecord) {
     expertises, setExpertises: set('expertises'), costs, setCosts: set('costs'), price, setPrice: set('price'), discount, setDiscount: set('discount'),
     addons, setAddons: set('addons'), comments, setComments: set('comments'),
     scheduleOptions, scheduleId, defaultScheduleId, setScheduleId: set('scheduleId'), deposit, formLines, setQty, resetQuantities, qtyOverrides: draft.qtyOverrides,
-    warranties, setWarranties: set('warranties'), note, setNote: set('note'), crewNote: draft.crewNote ?? '', setCrewNote: set('crewNote'), rewriting,
+    warranties, setWarranties: set('warranties'), note, setNote: set('note'), workOrderNote: draft.workOrderNote ?? '', setWorkOrderNote: set('workOrderNote'), rewriting,
     gutter: draft.gutter, setGutter, tier: draft.tier, setTier, tiers: draft.tiers, setTiers: set('tiers'), caa: draft.caa, setCaa: set('caa'), caaNo: draft.caaNo, setCaaNo: set('caaNo'),
     description: draft.description, setDescription: set('description'), renoArea: draft.renoArea, setRenoArea: set('renoArea'), renoDays: draft.renoDays, setRenoDays: set('renoDays'),
     photos: draft.photos, setPhotos: set('photos'),

@@ -7,11 +7,11 @@ import { useAuth } from '../../auth/AuthContext'
 import { ACCOUNTS } from '../../auth/permissions'
 import { REPS, repById } from '../../data/mock'
 import { request, useStore } from '../../data/store'
-import { BUSY_BLOCKS, CALENDAR_LINKS, PROVIDER_LABEL, calendarLink, connectCalendar, disconnectCalendar, syncCalendar, type CalendarProvider } from '../../data/crews'
+import { BUSY_BLOCKS, CALENDAR_LINKS, PROVIDER_LABEL, calendarLink, connectCalendar, disconnectCalendar, syncCalendar, type CalendarProvider } from '../../data/calendar'
 import { toast } from '../../lib/toast'
 import { cn, formatHour } from '../../lib/utils'
 import { locale, t } from '../../i18n'
-import { shortDay } from '../agenda/crews'
+import { shortDay } from '../agenda/jobs'
 
 const syncLabel = (iso: string) => new Date(iso).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 

@@ -82,8 +82,7 @@ function ShapesOverlay({ shapes, w, h, fit }: { shapes: Shape[]; w: number; h: n
   )
 }
 
-/** Main photo first, then the estimator's, then the crew's (each group in its original order). */
+/** Main photo first, then the others (in their original order). */
 export function orderPhotos(photos: QuotePhoto[]) {
-  const est = photos.filter((p) => p.by !== 'equipe')
-  return { estimator: [...est.filter((p) => p.main), ...est.filter((p) => !p.main)], crew: photos.filter((p) => p.by === 'equipe') }
+  return [...photos.filter((p) => p.main), ...photos.filter((p) => !p.main)]
 }

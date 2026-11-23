@@ -1,7 +1,7 @@
 /**
  * Signature Gouttières quantities: pure math, no UI, no translations (French item names, translated at
  * display). The gutter form (lengths per side, downspouts, storeys…) is the ONLY input: the Quantités
- * list, the cost, the crew's work order (builder + Agenda) all come from `gutterLines()`. The rep can
+ * list, the cost, the work order (builder + Agenda) all come from `gutterLines()`. The rep can
  * still override a quantity on the quote (see `qtyOverrides` in data/quote-builder.ts).
  *
  * Kept apart from data/quote-builder.ts so data/mock.ts can seed every Gouttières quote with a form
@@ -81,7 +81,7 @@ export interface GutterLineOptions {
 
 /**
  * Quantities computed from the gutter form: linear feet of gutters, downspout length, elbows (3 per
- * downspout), gutter guard on the full length (by tier), chosen add-ons and the crew's hours.
+ * downspout), gutter guard on the full length (by tier), chosen add-ons and the labour hours.
  */
 export function gutterLines(g: GutterForm, opts: GutterLineOptions = {}): MaterialLine[] {
   const { gutter, downspouts, downFeet } = gutterTotals(g)
@@ -209,7 +209,7 @@ export function seedGutterQuote(q: { id: string; amount: number; cost: number; w
 
 /**
  * Cost of a Gouttières quote whose form has `feet` linear feet of gutters — used to seed demo quotes with
- * a known length (e.g. a crew job "T-Rex XL · 210 pi") so `seedGutterQuote` lands on that exact form.
+ * a known length (e.g. a scheduled job "T-Rex XL · 210 pi") so `seedGutterQuote` lands on that exact form.
  */
 export function costForFeet(q: { id: string; workType: string }, feet: number): number {
   const kind = gutterKind(q.workType)

@@ -1,11 +1,10 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, ChevronRight, ChevronsUpDown, Columns3, Eye, FilePenLine, FileText, HardHat, Inbox, Layers, LogOut, Menu, MessagesSquare, Plus, Search, Settings, Sun, Undo2, UserPlus, UserRound, Users, X } from 'lucide-react'
+import { Bell, BookOpen, CalendarDays, CalendarPlus, Check, ChevronDown, ChevronRight, ChevronsUpDown, Columns3, Eye, FilePenLine, FileText, Inbox, Layers, LogOut, Menu, MessagesSquare, Plus, Search, Settings, Sun, Undo2, UserPlus, UserRound, Users, X } from 'lucide-react'
 import { Avatar, CompanyLogo, StatusBadge, Wordmark, type Icon } from '../components/ui'
 import { inScope, useApp, type Scope } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
-import { ACCOUNTS, ROLE_LABELS, isCrewRole, type Account, type Permission } from '../auth/permissions'
-import { crewById } from '../data/crews'
+import { ACCOUNTS, ROLE_LABELS, type Account, type Permission } from '../auth/permissions'
 import { setViewAsOrigin, viewAsOrigin } from '../auth/session'
 import { useStore } from '../data/store'
 import { CLIENTS, COMPANIES, LEADS, QUOTES, THREADS, clientById, fullName, repById, type CompanyId } from '../data/mock'
@@ -42,17 +41,6 @@ const NAV_GROUPS: { label: string; items: NavEntry[] }[] = [
   { label: 'Opérations', items: [{ name: 'Agenda', href: '/agenda', icon: CalendarDays }] },
 ]
 
-/** Field crew accounts only see their own jobs and their crew's calendar. */
-const CREW_NAV_GROUPS: { label: string; items: NavEntry[] }[] = [
-  {
-    label: 'Chantiers',
-    items: [
-      { name: 'Mes chantiers', href: '/equipe', icon: HardHat },
-      { name: 'Calendrier', href: '/equipe/calendrier', icon: CalendarDays },
-    ],
-  },
-]
-
 const ADMIN_NAV: NavEntry[] = [
   { name: 'Catalogue', href: '/catalogue', icon: BookOpen, perm: ['catalogue.edit'] },
   { name: 'Paramètres', href: '/catalogue?tab=parametres', icon: Settings, perm: ['settings.manage', 'users.manage'] },
@@ -77,7 +65,7 @@ function NavItem({ item }: { item: NavEntry }) {
   return (
     <NavLink
       to={item.href}
-      end={item.href === '/' || item.href === '/equipe'}
+      end={item.href === '/'}
       className={({ isActive }) => cn('group flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors', resolve(isActive) ? 'bg-primary text-white' : 'text-ink-mute hover:text-ink hover:bg-sand')}
     >
       {({ isActive }) => {
@@ -288,10 +276,6 @@ function CommandPalette() {
 /** One-line description of what the user can see, under their name. */
 function accessLine(a: Account) {
   if (a.role === 'admin') return t('Administrateur · accès aux 3 comptes')
-  if (isCrewRole(a)) {
-    const crew = crewById(a.crewId)
-    return crew ? `${t(ROLE_LABELS[a.role])} · ${t(crew.name)}` : t(ROLE_LABELS[a.role])
-  }
   const where = a.companies.length === COMPANIES.length ? t('3 compagnies') : a.companies.map((c) => t(COMPANIES.find((x) => x.id === c)!.short)).join(', ')
   return `${t(ROLE_LABELS[a.role])} · ${where}`
 }
@@ -469,7 +453,7 @@ export default function AppLayout() {
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const { setPaletteOpen, scope } = useApp()
-  const { can, user } = useAuth()
+  const { can } = useAuth()
 
   // Back from previewing a client's portal (which opens in the client's language): restore the rep's own language.
   const restoreStaffLanguage = useRestoreStaffLanguage()
@@ -477,10 +461,7 @@ export default function AppLayout() {
     restoreStaffLanguage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // Field crew: price-free view — no sales nav, search, "Nouveau" menu, notifications or admin.
-  const crew = isCrewRole(user)
-  const navGroups = crew ? CREW_NAV_GROUPS : NAV_GROUPS
-  const adminNav = crew ? [] : ADMIN_NAV.filter((it) => !it.perm || it.perm.some(can))
+  const adminNav = ADMIN_NAV.filter((it) => !it.perm || it.perm.some(can))
 
   useEffect(() => {
     setMenuOpen(false)
@@ -491,7 +472,6 @@ export default function AppLayout() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        if (crew) return
         e.preventDefault()
         setPaletteOpen(true)
       }
@@ -499,7 +479,7 @@ export default function AppLayout() {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [setPaletteOpen, crew])
+  }, [setPaletteOpen])
 
   const sidebar = (
     <div className="flex flex-col h-full bg-white">
@@ -510,7 +490,7 @@ export default function AppLayout() {
         </button>
       </div>
       <nav className="flex-1 px-3 py-4 overflow-y-auto nav-scroll space-y-5">
-        {navGroups.map((g) => (
+        {NAV_GROUPS.map((g) => (
           <div key={g.label} className="space-y-0.5">
             <p className="label-caps px-3 pb-1.5">{t(g.label)}</p>
             {g.items.map((it) => (
@@ -542,23 +522,19 @@ export default function AppLayout() {
           <button onClick={() => setMenuOpen(true)} className="md:hidden shrink-0 h-9 flex items-center" aria-label={t('Changer de compagnie')}>
             {scope === 'all' ? <Wordmark sub={false} /> : <CompanyLogo id={scope} className="h-6 max-w-[96px]" />}
           </button>
-          {crew ? <span className="flex-1 min-w-0" /> : <button onClick={() => setPaletteOpen(true)} className="flex-1 min-w-0 max-w-xl h-9 px-3 rounded-md bg-sand hover:bg-stone transition-colors flex items-center gap-2 text-sm text-ink-faint text-left">
+          <button onClick={() => setPaletteOpen(true)} className="flex-1 min-w-0 max-w-xl h-9 px-3 rounded-md bg-sand hover:bg-stone transition-colors flex items-center gap-2 text-sm text-ink-faint text-left">
             <Search className="w-4 h-4 text-ink-mute" />
             <span className="flex-1 truncate hidden sm:block">{t('Rechercher un client, une adresse, un no…')}</span>
             <span className="flex-1 truncate sm:hidden">{t('Rechercher…')}</span>
             <kbd className="hidden sm:inline text-2xs text-ink-mute bg-white px-1.5 py-0.5 rounded border border-hairline">⌘ K</kbd>
-          </button>}
+          </button>
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <LanguageSwitch />
-            {!crew && (
-              <>
-                <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />
-                </button>
-                <NewMenu />
-              </>
-            )}
+            <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />
+            </button>
+            <NewMenu />
           </div>
         </header>
         <main className="flex-1 min-w-0">
@@ -570,8 +546,8 @@ export default function AppLayout() {
           <span>{t('Maquette interactive · données fictives')}</span>
         </footer>
       </div>
-      {!crew && <CommandPalette />}
-      {!crew && <CreateHost />}
+      <CommandPalette />
+      <CreateHost />
       <ConfirmHost />
       <Toaster />
     </div>

@@ -106,7 +106,7 @@ export function saveProfileExtras(accountId: string, p: ProfileExtras) {
 // ── Misc ────────────────────────────────────────────────────────────────────
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? name
 
-/** Company scope a user lands on: Toitures for the admin (as before), else their first company (a field crew's company). */
+/** Company scope a user lands on: Toitures for the admin (as before), else their first company. */
 export function defaultScopeFor(user: Account | null): CompanyId {
   if (!user || user.role === 'admin') return 'toit'
   return user.companies[0] ?? 'toit'
