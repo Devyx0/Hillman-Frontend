@@ -6,6 +6,7 @@
 import { commit } from '../data/store'
 import { repById, type CompanyId } from '../data/mock'
 import { ACCOUNTS, DEMO_PASSWORD, type Account } from './permissions'
+import { API_MODE } from '../api/config'
 
 // ── Passwords ───────────────────────────────────────────────────────────────
 /** Passwords set during this browser session (in memory only, never persisted). */
@@ -38,6 +39,7 @@ export const passwordIsStrong = (pw: string) => passwordChecks(pw).every((c) => 
  * the others go through `login()` with the demo password. Rejects with a French UI message.
  */
 export function signIn(email: string, password: string, auth: { login: (e: string, p: string) => Promise<Account>; impersonate: (id: string) => void }): Promise<Account> {
+  if (API_MODE) return auth.login(email, password)
   const acc = ACCOUNTS.find((a) => a.email.toLowerCase() === email.trim().toLowerCase())
   if (!acc || !hasOwnPassword(acc.id)) return auth.login(email, password)
   return new Promise((resolve, reject) =>

@@ -1,11 +1,16 @@
 /** New lead entered by hand (phone call, walk-in, trade show…). */
 import { useState, type FormEvent } from 'react'
-import { Inbox, TriangleAlert } from 'lucide-react'
+import { Inbox, LoaderCircle, TriangleAlert } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { DEFAULT_LEAD_REP } from '../../data/leads'
 import { COMPANIES, REPS, fullName, type CompanyId, type Lead } from '../../data/mock'
 import { activeSources } from '../../data/settings'
 import { addLead, findDuplicateClients, useStore } from '../../data/store'
+import { API_MODE } from '../../api/config'
+import { errorMessage } from '../../api/http'
+import { isValidPhone } from '../../api/mappers'
+import { createLead } from '../../data/actions'
+import { companyReps } from '../../data/reps'
 import { t } from '../../i18n'
 import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
@@ -19,9 +24,12 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
   const { user, companies, can } = useAuth()
   const sources = activeSources()
   const [company, setCompany] = useState<CompanyId>(prefill.company && companies.includes(prefill.company) ? prefill.company : (companies[0] ?? 'toit'))
-  const repsFor = (c: CompanyId) => REPS.filter((r) => r.company === c)
-  const defaultRep = (c: CompanyId) => (user && repsFor(c).some((r) => r.id === user.repId) ? user.repId : DEFAULT_LEAD_REP[c])
+  const repsFor = (c: CompanyId) => (API_MODE ? companyReps(c) : REPS.filter((r) => r.company === c))
+  // API mode: the signed-in user when they are one of the company's reps, else unassigned ('' — « Leads à qualifier »).
+  const defaultRep = (c: CompanyId) => (user && repsFor(c).some((r) => r.id === user.repId) ? user.repId : API_MODE ? '' : DEFAULT_LEAD_REP[c])
   const [repId, setRepId] = useState(() => defaultRep(company) ?? repsFor(company)[0]?.id ?? '')
+  const [busy, setBusy] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
   const [f, setF] = useState({ name: prefill.name ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', city: prefill.city ?? '', source: prefill.source ?? sources[0] ?? 'Autre', message: '' })
   const [tried, setTried] = useState(false)
   const set = <K extends keyof typeof f>(k: K, v: string) => setF((prev) => ({ ...prev, [k]: v }))
@@ -30,14 +38,33 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
     name: !f.name.trim() ? t('Entrez le nom du contact.') : '',
     contact: !f.phone.trim() && !f.email.trim() ? t('Entrez un téléphone ou un courriel.') : '',
     email: f.email.trim() && !EMAIL_RE.test(f.email.trim()) ? t('Courriel invalide.') : '',
+    phone: API_MODE && f.phone.trim() && !isValidPhone(f.phone) ? t('Numéro de téléphone invalide (10 chiffres attendus).') : '',
   }
   const invalid = Object.values(errors).some(Boolean)
-  const known = findDuplicateClients({ phone: f.phone, email: f.email })
+  const known = findDuplicateClients({ phone: f.phone, email: f.email }).filter((c) => !API_MODE || c.companyId === company)
+
+  const submitApi = async () => {
+    setBusy(true)
+    setServerError(null)
+    try {
+      const lead = await createLead({ name: f.name.trim(), phone: f.phone.trim(), email: f.email.trim(), city: f.city.trim(), company, channel: f.source, message: f.message.trim(), repId })
+      toast(t('Lead ajouté : {name}', { name: lead.name }))
+      onCreated(lead)
+    } catch (err) {
+      setServerError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     setTried(true)
-    if (invalid) return
+    if (invalid || busy) return
+    if (API_MODE) {
+      void submitApi()
+      return
+    }
     const lead = addLead({
       name: f.name.trim(),
       phone: f.phone.trim(),
@@ -69,7 +96,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
           <Field label={t('Courriel')}>
             <input className="form-input" type="email" inputMode="email" value={f.email} onChange={(e) => set('email', e.target.value)} aria-invalid={tried && !!(errors.email || errors.contact)} />
           </Field>
-          {(err(errors.contact) || err(errors.email)) && <div className="sm:col-span-2 -mt-1">{err(errors.contact) ?? err(errors.email)}</div>}
+          {(err(errors.contact) || err(errors.email) || err(errors.phone)) && <div className="sm:col-span-2 -mt-1">{err(errors.contact) ?? err(errors.email) ?? err(errors.phone)}</div>}
           <Field label={t('Ville')}>
             <input className="form-input" value={f.city} onChange={(e) => set('city', e.target.value)} />
           </Field>
@@ -104,6 +131,7 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
           )}
           <Field label={t('Responsable')}>
             <select className="form-input" value={repId} onChange={(e) => setRepId(e.target.value)} disabled={!can('leads.assign')} title={can('leads.assign') ? undefined : t('Seuls les administrateurs et la coordination assignent les leads')}>
+              {API_MODE && (can('leads.assign') || !repId) && <option value="">{t('Non assigné')}</option>}
               {repsFor(company).map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
@@ -126,11 +154,12 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
       </div>
       <DrawerFooter>
         {tried && invalid && <MissingNotice messages={Object.values(errors)} />}
+        {serverError && <MissingNotice messages={[serverError]} />}
         <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">
           {t('Annuler')}
         </button>
-        <button type="submit" className="btn btn-sm btn-primary">
-          <Inbox className="w-4 h-4" />
+        <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+          {busy ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <Inbox className="w-4 h-4" />}
           {t('Ajouter le lead')}
         </button>
       </DrawerFooter>

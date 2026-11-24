@@ -8,6 +8,7 @@ import { useAccess } from '../auth/access'
 import { ACCOUNTS, ROLE_LABELS, type Account, type Permission } from '../auth/permissions'
 import { setViewAsOrigin, viewAsOrigin } from '../auth/session'
 import { useStore } from '../data/store'
+import { API_MODE } from '../api/config'
 import { CLIENTS, COMPANIES, LEADS, QUOTES, THREADS, clientById, fullName, repById, type CompanyId } from '../data/mock'
 import { t } from '../i18n'
 import { LanguageSwitch } from '../i18n/LanguageProvider'
@@ -223,7 +224,7 @@ function CommandPalette() {
     // Scope first; without the "all" permissions a rep only finds their own quotes and clients.
     const allowed = QUOTES.filter((x) => inScope(scope, x.company) && access.quote(x))
     const quotes = allowed.filter((x) => !q || normalize(`${x.no} ${fullName(clientById(x.clientId)!)} ${x.city} ${x.workType}`).includes(q)).slice(0, 5)
-    const inScopeClient = (c: (typeof CLIENTS)[number]) => scope === 'all' || c.company === scope || QUOTES.some((x) => x.clientId === c.id && x.company === scope)
+    const inScopeClient = (c: (typeof CLIENTS)[number]) => scope === 'all' || (API_MODE ? c.companyId === scope : c.company === scope || QUOTES.some((x) => x.clientId === c.id && x.company === scope))
     const clients = CLIENTS.filter((c) => inScopeClient(c) && access.client(c) && (!q || normalize(`${fullName(c)} ${c.phone} ${c.mobile ?? ''} ${c.street} ${c.city} ${c.email}`).includes(q))).slice(0, 5)
     return { quotes, clients }
   })()
@@ -312,7 +313,8 @@ function UserMenu({ onNavigate }: { onNavigate: () => void }) {
   const [asOpen, setAsOpen] = useState(false)
   if (!user) return null
   const rep = repById(user.repId)
-  const canViewAs = user.role === 'admin' && !viewAs.active
+  // "Voir comme…" switches demo accounts; with the backend each person signs in with their own account.
+  const canViewAs = !API_MODE && user.role === 'admin' && !viewAs.active
   const targets = ACCOUNTS.filter((a) => a.id !== user.id && a.status === 'actif' && a.role !== 'admin')
   const close = () => {
     setOpen(false)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, Search, UserPlus, Users, Workflow, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, LoaderCircle, Search, UserPlus, Users, Workflow, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useAccess } from '../auth/access'
 import { Select } from '../components/filters'
@@ -14,6 +14,8 @@ import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn, normalize, num } from '../lib/utils'
 import { t } from '../i18n'
+import { API_MODE } from '../api/config'
+import { REF, searchClients } from '../data/api-sync'
 
 export default function Clients() {
   useStore()
@@ -40,6 +42,23 @@ export default function Clients() {
     setSelected(new Set())
   }, [scope])
 
+  // API mode: the list holds the first clients only; a search also asks the server and adds what it finds.
+  const [searching, setSearching] = useState(false)
+  useEffect(() => {
+    if (!API_MODE || query.trim().length < 2) return
+    let live = true
+    const timer = window.setTimeout(() => {
+      setSearching(true)
+      searchClients(query.trim(), { company: scope !== 'all' ? scope : company !== 'Toutes' ? (company as CompanyId) : undefined })
+        .catch(() => undefined)
+        .finally(() => live && setSearching(false))
+    }, 300)
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [query, scope, company])
+
   // Without `clients.viewAll` a rep sees only their clients (one of their quotes or leads, or created by them).
   const rows = CLIENTS.filter((c) => access.client(c)).map((c) => ({ c, served: companiesServing(c) })).filter((r) => {
     if ((scope !== 'all' && !r.served.includes(scope)) || (company !== 'Toutes' && !r.served.includes(company as CompanyId)) || (type !== 'Tous' && r.c.type !== type)) return false
@@ -52,6 +71,13 @@ export default function Clients() {
     }
     return true
   })
+  // API mode: real pages of 25 (back to the first page when the filters change).
+  const pageKey = `${query}|${type}|${company}|${scope}`
+  const [pageAt, setPageAt] = useState({ key: pageKey, n: 0 })
+  const pageCount = Math.max(1, Math.ceil(rows.length / 25))
+  const pageN = API_MODE ? Math.min(pageAt.key === pageKey ? pageAt.n : 0, pageCount - 1) : 0
+  const pageStart = pageN * 25
+  const goPage = (n: number) => setPageAt({ key: pageKey, n: Math.max(0, Math.min(pageCount - 1, n)) })
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.c.id))
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -134,7 +160,7 @@ export default function Clients() {
               </tr>
             </thead>
             <tbody className="divide-y divide-hairline">
-              {rows.slice(0, 25).map(({ c, served }) => (
+              {rows.slice(pageStart, pageStart + 25).map(({ c, served }) => (
                 <tr key={c.id} onClick={() => navigate(`/clients/${c.id}`)} className={cn('cursor-pointer hover:bg-sand/60 transition-colors', selected.has(c.id) && 'bg-primary-wash')}>
                   <td className="td" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="accent-[var(--color-primary)]" aria-label={t('Sélectionner {name}', { name: fullName(c) })} />
@@ -174,9 +200,25 @@ export default function Clients() {
         </div>
         <div className="px-5 py-3 border-t border-hairline flex items-center justify-between text-xs text-ink-mute">
           <span className="tnum">
-            {t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(all ? TOTAL_CLIENTS[scope] + Object.values(CLIENT_COMPANIES).filter((cs) => scope === 'all' || cs.includes(scope)).length : rows.length) })}
+            {API_MODE
+              ? `${num(rows.length ? pageStart + 1 : 0)} – ${num(Math.min(pageStart + 25, rows.length))} / ${num(rows.length)}${REF.truncated.clients && !query.trim() ? '+' : ''}`
+              : t('1 – {n} de {total}', { n: Math.min(25, rows.length), total: num(all ? TOTAL_CLIENTS[scope] + Object.values(CLIENT_COMPANIES).filter((cs) => scope === 'all' || cs.includes(scope)).length : rows.length) })}
+            {searching && <LoaderCircle className="inline w-3 h-3 ml-2 animate-spin" />}
           </span>
-          <div className={cn('flex items-center gap-1', !all && rows.length <= 25 && 'hidden')}>
+          {API_MODE && pageCount > 1 && (
+            <div className="flex items-center gap-1">
+              <button className="p-1.5 rounded-md hover:bg-sand disabled:opacity-40" aria-label={t('Page précédente')} disabled={pageN === 0} onClick={() => goPage(pageN - 1)}>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="tnum px-1">
+                {pageN + 1} / {pageCount}
+              </span>
+              <button className="p-1.5 rounded-md hover:bg-sand disabled:opacity-40" aria-label={t('Page suivante')} disabled={pageN >= pageCount - 1} onClick={() => goPage(pageN + 1)}>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          <div className={cn('flex items-center gap-1', ((!all && rows.length <= 25) || API_MODE) && 'hidden')}>
             <button className="p-1.5 rounded-md hover:bg-sand" aria-label={t('Page précédente')} disabled>
               <ChevronLeft className="w-4 h-4" />
             </button>

@@ -4,13 +4,14 @@ import { LoaderCircle, LogIn } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCOUNTS, DEMO_PASSWORD, ROLE_LABELS } from '../../auth/permissions'
 import { signIn } from '../../auth/session'
-import { Notice } from '../../components/states'
+import { Loading, Notice } from '../../components/states'
 import { Avatar, Badge, Field } from '../../components/ui'
 import { COMPANIES, repById } from '../../data/mock'
 import { useStore } from '../../data/store'
 import { t } from '../../i18n'
 import { cn } from '../../lib/utils'
 import { AuthShell, PasswordInput } from './AuthShell'
+import { API_MODE } from '../../api/config'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -30,6 +31,7 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
 
   if (auth.user && !busy) return <Navigate to={target} replace />
+  if (API_MODE && auth.status === 'loading' && !busy) return <Loading className="min-h-screen" />
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -93,12 +95,14 @@ export default function Login() {
     </div>
   )
 
+  // With the backend there are no demo accounts; a session that was refused on load explains why here.
+  const shownError = error ?? (API_MODE && auth.error ? auth.error : null)
   return (
-    <AuthShell title={t('Connexion')} subtitle={t('Connectez-vous à Hillman Centrale.')} aside={demo}>
+    <AuthShell title={t('Connexion')} subtitle={t('Connectez-vous à Hillman Centrale.')} aside={API_MODE ? undefined : demo}>
       <form onSubmit={submit} noValidate className="space-y-4">
-        {error && (
+        {shownError && (
           <Notice tone="critical">
-            <span role="alert">{error}</span>
+            <span role="alert">{shownError}</span>
           </Notice>
         )}
         <Field label={t('Courriel')}>

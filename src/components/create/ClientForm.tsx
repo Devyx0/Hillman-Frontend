@@ -3,12 +3,18 @@
  * companies, so matches are searched across every company and show who already serves them.
  */
 import { useMemo, useState, type FormEvent } from 'react'
-import { ShieldCheck, TriangleAlert, UserPlus } from 'lucide-react'
+import { LoaderCircle, ShieldCheck, TriangleAlert, UserPlus } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { registerClientCompany } from '../../data/clients'
 import { COMPANIES, companyById, type Client, type CompanyId } from '../../data/mock'
 import { PRIVACY, activeSources } from '../../data/settings'
 import { addClient, findDuplicateClients, useStore } from '../../data/store'
+import { API_MODE } from '../../api/config'
+import { errorMessage } from '../../api/http'
+import { formatPhone, isValidPhone } from '../../api/mappers'
+import type { DuplicateMatch } from '../../api/types'
+import { DuplicateClientError, createClient } from '../../data/actions'
+import { CLIENTS } from '../../data/mock'
 import { langName, t, type Lang } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn } from '../../lib/utils'
@@ -57,12 +63,32 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
     language: 'fr' as Lang,
   })
   const [tried, setTried] = useState(false)
-  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((prev) => ({ ...prev, [k]: v }))
+  const [busy, setBusy] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  /** API mode: likely duplicates reported by the server (same phone or e-mail in that company). */
+  const [serverDups, setServerDups] = useState<DuplicateMatch[] | null>(null)
+  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
+    setServerDups(null)
+    setF((prev) => ({ ...prev, [k]: v }))
+  }
 
-  const dups = useMemo(() => findDuplicateClients(f), [f])
+  // API mode: a client belongs to one company, so only that company's clients can be duplicates.
+  const localDups = useMemo(() => findDuplicateClients(f).filter((c) => !API_MODE || c.companyId === company), [f, company])
+  const dups: Client[] = serverDups
+    ? serverDups.map(
+        (m): Client =>
+          CLIENTS.find((c) => c.id === m.id) ?? {
+            id: m.id, first: m.first_name ?? '', last: m.last_name ?? '', company: m.organization_name ?? undefined, phone: formatPhone(m.phone),
+            mobile: m.alternate_phone ? formatPhone(m.alternate_phone) : undefined, email: m.email ?? '', no: '', street: '', city: m.city ?? '', postal: '',
+            since: '', tags: [], source: '', lifetime: 0, quotes: 0, lastActivity: '', consentSms: false, type: '', companyId: company, partial: true,
+          },
+      )
+    : localDups
+  const badPhone = (v: string) => API_MODE && !!v.trim() && !isValidPhone(v)
   const errors = {
     name: !f.first.trim() && !f.last.trim() ? t('Entrez au moins un prénom ou un nom.') : '',
     contact: !f.phone.trim() && !f.mobile.trim() && !f.email.trim() ? t('Entrez un téléphone ou un courriel.') : '',
+    phone: badPhone(f.phone) || badPhone(f.mobile) ? t('Numéro de téléphone invalide (10 chiffres attendus).') : '',
     email: f.email.trim() && !EMAIL_RE.test(f.email.trim()) ? t('Courriel invalide.') : '',
     postal: f.postal.trim() && !POSTAL_RE.test(f.postal.trim()) ? t('Code postal invalide (ex. G1H 3K7).') : '',
     companyName: f.type !== 'Résidentiel' && !f.company.trim() ? t("Entrez le nom de l'entreprise.") : '',
@@ -70,10 +96,48 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
   const invalid = Object.values(errors).some(Boolean)
   const companyName = companyById(company).name
 
+  /** API mode: create through the server (it checks duplicates in that company unless forced). */
+  const submitApi = async () => {
+    setBusy(true)
+    setServerError(null)
+    try {
+      const { client, consentError } = await createClient(
+        {
+          first: f.first.trim(),
+          last: f.last.trim(),
+          company: f.type !== 'Résidentiel' ? f.company.trim() : '',
+          phone: f.phone.trim() || f.mobile.trim(),
+          mobile: f.phone.trim() ? f.mobile.trim() : '',
+          email: f.email.trim(),
+          no: f.no.trim(),
+          street: f.street.trim(),
+          city: f.city.trim(),
+          postal: f.postal.trim(),
+          type: f.type,
+        },
+        company,
+        // A duplicate already shown (locally or by the server) and confirmed with « Créer quand même ».
+        { force: dups.length > 0, smsConsent: f.consentSms },
+      )
+      toast(t('Client créé : {name}', { name: `${client.first} ${client.last}`.trim() || (client.company ?? '') }))
+      if (consentError) toast(t("Le consentement aux textos n'a pas pu être enregistré : {error}", { error: errorMessage(consentError) }))
+      onCreated(client)
+    } catch (err) {
+      if (err instanceof DuplicateClientError) setServerDups(err.matches)
+      else setServerError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
     setTried(true)
-    if (invalid) return
+    if (invalid || busy) return
+    if (API_MODE) {
+      void submitApi()
+      return
+    }
     const c = addClient({
       first: f.first.trim(),
       last: f.last.trim(),
@@ -145,7 +209,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
           </Field>
           <Field label={t('Courriel')} className="sm:col-span-2">
             <input className="form-input" type="email" inputMode="email" value={f.email} onChange={(e) => set('email', e.target.value)} aria-invalid={tried && !!(errors.email || errors.contact)} />
-            {err(errors.email) || err(errors.contact)}
+            {err(errors.email) || err(errors.contact) || err(errors.phone)}
           </Field>
           <div className="sm:col-span-2 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-3">
             <Field label={t('No civique')}>
@@ -162,6 +226,8 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
             <input className="form-input uppercase" value={f.postal} onChange={(e) => set('postal', e.target.value)} placeholder="G1H 3K7" aria-invalid={tried && !!errors.postal} />
             {err(errors.postal)}
           </Field>
+          {/* The backend stores neither the language nor the source of a client (the source is chosen on each quote). */}
+          {!API_MODE && (
           <fieldset className="sm:col-span-2 flex flex-col gap-1 min-w-0">
             <legend className="label-caps mb-1">{t('Langue de communication')}</legend>
             <div className="flex flex-wrap gap-2">
@@ -174,6 +240,8 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
             </div>
             <span className="text-2xs text-ink-mute">{t('Portail, soumissions, courriels et textos seront envoyés dans cette langue.')}</span>
           </fieldset>
+          )}
+          {!API_MODE && (
           <Field label={t('Source')} className="sm:col-span-2">
             <select className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
               {!sources.includes(f.source) && <option value={f.source}>{t(f.source)}</option>}
@@ -184,6 +252,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
               ))}
             </select>
           </Field>
+          )}
         </div>
 
         <label className={cn('flex items-start gap-3 rounded-lg border px-3.5 py-3 cursor-pointer', f.consentSms ? 'border-primary bg-primary-wash' : 'border-hairline')}>
@@ -203,7 +272,11 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
               <TriangleAlert className="w-4 h-4" />
               {dups.length > 1 ? t('{n} clients existants correspondent', { n: dups.length }) : t('Un client existant correspond')}
             </p>
-            <p className="text-xs text-ink-secondary">{t('Même téléphone, courriel ou adresse. Un client peut être servi par les trois compagnies : ouvrez la fiche existante plutôt que de créer un doublon.')}</p>
+            <p className="text-xs text-ink-secondary">
+              {API_MODE
+                ? t('Même téléphone ou courriel dans cette compagnie : ouvrez la fiche existante plutôt que de créer un doublon.')
+                : t('Même téléphone, courriel ou adresse. Un client peut être servi par les trois compagnies : ouvrez la fiche existante plutôt que de créer un doublon.')}
+            </p>
             <div className="space-y-2">
               {dups.slice(0, 4).map((c) => (
                 <ClientCard
@@ -222,11 +295,12 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
       </div>
       <DrawerFooter>
         {tried && invalid && <MissingNotice messages={Object.values(errors)} />}
+        {serverError && <MissingNotice messages={[serverError]} />}
         <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">
           {cancelLabel ?? t('Annuler')}
         </button>
-        <button type="submit" className={cn('btn btn-sm', dups.length ? 'btn-secondary' : 'btn-primary')}>
-          <UserPlus className="w-4 h-4" />
+        <button type="submit" disabled={busy} className={cn('btn btn-sm', dups.length ? 'btn-secondary' : 'btn-primary')}>
+          {busy ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
           {dups.length ? t('Créer quand même') : t('Créer le client')}
         </button>
       </DrawerFooter>

@@ -10,6 +10,9 @@ import { firstName } from '../auth/session'
 import { useStore } from '../data/store'
 import { openCreate } from '../lib/create'
 import { APPOINTMENTS, LEADS, ME, QUOTES, REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
+import { API_MODE } from '../api/config'
+import { scopeReps as scopeRepsOf } from '../data/reps'
+import { GroupSummaryCard } from '../components/GroupSummary'
 import { getLang, inLang, t, tx } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn, formatHour, money } from '../lib/utils'
@@ -30,7 +33,7 @@ export default function Today() {
   const myRepId = mode === 'admin' ? ME.id : user!.repId
   const greetName = user ? firstName(user.name) : ME.first
   const mine = mode === 'own' || (mode === 'admin' && (scope === 'all' || scope === ME.company))
-  const scopeReps = REPS.filter((r) => r.company !== 'all' && inScope(scope, r.company)).map((r) => r.id)
+  const scopeReps = (API_MODE ? scopeRepsOf(scope) : REPS.filter((r) => r.company !== 'all' && inScope(scope, r.company))).map((r) => r.id)
   /** Row belongs to this dashboard (company scope, and the rep's own work in 'own' mode). */
   const mineOrTeam = (company: string, repId?: string) => inScope(scope, company) && (mode !== 'own' || repId === myRepId)
   const canSeeQuote = (q: (typeof QUOTES)[number]) => mineOrTeam(q.company, q.repId) && access.quote(q)
@@ -41,7 +44,8 @@ export default function Today() {
   const followUps = (() => {
     const pending = QUOTES.filter((q) => (q.status === 'À rappeler' || q.status === 'Rappel courriel envoyé') && canSeeQuote(q))
     if (mode !== 'admin') return pending.slice(0, 6)
-    const first = QUOTES[0]
+    const first = API_MODE ? undefined : QUOTES[0]
+    if (!first) return pending.slice(0, 6)
     return [first, ...pending.filter((q) => q.id !== first.id)].filter((q) => inScope(scope, q.company) && access.quote(q)).slice(0, 6)
   })()
 
@@ -70,7 +74,7 @@ export default function Today() {
             <CalendarDays className="w-4 h-4" />
             {t('Agenda')}
           </Link>
-          {mode === 'admin' ? (
+          {mode === 'admin' && !API_MODE ? (
             <Link to="/soumissions/q64320" className="btn btn-sm btn-primary">
               {t('Nouvelle soumission')}
             </Link>
@@ -87,6 +91,9 @@ export default function Today() {
         <Stat label={t('Suivis à faire')} value={followUps.length - done.size} icon={PhoneCall} />
         <Stat label={t('Ouvertes')} value={opened.length} icon={Eye} />
       </div>
+
+      {/* Vue Groupe: admins, on the all-companies scope (GET /group/summary). */}
+      {API_MODE && scope === 'all' && user?.role === 'admin' && <GroupSummaryCard />}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
         <Card

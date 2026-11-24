@@ -51,7 +51,7 @@ export function parseAddress(address = ''): { no?: string; street?: string; city
 /** Everything a lead knows about the person, ready for the new-client form. */
 export function leadClientPrefill(lead: LeadRecord | undefined, prefill: CreatePrefill = {}): ClientPrefill {
   const profile = lead ? LEAD_PROFILES[lead.id] : undefined
-  const addr = parseAddress(profile?.address)
+  const addr = parseAddress(profile?.address ?? lead?.address)
   const name = prefill.name ?? lead?.name
   const type = profile?.type ?? 'Résidentiel'
   return {

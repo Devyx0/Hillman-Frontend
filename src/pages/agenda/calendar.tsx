@@ -25,7 +25,8 @@ const HOUR_HEIGHT = 56
 const NOW_HOUR = 9.1
 
 /** Reps who have a calendar (everyone but the coordinator). */
-export const AGENDA_REPS = REPS.filter((r) => r.id !== 'hpe')
+/** Reps shown in the agenda (read live: with the backend, REPS is loaded after sign-in). */
+export const agendaReps = () => REPS.filter((r) => r.id !== 'hpe')
 
 /** Something drawn in a rep column: an appointment, an absence or a busy block from Google/Outlook. */
 export type CalEvent = AppointmentRecord & { kind?: 'appt' | 'absence' | 'busy'; label?: string; absenceId?: string }
@@ -326,7 +327,7 @@ export function MonthView({ evts, onPickDay }: { evts: CalEvent[]; onPickDay: (d
                 <>
                   <div className="flex flex-wrap gap-0.5">
                     {Array.from({ length: Math.min(count, 12) }, (_, k) => (
-                      <span key={k} className={cn('w-1.5 h-1.5 rounded-full', `bg-${AGENDA_REPS[k % AGENDA_REPS.length].color}-ink`)} />
+                      <span key={k} className={cn('w-1.5 h-1.5 rounded-full', `bg-${agendaReps()[k % Math.max(1, agendaReps().length)]?.color ?? 'data-1'}-ink`)} />
                     ))}
                   </div>
                   <span className="text-2xs text-ink-mute mt-auto tnum">{count}</span>

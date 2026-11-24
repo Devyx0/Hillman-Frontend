@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Bot, CalendarCheck, CalendarClock, CalendarPlus, Check, FilePenLine, FileText, Flame, House, Inbox, Mail, MapPin, MessageSquare, Phone, RotateCcw, SearchX, Tag, UserRound, Wallet, Wrench } from 'lucide-react'
+import { Bot, CalendarCheck, CalendarClock, CalendarPlus, Check, FilePenLine, FileText, Flame, House, Inbox, LoaderCircle, Mail, MapPin, MessageSquare, Pencil, Phone, RotateCcw, SearchX, Tag, Trash2, UserRound, Wallet, Wrench } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useAccess } from '../auth/access'
 import { NoAccessPage } from '../auth/guards'
@@ -8,7 +8,7 @@ import { LeadStageBadge } from '../components/leads'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
 import { ComingSoon, confirmAction } from '../components/states'
-import { CompanyBadge, Drawer, Empty, Page, RepAvatar, StatusBadge, Tabs } from '../components/ui'
+import { CompanyBadge, Drawer, Empty, Field, Page, RepAvatar, StatusBadge, Tabs } from '../components/ui'
 import { DEFAULT_LEAD_REP, LEAD_LOST, LEAD_PROFILES, LEAD_STAGES, LEAD_STATUS, channelStyle, leadById, leadStage, threadForLead } from '../data/leads'
 import { REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
 import { addAppointment, quoteById, updateLead, useStore } from '../data/store'
@@ -16,6 +16,15 @@ import { t, tIn } from '../i18n'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
+import { API_MODE } from '../api/config'
+import * as api from '../api/endpoints'
+import { errorMessage } from '../api/http'
+import { isValidPhone } from '../api/mappers'
+import type { ApiLeadDetail } from '../api/types'
+import { deleteLead, updateLead as apiUpdateLead, type LeadPatch } from '../data/actions'
+import { cacheLead, roleIn } from '../data/api-sync'
+import { companyReps } from '../data/reps'
+import { activeSources } from '../data/settings'
 
 /** Bookable estimate slots (mockup: `T3`). */
 const SLOTS = [
@@ -45,9 +54,38 @@ export default function LeadDetail() {
   const [slot, setSlot] = useState<string | null>(null)
   const [changingRep, setChangingRep] = useState(false)
   const found = leadById(id)
+  // API mode: the lead as stored, with its client and the quotes created from it.
+  const [detail, setDetail] = useState<ApiLeadDetail | null>(null)
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(API_MODE ? 'loading' : 'ready')
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!API_MODE || !id) return
+    let live = true
+    setLoadState('loading')
+    api.getLead(id).then(
+      (d) => {
+        if (!live) return
+        cacheLead(d)
+        setDetail(d)
+        setLoadState('ready')
+      },
+      () => live && setLoadState('error'),
+    )
+    return () => {
+      live = false
+    }
+  }, [id])
   // Rebuild the synthesized conversation only when the lead's identity or status changes.
   const thread = useMemo(() => (found ? threadForLead(found) : null), [found, found?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (API_MODE && loadState === 'loading' && !found)
+    return (
+      <Page>
+        <div className="flex justify-center py-12 text-ink-mute">
+          <LoaderCircle className="w-5 h-5 animate-spin" />
+        </div>
+      </Page>
+    )
   if (!found || !thread)
     return (
       <Page>
@@ -66,12 +104,13 @@ export default function LeadDetail() {
   const lead = found
 
   const profile = LEAD_PROFILES[lead.id]
-  const rep = repById(lead.repId ?? DEFAULT_LEAD_REP[lead.company])!
+  // API mode: an unassigned lead (« Leads à qualifier ») has no responsable yet.
+  const rep = repById(lead.repId ?? (API_MODE ? undefined : DEFAULT_LEAD_REP[lead.company])) ?? { id: '', name: t('Non assigné'), first: '', phone: '', company: lead.company, role: '', color: 'sand', territory: '' }
   const company = companyById(lead.company)
   const stage = leadStage(lead)
   const channel = channelStyle(lead.channel)
-  const quote = quoteById(lead.quoteId)
-  const client = clientById(lead.clientId)
+  const quote = quoteById(API_MODE ? detail?.quotes[0]?.id : lead.quoteId)
+  const client = clientById(API_MODE ? (detail?.client?.id ?? lead.clientId) : lead.clientId)
   // Drafts go out in the client's language once the lead is linked to a client; French otherwise.
   const lang = clientLang(client)
   const ctx: MessageCtx = { name: lead.name, first: lead.name.split(' ')[0], company: company.name, rep: rep.first, lang }
@@ -98,9 +137,45 @@ export default function LeadDetail() {
     ...(quote ? [{ icon: FilePenLine, title: t('Converti en soumission {no}', { no: quote.no }), at: t("Aujourd'hui"), tone: 'primary' as const }] : []),
   ]
 
+  /** API mode: save on the server, then show the result (or the server's refusal). */
+  const saveApi = async (patch: LeadPatch, message: string) => {
+    try {
+      await apiUpdateLead(lead.id, patch)
+      toast(message)
+      return true
+    } catch (e) {
+      toast(errorMessage(e))
+      return false
+    }
+  }
+
   const setStatus = (status: string, message?: string) => {
+    if (API_MODE) {
+      void saveApi({ status }, message ?? t('Étape : {stage}', { stage: t(status) }))
+      return
+    }
     updateLead(lead.id, { status })
     toast(message ?? t('Étape : {stage}', { stage: t(status) }))
+  }
+
+  const setRep = (repId: string, name: string) => {
+    setChangingRep(false)
+    if (API_MODE) void saveApi({ repId }, repId ? t('Assigné à {name}', { name }) : t('Lead non assigné'))
+    else {
+      updateLead(lead.id, { repId })
+      toast(t('Assigné à {name}', { name }))
+    }
+  }
+
+  const removeLead = async () => {
+    if (!(await confirmAction({ title: t('Supprimer ce lead?'), body: t('Le lead sera retiré de la liste. Les soumissions créées à partir de lui sont conservées.'), confirmLabel: t('Supprimer'), danger: true }))) return
+    try {
+      await deleteLead(lead.id)
+      toast(t('Lead supprimé'))
+      navigate('/leads')
+    } catch (e) {
+      toast(errorMessage(e))
+    }
   }
 
   /** Converts the lead: the quote flow finds or creates the client (duplicate check) and links the quote. */
@@ -114,7 +189,9 @@ export default function LeadDetail() {
 
   /** "Ajouter" a visit: with a quote, the agenda opens prefilled from it (same as the quote screen). */
   const addVisit = () => {
-    if (quote) navigate(`/agenda?nouveau=${quote.id}`)
+    // API mode: the agenda is not on the server yet, so booking records the stage only.
+    if (API_MODE) setStatus('RDV réservé', t('Étape : {stage}', { stage: t('RDV réservé') }))
+    else if (quote) navigate(`/agenda?nouveau=${quote.id}`)
     else setBooking(true)
   }
 
@@ -146,6 +223,12 @@ export default function LeadDetail() {
             </button>
             <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
             <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
+            {API_MODE && (
+              <button onClick={() => setEditing(true)} className="btn btn-sm btn-secondary">
+                <Pencil className="w-4 h-4" />
+                {t('Modifier')}
+              </button>
+            )}
             <button onClick={createQuote} className="btn btn-sm btn-primary">
               <FilePenLine className="w-4 h-4" />
               {quote ? t('Ouvrir {no}', { no: quote.no }) : t('Créer la soumission')}
@@ -163,7 +246,7 @@ export default function LeadDetail() {
               createQuote()
               return
             }
-            if (i === 3 && !lead.booked) {
+            if (i === 3 && !lead.booked && !API_MODE) {
               addVisit()
               return
             }
@@ -195,17 +278,22 @@ export default function LeadDetail() {
                         },
                       ]
                     : []),
-                  { icon: MapPin, label: t('Adresse'), value: profile ? t(profile.address) : lead.city, copy: profile?.address },
+                  { icon: MapPin, label: t('Adresse'), value: profile ? t(profile.address) : [lead.address, lead.city].filter(Boolean).join(', ') || '—', copy: profile?.address ?? lead.address },
                 ],
               },
               {
                 title: t('Demande'),
                 rows: [
                   { icon: Wrench, label: t('Travaux'), value: profile ? t(profile.work) : lead.message || '—' },
-                  { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
-                  { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
-                  { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
-                  { icon: House, label: t('Propriété'), value: profile ? t(profile.property) : '—' },
+                  // API mode: the server keeps the request text only (qualification details come with the AI agent).
+                  ...(API_MODE
+                    ? []
+                    : [
+                        { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
+                        { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
+                        { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
+                        { icon: House, label: t('Propriété'), value: profile ? t(profile.property) : '—' },
+                      ]),
                 ],
               },
               {
@@ -351,14 +439,18 @@ export default function LeadDetail() {
               </div>
               {changingRep && (
                 <ul className="mt-3 border-t border-hairline pt-2">
-                  {REPS.filter((r) => r.company === lead.company).map((r) => (
+                  {API_MODE && lead.repId && (
+                    <li>
+                      <button onClick={() => setRep('', '')} className="w-full flex items-center gap-2 px-1 py-1.5 text-sm rounded hover:bg-sand text-ink-mute">
+                        <RepAvatar id="" size="xs" />
+                        <span className="flex-1 text-left truncate">{t('Non assigné')}</span>
+                      </button>
+                    </li>
+                  )}
+                  {(API_MODE ? companyReps(lead.company) : REPS.filter((r) => r.company === lead.company)).map((r) => (
                     <li key={r.id}>
                       <button
-                        onClick={() => {
-                          updateLead(lead.id, { repId: r.id })
-                          setChangingRep(false)
-                          toast(t('Assigné à {name}', { name: r.name }))
-                        }}
+                        onClick={() => setRep(r.id, r.name)}
                         className="w-full flex items-center gap-2 px-1 py-1.5 text-sm rounded hover:bg-sand"
                       >
                         <RepAvatar id={r.id} size="xs" />
@@ -386,9 +478,17 @@ export default function LeadDetail() {
                 {t('Réactiver le lead')}
               </button>
             )}
+            {API_MODE && can('delete') && roleIn(lead.company) === 'admin' && (
+              <button onClick={removeLead} className="btn btn-sm btn-ghost w-full text-tone-critical-ink">
+                <Trash2 className="w-4 h-4" />
+                {t('Supprimer le lead')}
+              </button>
+            )}
           </>
         }
       />
+
+      {API_MODE && editing && <EditLeadDrawer lead={lead} onClose={() => setEditing(false)} />}
 
       <Drawer
         open={booking}
@@ -433,5 +533,85 @@ export default function LeadDetail() {
         </div>
       </Drawer>
     </Page>
+  )
+}
+
+/** API mode: edit the lead's contact details, source and request (PATCH /leads/:id). */
+function EditLeadDrawer({ lead, onClose }: { lead: NonNullable<ReturnType<typeof leadById>>; onClose: () => void }) {
+  const sources = activeSources()
+  const [f, setF] = useState({ name: lead.name, phone: lead.phone, email: lead.email ?? '', city: lead.city, address: lead.address ?? '', channel: lead.channel, message: lead.message })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const set = (k: keyof typeof f, v: string) => setF((p) => ({ ...p, [k]: v }))
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!f.name.trim()) return setError(t('Entrez le nom du contact.'))
+    if (!f.phone.trim() && !f.email.trim()) return setError(t('Entrez un téléphone ou un courriel.'))
+    if (f.phone.trim() && !isValidPhone(f.phone)) return setError(t('Numéro de téléphone invalide (10 chiffres attendus).'))
+    setBusy(true)
+    setError(null)
+    // Only what changed: re-sending the source would fail for a deactivated source, and the name would be re-split.
+    const orig = { name: lead.name, phone: lead.phone, email: lead.email ?? '', city: lead.city, address: lead.address ?? '', channel: lead.channel, message: lead.message }
+    const patch: LeadPatch = {}
+    for (const k of Object.keys(f) as (keyof typeof f)[]) if (f[k].trim() !== orig[k].trim()) patch[k] = f[k]
+    if (!Object.keys(patch).length) return onClose()
+    try {
+      await apiUpdateLead(lead.id, patch)
+      toast(t('Lead enregistré'))
+      onClose()
+    } catch (err) {
+      setError(errorMessage(err))
+      setBusy(false)
+    }
+  }
+  return (
+    <Drawer open onClose={onClose} title={t('Modifier le lead')}>
+      <form onSubmit={submit} noValidate className="p-5 space-y-4">
+        <Field label={t('Nom du contact')}>
+          <input className="form-input" value={f.name} onChange={(e) => set('name', e.target.value)} autoFocus />
+        </Field>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label={t('Téléphone')}>
+            <input className="form-input tnum" type="tel" value={f.phone} onChange={(e) => set('phone', e.target.value)} />
+          </Field>
+          <Field label={t('Courriel')}>
+            <input className="form-input" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} />
+          </Field>
+          <Field label={t('Adresse')}>
+            <input className="form-input" value={f.address} onChange={(e) => set('address', e.target.value)} />
+          </Field>
+          <Field label={t('Ville')}>
+            <input className="form-input" value={f.city} onChange={(e) => set('city', e.target.value)} />
+          </Field>
+        </div>
+        <Field label={t('Source')}>
+          <select className="form-input" value={f.channel} onChange={(e) => set('channel', e.target.value)}>
+            {!sources.includes(f.channel) && <option value={f.channel}>{t(f.channel)}</option>}
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {t(s)}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t('Demande du client')}>
+          <textarea className="form-input min-h-24 py-2" rows={4} value={f.message} onChange={(e) => set('message', e.target.value)} />
+        </Field>
+        {error && (
+          <p role="alert" className="text-xs font-semibold text-tone-critical-ink">
+            {error}
+          </p>
+        )}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+            {t('Annuler')}
+          </button>
+          <button type="submit" className="btn btn-sm btn-primary" disabled={busy}>
+            {busy && <LoaderCircle className="w-4 h-4 animate-spin" />}
+            {t('Enregistrer')}
+          </button>
+        </div>
+      </form>
+    </Drawer>
   )
 }

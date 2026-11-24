@@ -23,6 +23,8 @@ import { SuiviSection } from './quote-builder/SuiviSection'
 import { MobileTotalBar, SummaryRail } from './quote-builder/Summary'
 import { useQuoteBuilder, type Builder } from './quote-builder/useQuoteBuilder'
 import type { SectionId } from '../data/quote-builder'
+import { API_MODE } from '../api/config'
+import ApiQuoteBuilder from './quote-builder/api/ApiQuoteBuilder'
 
 /**
  * Route `soumissions/:id` — remounts the editor when the id changes (mockup: `u4`).
@@ -32,6 +34,12 @@ export default function QuoteBuilderPage() {
   useStore()
   const { id } = useParams()
   const access = useAccess()
+  // API mode: the editor works on the server's quote (tabs, totals) instead of the demo draft.
+  if (API_MODE) return <ApiQuoteBuilder key={id} id={id ?? ''} />
+  return <MockQuoteBuilderPage id={id} access={access} />
+}
+
+function MockQuoteBuilderPage({ id, access }: { id?: string; access: ReturnType<typeof useAccess> }) {
   const quote = quoteById(id)
   if (!quote)
     return (

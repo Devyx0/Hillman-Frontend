@@ -90,6 +90,22 @@ export const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
   rep: new Set<Permission>(['quotes.edit', 'quotes.costs', 'quotes.status', 'catalogue.view']),
 }
 
+/**
+ * API mode: the backend decides what each role reads and writes (RLS), so the table follows it.
+ * - Representatives never receive costs or margins (cost columns are not granted), and see every client of
+ *   their companies (clients belong to a company, not to a rep).
+ * - Deleting (clients, leads, quotes), the audit log and the group summary are admin only.
+ */
+export function applyApiPermissions() {
+  ROLE_PERMISSIONS.rep.delete('quotes.costs')
+  ROLE_PERMISSIONS.rep.delete('quotes.profit')
+  ROLE_PERMISSIONS.rep.add('clients.viewAll')
+  for (const p of ['delete', 'audit.view', 'users.manage'] as Permission[]) {
+    ROLE_PERMISSIONS.coordinator.delete(p)
+    ROLE_PERMISSIONS.rep.delete(p)
+  }
+}
+
 /** True when the permission table cell can't be changed (admins always keep every permission). */
 export const isPermissionLocked = (role: Role) => role === 'admin'
 

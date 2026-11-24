@@ -14,6 +14,9 @@ import { leadById } from '../data/leads'
 import { AMOUNT_RANGES, COLUMN_STATUS, PIPELINE_COLUMNS as COLUMNS, QUOTE_COLUMNS, ageTone, buildDeals, inAmountRange as matchesAmount, type AmountRange, type PipelineColumnId as ColumnId } from '../data/pipeline'
 import { request, useStore } from '../data/store'
 import { t } from '../i18n'
+import { API_MODE } from '../api/config'
+import { errorMessage } from '../api/http'
+import { updateLead as updateLeadApi } from '../data/actions'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort } from '../lib/utils'
 
@@ -69,13 +72,28 @@ export default function Pipeline() {
   )
   const inColumn = (col: ColumnId) => visible.filter((d) => d.col === col).sort((a, b) => a.days - b.days || b.amount - a.amount)
   const canDrag = (d: { quoteId?: string }) => !d.quoteId || status.canChange
-  const targets = (d: { quoteId?: string; col: ColumnId }) => COLUMNS.filter((c) => c.id !== d.col && (!d.quoteId || QUOTE_COLUMNS.includes(c.id)))
+  // API mode: a lead only moves between « Nouveau lead » and « Visite planifiée » (its stage on the server).
+  const targets = (d: { quoteId?: string; col: ColumnId }) =>
+    COLUMNS.filter((c) => c.id !== d.col && (d.quoteId ? QUOTE_COLUMNS.includes(c.id) : !API_MODE || c.id === 'lead' || c.id === 'visite'))
 
   const move = async (id: string, col: ColumnId) => {
     setMenuId(null)
     const deal = deals.find((d) => d.id === id)
     if (!deal || deal.col === col) return
     if (!deal.quoteId) {
+      if (API_MODE) {
+        if (col !== 'lead' && col !== 'visite') {
+          toast(t('Créez la soumission à partir du lead pour le faire avancer.'))
+          return
+        }
+        try {
+          await updateLeadApi(id, { status: col === 'visite' ? 'RDV réservé' : 'Qualifié' })
+          toast(`${deal.name} → ${t(COLUMNS.find((c) => c.id === col)!.label)}`)
+        } catch (e) {
+          toast(errorMessage(e))
+        }
+        return
+      }
       setLeadMoves((m) => ({ ...m, [id]: col }))
       toast(`${deal.name} → ${t(COLUMNS.find((c) => c.id === col)!.label)}`)
       return

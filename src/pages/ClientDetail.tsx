@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, Ban, CalendarDays, Download, Eye, FilePenLine, FileText, History, House, Inbox, Languages, Mail, MapPin, MessageSquare, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag, UserX } from 'lucide-react'
+import { Archive, Ban, CalendarDays, Download, Eye, FilePenLine, FileText, History, House, Inbox, Languages, LoaderCircle, Mail, MapPin, MessageSquare, Pencil, Phone, PhoneCall, Plus, ShieldCheck, Smartphone, Tag, Trash2, UserX } from 'lucide-react'
 import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
-import { ErrorState, SkeletonRows } from '../components/states'
+import { ErrorState, SkeletonRows, confirmAction } from '../components/states'
+import { API_MODE } from '../api/config'
+import { ApiError, errorMessage } from '../api/http'
+import { STATUS_FR, subtotalFromTotal, toNum } from '../api/mappers'
+import type { ApiClientDetail } from '../api/types'
+import { ClientDocuments, ConsentsCard, EditClientDrawer } from '../components/client-api'
+import { deleteClient } from '../data/actions'
+import { companyRates, companySlug, refreshClient, roleIn } from '../data/api-sync'
 import { Badge, CompanyBadge, Drawer, Empty, Page, RepName, StatusBadge, Tabs } from '../components/ui'
 import { useApp } from '../context/AppContext'
 import { useAccess } from '../auth/access'
+import { useAuth } from '../auth/AuthContext'
 import { NoAccessPage } from '../auth/guards'
 import { LOGICIA_TONE, logiciaForClient, type LogiciaQuote } from '../data/logicia'
 import { QUOTES, REPS, THREADS, clientById, clientLang, companyById, fullName, repById, type Client, type Quote, type Thread } from '../data/mock'
@@ -174,8 +182,44 @@ export default function ClientDetail() {
   useStore()
   const { id = '' } = useParams()
   const access = useAccess()
+  // API mode: the record as stored, with every quote of the client the user may see.
+  const [detail, setDetail] = useState<ApiClientDetail | null>(null)
+  const [load, setLoad] = useState<'loading' | 'ready' | 'error' | 'missing'>(API_MODE ? 'loading' : 'ready')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    if (!API_MODE || !id) return
+    let live = true
+    setLoad('loading')
+    refreshClient(id).then(
+      (d) => {
+        if (!live) return
+        setDetail(d)
+        setLoad('ready')
+      },
+      (e) => live && setLoad(e instanceof ApiError && (e.status === 404 || e.status === 400) ? 'missing' : 'error'),
+    )
+    return () => {
+      live = false
+    }
+  }, [id, attempt])
   const client = clientById(id)
-  if (!client)
+  if (API_MODE && load === 'loading' && (!client || client.partial))
+    return (
+      <Page>
+        <div className="flex justify-center py-12 text-ink-mute">
+          <LoaderCircle className="w-5 h-5 animate-spin" />
+        </div>
+      </Page>
+    )
+  if (API_MODE && load === 'error' && !client)
+    return (
+      <Page>
+        <div className="card">
+          <ErrorState onRetry={() => setAttempt((n) => n + 1)} />
+        </div>
+      </Page>
+    )
+  if (!client || (API_MODE && load === 'missing'))
     return (
       <Page>
         <Empty icon={UserX} title={t('Client introuvable')}>
@@ -190,16 +234,35 @@ export default function ClientDetail() {
     )
   // A client the rep doesn't work with (no quote or lead of theirs), opened by URL.
   if (!access.client(client)) return <NoAccessPage>{t('Ce client n’est lié à aucune de vos soumissions ni à aucun de vos leads.')}</NoAccessPage>
-  return <ClientRecord key={client.id} client={client} />
+  return <ClientRecord key={client.id} client={client} detail={detail} />
 }
 
-function ClientRecord({ client }: { client: Client }) {
+/** API mode: the client's quotes from GET /clients/:id, as list rows (cached rows first: they carry more detail). */
+function detailQuotes(detail: ApiClientDetail): Quote[] {
+  return detail.quotes_by_company.flatMap((g) =>
+    g.quotes.map((q) => {
+      const cached = QUOTES.find((x) => x.id === q.id)
+      if (cached) return cached
+      const company = companySlug(q.company_id) ?? 'toit'
+      const rates = companyRates(company)
+      return {
+        id: q.id, no: q.display_number, clientId: detail.id, company, repId: q.assigned_user_id ?? '', status: STATUS_FR[q.status] ?? q.status,
+        date: q.quote_date, amount: subtotalFromTotal(toNum(q.total_amount), rates.gst, rates.qst), cost: 0, source: '', workType: q.work_summary ?? '',
+        city: detail.city ?? '', views: 0, daysInStatus: 0, hot: false, nextActionDate: q.quote_date,
+      } satisfies Quote
+    }),
+  )
+}
+
+function ClientRecord({ client, detail }: { client: Client; detail: ApiClientDetail | null }) {
   const version = useStore()
   const navigate = useNavigate()
   const { scope } = useApp()
   const access = useAccess()
-  const isDemo = client.id === 'c66700'
+  const { can } = useAuth()
+  const isDemo = !API_MODE && client.id === 'c66700'
   const [tab, setTab] = useState<TabId>('conversation')
+  const [editing, setEditing] = useState(false)
   const textPhone = client.mobile ?? client.phone
   const optedOut = isOptedOut(client.mobile) || isOptedOut(client.phone)
 
@@ -212,17 +275,20 @@ function ClientRecord({ client }: { client: Client }) {
             { ...QUOTES[0], id: 'qx1', no: 'G58114', company: 'sg', repId: 'bto', status: 'Payé', date: '2025-08-28', amount: 200, workType: 'Nettoyage de gouttières', views: 0 },
             { ...QUOTES[0], id: 'qx2', no: 'G31877', company: 'sg', repId: 'plc', status: 'Payé', date: '2021-04-30', amount: 2500, workType: 'Gouttières · T-Rex M-5200', views: 0 },
           ] as Quote[])
-        : QUOTES.filter((q) => q.clientId === client.id)
+        : API_MODE && detail
+          ? detailQuotes(detail)
+          : QUOTES.filter((q) => q.clientId === client.id)
       ).filter((q) => access.quote(q)),
-    [client.id, isDemo, version, access.seesAll.quotes], // eslint-disable-line react-hooks/exhaustive-deps
+    [client.id, isDemo, version, access.seesAll.quotes, detail], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const companies = [...new Set(quotes.map((q) => q.company))]
+  // API mode: the client belongs to one company, even before its first quote.
+  const companies = API_MODE ? (client.companyId ? [client.companyId] : []) : [...new Set(quotes.map((q) => q.company))]
   const open = quotes.filter((q) => OPEN_STATUSES.includes(q.status))
   // The quote a message refers to decides which company (and rep) it is sent from.
   const msgQuote = open.find((q) => scope === 'all' || q.company === scope) ?? quotes.find((q) => scope === 'all' || q.company === scope) ?? open[0] ?? quotes[0]
   const activeCompany = msgQuote?.company ?? (scope !== 'all' ? scope : 'toit')
   const companyRep = (msgQuote && repById(msgQuote.repId)) || REPS.find((r) => r.company === activeCompany)
-  const owner = repById(open[0]?.repId ?? quotes[0]?.repId ?? 'jph')!
+  const owner = repById(open[0]?.repId ?? quotes[0]?.repId ?? (API_MODE ? '' : 'jph')) ?? { id: '', first: '', name: t('Non assigné') }
   // Everything sent to the client (texts, emails, drafts) is written in the client's language.
   const lang = clientLang(client)
   const ctx: MessageCtx = { name: fullName(client), first: client.first, quoteNo: msgQuote?.no, company: companyById(activeCompany).name, rep: companyRep?.first ?? 'Jean-Pierre', lang }
@@ -242,7 +308,7 @@ function ClientRecord({ client }: { client: Client }) {
       unread: 0,
       last: '',
       at: '',
-      assigned: q?.repId ?? 'jph',
+      assigned: q?.repId ?? (API_MODE ? '' : 'jph'),
       messages: q
         ? [
             {
@@ -250,7 +316,7 @@ function ClientRecord({ client }: { client: Client }) {
               dir: 'out',
               channel: 'email',
               at: q.date,
-              by: repById(q.repId)!.name,
+              by: repById(q.repId)?.name ?? '',
               text: tIn(clientLang(client), 'Bonjour {first}, voici votre soumission {no}. Vous pouvez la consulter et la signer en ligne.', { first: client.first, no: q.no }),
               meta: t('Soumission {no}', { no: q.no }) + (q.views ? ' · ' + t('Ouverte {n} fois', { n: q.views }) : ''),
             },
@@ -272,7 +338,18 @@ function ClientRecord({ client }: { client: Client }) {
       ]
     : quotes.slice(0, 5).map((q) => ({ icon: FilePenLine, title: `${q.no} · ${t(q.status)}`, at: q.date }))
   const nextStep = isDemo ? { when: t('Mar. 20 oct. · 15 h 00'), whenForClient: tIn(lang, 'Mar. 20 oct. · 15 h 00'), what: t('Revoir le client') } : null
-  const address = `${client.no}, ${client.street}, ${client.city} ${client.postal}`
+  const address = [[client.no, client.street].filter(Boolean).join(', '), [client.city, client.postal].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—'
+
+  const remove = async () => {
+    if (!(await confirmAction({ title: t('Supprimer ce client?'), body: t('La fiche sera retirée des listes. Ses soumissions sont conservées.'), confirmLabel: t('Supprimer'), danger: true }))) return
+    try {
+      await deleteClient(client.id)
+      toast(t('Client supprimé'))
+      navigate('/clients')
+    } catch (e) {
+      toast(errorMessage(e))
+    }
+  }
 
   return (
     <Page>
@@ -317,7 +394,13 @@ function ClientRecord({ client }: { client: Client }) {
               <MessageButton kind="sms" ctx={ctx} label={t('Texto')} />
             )}
             <MessageButton kind="email" ctx={ctx} label={t('Courriel')} />
-            <button onClick={() => openCreate('quote', { clientId: client.id, company: scope !== 'all' ? scope : undefined })} className="btn btn-sm btn-primary">
+            {API_MODE && (
+              <button onClick={() => setEditing(true)} className="btn btn-sm btn-secondary">
+                <Pencil className="w-4 h-4" />
+                {t('Modifier')}
+              </button>
+            )}
+            <button onClick={() => openCreate('quote', { clientId: client.id, company: API_MODE ? client.companyId : scope !== 'all' ? scope : undefined })} className="btn btn-sm btn-primary">
               <Plus className="w-4 h-4" />
               {t('Créer une soumission')}
             </button>
@@ -363,7 +446,7 @@ function ClientRecord({ client }: { client: Client }) {
               {
                 title: t('Détails'),
                 rows: [
-                  {
+                  ...(API_MODE ? [] : [{
                     icon: Languages,
                     label: t('Langue de communication'),
                     value: (
@@ -382,7 +465,7 @@ function ClientRecord({ client }: { client: Client }) {
                       </select>
                     ),
                   },
-                  { icon: Inbox, label: t('Source'), value: t(client.source) },
+                  { icon: Inbox, label: t('Source'), value: t(client.source) }]),
                   { icon: House, label: t('Propriété'), value: isDemo ? t('Maison 1998 · 2 étages') : t(client.type) },
                   {
                     icon: ShieldCheck,
@@ -416,7 +499,7 @@ function ClientRecord({ client }: { client: Client }) {
                 { value: 'conversation', label: t('Conversation'), icon: MessageSquare },
                 { value: 'activite', label: t('Activité') },
                 { value: 'soumissions', label: t('Soumissions'), count: quotes.length },
-                { value: 'logicia', label: t('Historique Logicia'), icon: History },
+                ...(API_MODE ? [] : [{ value: 'logicia' as TabId, label: t('Historique Logicia'), icon: History }]),
                 { value: 'notes', label: t('Notes') },
                 { value: 'fichiers', label: t('Fichiers') },
               ]}
@@ -468,12 +551,13 @@ function ClientRecord({ client }: { client: Client }) {
               </div>
             )}
             {tab === 'notes' && <Notes canDelete={access.canDelete} initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
-            {tab === 'fichiers' && quotes.length === 0 && (
+            {tab === 'fichiers' && API_MODE && <ClientDocuments quotes={quotes} />}
+            {tab === 'fichiers' && !API_MODE && quotes.length === 0 && (
               <div className="bg-white rounded-xl shadow-card">
                 <Empty icon={FileText} title={t('Aucun fichier')} />
               </div>
             )}
-            {tab === 'fichiers' && quotes.length > 0 && (
+            {tab === 'fichiers' && !API_MODE && quotes.length > 0 && (
               <ul className="bg-white rounded-xl shadow-card divide-y divide-hairline">
                 {quotes.slice(0, 4).map((q) => (
                   <li key={q.id} className="flex items-center gap-3 px-5 py-3">
@@ -512,7 +596,7 @@ function ClientRecord({ client }: { client: Client }) {
                   )}
                 </div>
               ) : (
-                <button onClick={() => navigate(`/agenda?nouveau=${open[0]?.id ?? 'q64320'}`)} className="btn btn-sm btn-secondary w-full">
+                <button onClick={() => navigate(API_MODE && !open[0] ? '/agenda' : `/agenda?nouveau=${open[0]?.id ?? 'q64320'}`)} className="btn btn-sm btn-secondary w-full">
                   <CalendarDays className="w-4 h-4" />
                   {t('Planifier un rendez-vous')}
                 </button>
@@ -541,9 +625,17 @@ function ClientRecord({ client }: { client: Client }) {
             <SideCard title={t('Responsable')}>
               <RepName id={owner.id} size="md" />
             </SideCard>
+            {API_MODE && <ConsentsCard client={client} />}
+            {API_MODE && can('delete') && !!client.companyId && roleIn(client.companyId) === 'admin' && (
+              <button onClick={remove} className="btn btn-sm btn-ghost w-full text-tone-critical-ink">
+                <Trash2 className="w-4 h-4" />
+                {t('Supprimer le client')}
+              </button>
+            )}
           </>
         }
       />
+      {editing && <EditClientDrawer client={client} onClose={() => setEditing(false)} />}
     </Page>
   )
 }

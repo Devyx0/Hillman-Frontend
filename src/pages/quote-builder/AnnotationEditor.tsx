@@ -103,6 +103,8 @@ export function AnnotationEditor({ photo, onSave, onClose }: { photo: QuotePhoto
       return
     }
     const img = new Image()
+    // Remote photos (signed storage URLs) must load with CORS, or the canvas could not be exported.
+    if (/^https?:/.test(photo.src)) img.crossOrigin = 'anonymous'
     img.onload = () => {
       base.current = img
       setReady(true)
@@ -157,7 +159,13 @@ export function AnnotationEditor({ photo, onSave, onClose }: { photo: QuotePhoto
   const save = () => {
     const c = canvas.current
     if (!c) return
-    onSave(c.toDataURL('image/jpeg', 0.85), shapes)
+    let annotated = ''
+    try {
+      annotated = c.toDataURL('image/jpeg', 0.85)
+    } catch {
+      /* canvas not exportable: the shapes alone are saved */
+    }
+    onSave(annotated, shapes)
   }
 
   return createPortal(

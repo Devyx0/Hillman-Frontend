@@ -8,6 +8,8 @@ import { Field } from '../../components/ui'
 import { request } from '../../data/store'
 import { t } from '../../i18n'
 import { AuthShell, PasswordInput, PasswordRules } from './AuthShell'
+import { API_MODE } from '../../api/config'
+import { getSession, requestPasswordReset, updatePassword } from '../../api/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -24,8 +26,102 @@ const BackToLogin = () => (
  */
 export default function ResetPassword() {
   const [params] = useSearchParams()
+  if (API_MODE) {
+    // Supabase e-mail links land here (see consumeAuthRedirect): `nouveau=1` with a session, or `lien=invalide`.
+    if (params.get('lien') === 'invalide') return <InvalidLink />
+    if (params.get('nouveau') !== null) return <ApiSetNewPassword />
+    return <RequestLink />
+  }
   const token = params.get('token')
   return token !== null ? <SetNewPassword token={token} /> : <RequestLink />
+}
+
+function InvalidLink() {
+  return (
+    <AuthShell title={t('Lien invalide')}>
+      <div className="flex flex-col items-center text-center gap-3">
+        <span className="w-12 h-12 rounded-full bg-sand flex items-center justify-center">
+          <MailX className="w-5 h-5 text-ink-mute" />
+        </span>
+        <p className="text-sm text-ink-mute">{t('Ce lien de réinitialisation est invalide ou a expiré. Demandez un nouveau lien.')}</p>
+        <Link to="/mot-de-passe" className="btn btn-sm btn-primary mt-2">
+          {t('Demander un nouveau lien')}
+        </Link>
+        <BackToLogin />
+      </div>
+    </AuthShell>
+  )
+}
+
+/** API mode: the reset / invitation link signed the person in; they choose their password. */
+function ApiSetNewPassword() {
+  const navigate = useNavigate()
+  const session = getSession()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [tried, setTried] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  if (!session) return <InvalidLink />
+  if (done)
+    return (
+      <AuthShell title={t('Mot de passe modifié')}>
+        <div className="flex flex-col items-center text-center gap-3">
+          <span className="w-12 h-12 rounded-full bg-tone-good-soft flex items-center justify-center">
+            <CircleCheck className="w-5 h-5 text-tone-good" />
+          </span>
+          <p className="text-sm text-ink-mute">{t('Votre mot de passe a été enregistré.')}</p>
+          <button className="btn btn-sm btn-primary mt-2" onClick={() => navigate('/', { replace: true })}>
+            {t('Ouvrir Hillman Centrale')}
+          </button>
+        </div>
+      </AuthShell>
+    )
+
+  const pwError = !passwordIsStrong(password) ? t('Le mot de passe ne respecte pas les règles.') : null
+  const confirmError = confirm !== password ? t('Les mots de passe ne correspondent pas.') : null
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setTried(true)
+    if (pwError || confirmError) return
+    setBusy(true)
+    setError(null)
+    try {
+      await updatePassword(password)
+      setDone(true)
+    } catch (err) {
+      setError(t((err as Error).message))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <AuthShell title={t('Nouveau mot de passe')} subtitle={session.email ? t('Choisissez un nouveau mot de passe pour {email}.', { email: session.email }) : undefined}>
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="reset-password" className="label-caps">
+            {t('Nouveau mot de passe')}
+          </label>
+          <PasswordInput id="reset-password" value={password} onChange={setPassword} autoComplete="new-password" invalid={tried && !!pwError} autoFocus />
+          <div className="pt-1">
+            <PasswordRules password={password} />
+          </div>
+        </div>
+        <Field label={t('Confirmer le mot de passe')}>
+          <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" className="form-input" aria-invalid={(tried && !!confirmError) || undefined} />
+          {tried && confirmError && <span className="text-xs text-tone-critical">{confirmError}</span>}
+        </Field>
+        {tried && pwError && <Notice tone="critical">{pwError}</Notice>}
+        {error && <Notice tone="critical">{error}</Notice>}
+        <button type="submit" className="btn btn-md btn-primary w-full" disabled={busy}>
+          {busy && <LoaderCircle className="w-4 h-4 animate-spin" />}
+          {t('Enregistrer le mot de passe')}
+        </button>
+      </form>
+    </AuthShell>
+  )
 }
 
 function RequestLink() {
@@ -42,7 +138,8 @@ function RequestLink() {
     setError(null)
     setBusy(true)
     try {
-      await request(null, { ms: 600 })
+      if (API_MODE) await requestPasswordReset(email)
+      else await request(null, { ms: 600 })
       setSent(email.trim())
     } catch {
       setError(t("Impossible d'envoyer le lien. Réessayez dans un moment."))
@@ -52,7 +149,7 @@ function RequestLink() {
   }
 
   if (sent) {
-    const acc = ACCOUNTS.find((a) => a.email.toLowerCase() === sent.toLowerCase() && a.status === 'actif')
+    const acc = API_MODE ? undefined : ACCOUNTS.find((a) => a.email.toLowerCase() === sent.toLowerCase() && a.status === 'actif')
     return (
       <AuthShell title={t('Vérifiez vos courriels')}>
         <div className="flex flex-col items-center text-center gap-3">

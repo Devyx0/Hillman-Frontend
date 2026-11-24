@@ -13,6 +13,7 @@ import { activeSources } from '../data/settings'
 import { request, useStore } from '../data/store'
 import { t } from '../i18n'
 import { openCreate } from '../lib/create'
+import { API_MODE } from '../api/config'
 import { cn, normalize } from '../lib/utils'
 
 type Filter = 'all' | LeadBucket
@@ -125,8 +126,8 @@ export default function Leads() {
                       </td>
                       <td className="td">
                         <span className="inline-flex items-center gap-2">
-                          <RepAvatar id={l.repId ?? 'jph'} size="sm" />
-                          <span className="truncate">{repById(l.repId ?? 'jph')!.first}</span>
+                          <RepAvatar id={l.repId ?? (API_MODE ? '' : 'jph')} size="sm" />
+                          <span className="truncate">{repById(l.repId ?? (API_MODE ? '' : 'jph'))?.first ?? t('Non assigné')}</span>
                         </span>
                       </td>
                       <td className="td text-right text-xs text-ink-mute whitespace-nowrap">{t(l.ago)}</td>

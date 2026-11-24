@@ -1,5 +1,8 @@
 import { LEADS, QUOTES, clientById, fullName, type CompanyId } from './mock'
 import type { QuoteRecord } from './store'
+import { API_MODE } from '../api/config'
+
+const daysSince = (iso?: string) => (iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 864e5)) : 0)
 
 export type PipelineColumnId = 'lead' | 'visite' | 'soumission' | 'suivi' | 'signe' | 'annee' | 'refuse'
 
@@ -87,13 +90,14 @@ export function buildDeals(): Deal[] {
       no: 'Lead',
       name: l.name,
       company: l.company,
-      amount: LEAD_ESTIMATE[l.company],
-      repId: l.repId ?? DEFAULT_REP[l.company],
-      days: i < 4 ? 0 : 1 + (i % 3),
+      // API mode: a lead has no amount yet (no invented estimate), and its age is real.
+      amount: API_MODE ? 0 : LEAD_ESTIMATE[l.company],
+      repId: l.repId ?? (API_MODE ? '' : DEFAULT_REP[l.company]),
+      days: API_MODE ? daysSince(l.receivedAt) : i < 4 ? 0 : 1 + (i % 3),
       views: 0,
       prob: Math.round(l.score / 6),
       col: l.status === 'RDV réservé' ? 'visite' : 'lead',
-      work: l.aiSummary.split('·')[0].trim(),
+      work: API_MODE ? l.message : l.aiSummary.split('·')[0].trim(),
       ai: l.channel === 'Agent IA' || l.status === 'RDV réservé',
       statusLabel: l.status,
       month: 10,
@@ -108,7 +112,10 @@ export function buildDeals(): Deal[] {
       id: q.id,
       quoteId: q.id,
       no: q.no,
-      name: fullName(clientById(q.clientId)!),
+      name: (() => {
+        const c = clientById(q.clientId)
+        return c ? (API_MODE ? (c.company ?? fullName(c)) : fullName(c)) : '—'
+      })(),
       company: q.company,
       amount: q.amount,
       repId: q.repId,

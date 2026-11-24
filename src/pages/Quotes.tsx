@@ -13,9 +13,15 @@ import { CompanyBadge, Empty, Page, PageHeader, RepAvatar, Stat, StatusBadge, Ta
 import { inScope, useApp } from '../context/AppContext'
 import { COMPANIES, QUOTES, REPS, SOURCES, TODAY, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
 import { internalNote, marginPct, shortDate } from '../data/quote-builder'
-import { STATUS_DEFS } from '../data/settings'
+import { LEAD_SOURCES, STATUS_DEFS } from '../data/settings'
+import { scopeReps } from '../data/reps'
 import { removeQuotes, request, setFollowUpPaused, useStore, type QuoteStatusRecord } from '../data/store'
 import { t } from '../i18n'
+import { API_MODE } from '../api/config'
+import { errorMessage } from '../api/http'
+import { PICKABLE_STATUSES } from '../api/mappers'
+import { deleteQuotes } from '../data/actions'
+import { roleIn } from '../data/api-sync'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort, num, pct } from '../lib/utils'
@@ -77,7 +83,7 @@ function exportCsv(rows: Q[], withCosts: boolean) {
       repById(q.repId)?.name ?? '',
       t(q.status),
       q.amount,
-      ...(withCosts ? [q.cost, Math.round(marginPct(q) * 10) / 10] : []),
+      ...(withCosts ? (Number.isNaN(marginPct(q)) ? ['', ''] : [q.cost, Math.round(marginPct(q) * 10) / 10]) : []),
       t(q.source),
       q.city,
       followUpState(q).label,
@@ -104,7 +110,7 @@ export default function Quotes() {
   const { user, can } = useAuth()
   const viewAll = can('quotes.viewAll')
   const costs = can('quotes.costs')
-  const canDelete = can('delete')
+  const canDeleteAny = can('delete')
   const access = useAccess()
   const me = user?.repId
   const myCompanies = useMemo(() => user?.companies ?? [], [user])
@@ -165,7 +171,7 @@ export default function Quotes() {
       date: (a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no),
       client: (a, b) => clientName(a).localeCompare(clientName(b)),
       amount: (a, b) => a.amount - b.amount,
-      margin: (a, b) => marginPct(a) - marginPct(b),
+      margin: (a, b) => (Number.isNaN(marginPct(a)) ? -1e9 : marginPct(a)) - (Number.isNaN(marginPct(b)) ? -1e9 : marginPct(b)),
       status: (a, b) => statusRank(a.status) - statusRank(b.status),
       views: (a, b) => a.views - b.views,
       next: (a, b) => (followUpState(a).date ?? '9999').localeCompare(followUpState(b).date ?? '9999'),
@@ -207,8 +213,10 @@ export default function Quotes() {
   const closed = scoped.filter((q) => ['Signé', 'Payé', 'Terminé', 'Refusé'].includes(q.status))
   const signRate = scoped.length ? (closed.filter((q) => q.status !== 'Refusé').length / scoped.length) * 100 : 0
   const openedNoReply = pending.filter((q) => q.views > 0).length
-  const totalAmount = scoped.reduce((n, q) => n + q.amount, 0)
-  const avgMargin = totalAmount ? ((totalAmount - scoped.reduce((n, q) => n + q.cost, 0)) / totalAmount) * 100 : 0
+  // API mode: only quotes whose margin the server sent (admin / coordination of their company).
+  const withCost = API_MODE ? scoped.filter((q) => q.marginPct != null) : scoped
+  const costAmount = withCost.reduce((n, q) => n + q.amount, 0)
+  const avgMargin = costAmount ? ((costAmount - withCost.reduce((n, q) => n + q.cost, 0)) / costAmount) * 100 : 0
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -218,6 +226,8 @@ export default function Quotes() {
       return next
     })
   const selectedQuotes = scoped.filter((q) => selected.has(q.id))
+  // API mode: deleting is for admins of the quote's company (roles are per company).
+  const canDelete = canDeleteAny && (!API_MODE || selectedQuotes.every((q) => roleIn(q.company) === 'admin'))
   const allSelected = page.length > 0 && page.every((q) => selected.has(q.id))
   const ctxFor = (q: Q): MessageCtx => {
     const c = clientById(q.clientId)
@@ -247,7 +257,15 @@ export default function Quotes() {
       danger: true,
     })
     if (!ok) return
-    removeQuotes(ids)
+    if (API_MODE) {
+      try {
+        await deleteQuotes(ids)
+      } catch (e) {
+        toast(errorMessage(e))
+        setSelected(new Set([...selected].filter((id) => QUOTES.some((q) => q.id === id))))
+        return
+      }
+    } else removeQuotes(ids)
     setSelected(new Set())
     toast(ids.length > 1 ? t('{n} soumissions supprimées', { n: ids.length }) : t('Soumission supprimée'))
   }
@@ -314,13 +332,13 @@ export default function Quotes() {
             <Select
               value={rep}
               onChange={setRep}
-              options={[{ value: 'all', label: t('Tous') }, ...REPS.filter((r) => r.id !== 'hpe' && (group || r.company === scope)).map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))]}
+              options={[{ value: 'all', label: t('Tous') }, ...(API_MODE ? scopeReps(scope) : REPS.filter((r) => r.id !== 'hpe' && (group || r.company === scope))).map((r) => ({ value: r.id, label: r.name, icon: <RepAvatar id={r.id} size="xs" /> }))]}
               className="md:w-48"
             />
           </FilterField>
         )}
         <FilterField label={t('Source')}>
-          <Select value={source} onChange={setSource} options={[{ value: 'all', label: t('Toutes') }, ...SOURCES.map((s) => ({ value: s, label: t(s) }))]} className="md:w-40" />
+          <Select value={source} onChange={setSource} options={[{ value: 'all', label: t('Toutes') }, ...(API_MODE ? LEAD_SOURCES.map((x) => x.name) : SOURCES).map((s) => ({ value: s, label: t(s) }))]} className="md:w-40" />
         </FilterField>
         <FilterField label={t('Période')}>
           <Select
@@ -360,7 +378,7 @@ export default function Quotes() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setBulkStatusOpen(false)} />
                     <div role="menu" className="absolute left-0 top-full mt-1 z-50 w-60 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in">
-                      {STATUS_DEFS.map(({ name: s }) => (
+                      {STATUS_DEFS.filter(({ name }) => !API_MODE || PICKABLE_STATUSES.includes(name)).map(({ name: s }) => (
                         <button
                           key={s}
                           role="menuitem"
@@ -495,7 +513,7 @@ export default function Quotes() {
                       <td className="td px-2.5 text-right font-semibold text-ink tnum whitespace-nowrap">{money(q.amount, false)}</td>
                       {costs && (
                         <td className="td px-2.5 text-right tnum">
-                          <span className={cn('font-semibold', margin >= 32 ? 'text-tone-good-ink' : margin >= 25 ? 'text-tone-warn-ink' : 'text-tone-critical-ink')}>{pct(margin)}</span>
+                          {Number.isNaN(margin) ? <span className="text-ink-faint">—</span> : <span className={cn('font-semibold', margin >= 32 ? 'text-tone-good-ink' : margin >= 25 ? 'text-tone-warn-ink' : 'text-tone-critical-ink')}>{pct(margin)}</span>}
                         </td>
                       )}
                       <td className="td px-2.5">

@@ -16,6 +16,10 @@ import { useAuth } from '../../auth/AuthContext'
 import { TODAY } from '../../data/mock'
 import { REFUSAL_REASONS, STATUS_DEFS } from '../../data/settings'
 import { changeQuoteStatus, quoteById, type StatusChange } from '../../data/store'
+import { API_MODE } from '../../api/config'
+import { errorMessage } from '../../api/http'
+import { PICKABLE_STATUSES } from '../../api/mappers'
+import { changeStatus as apiChangeStatus } from '../../data/actions'
 import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn } from '../../lib/utils'
@@ -32,7 +36,8 @@ export interface StatusDetails {
 }
 
 /** Dialog asking for the details of a manual status change. Strings are translated inside. */
-export function ChangeStatusDialog({ ids, status, onConfirm, onCancel }: { ids: string[]; status: string; onConfirm: (d: StatusDetails) => void; onCancel: () => void }) {
+export function ChangeStatusDialog({ ids, status, onConfirm, onCancel }: { ids: string[]; status: string; onConfirm: (d: StatusDetails) => void | Promise<void>; onCancel: () => void }) {
+  const [busy, setBusy] = useState(false)
   const [reason, setReason] = useState('')
   const [comment, setComment] = useState('')
   const [paidAt, setPaidAt] = useState(TODAY)
@@ -109,9 +114,15 @@ export function ChangeStatusDialog({ ids, status, onConfirm, onCancel }: { ids: 
       <div className="absolute inset-0 bg-black/30" onClick={onCancel} />
       <form
         className="relative w-full sm:max-w-md bg-white rounded-t-xl sm:rounded-xl shadow-float p-5 menu-in max-h-[92vh] overflow-y-auto"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault()
-          if (valid) onConfirm({ reason: reason || undefined, comment: comment.trim() || undefined, paidAt: status === 'Payé' ? paidAt : undefined })
+          if (!valid || busy) return
+          setBusy(true)
+          try {
+            await onConfirm({ reason: reason || undefined, comment: comment.trim() || undefined, paidAt: status === 'Payé' ? paidAt : undefined })
+          } finally {
+            setBusy(false)
+          }
         }}
       >
         <header className="flex items-start gap-3">
@@ -140,7 +151,7 @@ export function ChangeStatusDialog({ ids, status, onConfirm, onCancel }: { ids: 
           <button type="button" className="btn btn-sm btn-ghost" onClick={onCancel}>
             {t('Annuler')}
           </button>
-          <button type="submit" disabled={!valid} className={cn('btn btn-sm', status === 'Refusé' ? 'bg-tone-critical text-white hover:opacity-90' : 'btn-primary', !valid && 'opacity-50 cursor-not-allowed')}>
+          <button type="submit" disabled={!valid || busy} className={cn('btn btn-sm', status === 'Refusé' ? 'bg-tone-critical text-white hover:opacity-90' : 'btn-primary', !valid && 'opacity-50 cursor-not-allowed')}>
             {status === 'Refusé' ? t('Marquer refusée') : status === 'Signé' ? t('Confirmer l’acceptation') : status === 'Payé' ? t('Marquer payée') : t('Confirmer')}
           </button>
         </div>
@@ -159,12 +170,29 @@ export function useChangeStatus({ via, silent }: { via?: StatusChange['via']; si
   const canChange = can('quotes.status')
   const [pending, setPending] = useState<{ ids: string[]; status: string; resolve: (ok: boolean) => void } | null>(null)
 
-  const apply = (ids: string[], status: string, d: StatusDetails) => {
-    ids.forEach((id) => changeQuoteStatus(id, status, { ...d, by: user?.name, via }))
-    if (silent) return
+  /** Applies the change; resolves true when at least one quote changed. */
+  const apply = async (ids: string[], status: string, d: StatusDetails): Promise<boolean> => {
+    let done = ids
+    if (API_MODE) {
+      // One request per quote; the server refuses e.g. accepting a quote that is already closed.
+      done = []
+      const failures: string[] = []
+      for (const id of ids) {
+        try {
+          await apiChangeStatus(id, status, { reason: d.reason, comment: d.comment })
+          done.push(id)
+        } catch (e) {
+          failures.push(`${quoteById(id)?.no ?? ''} : ${errorMessage(e)}`)
+        }
+      }
+      if (failures.length) toast(failures.length > 1 ? t('{n} soumissions non modifiées — {first}', { n: failures.length, first: failures[0] }) : failures[0])
+      if (!done.length) return false
+    } else ids.forEach((id) => changeQuoteStatus(id, status, { ...d, by: user?.name, via }))
+    if (silent) return true
     const stops = STATUS_DEFS.find((s) => s.name === status)?.stopsFollowUps
-    const what = ids.length > 1 ? t('{n} soumissions → {status}', { n: ids.length, status: t(status) }) : t('{no} → {status}', { no: quoteById(ids[0])?.no ?? '', status: t(status) })
+    const what = done.length > 1 ? t('{n} soumissions → {status}', { n: done.length, status: t(status) }) : t('{no} → {status}', { no: quoteById(done[0])?.no ?? '', status: t(status) })
     toast(stops ? t('{what} · relances arrêtées', { what }) : what)
+    return true
   }
 
   const change = (idOrIds: string | string[], status: string) =>
@@ -178,11 +206,12 @@ export function useChangeStatus({ via, silent }: { via?: StatusChange['via']; si
         return q && q.status !== status
       })
       if (!ids.length) return resolve(false)
-      if (STATUSES_WITH_DIALOG.includes(status)) setPending({ ids, status, resolve })
-      else {
-        apply(ids, status, {})
-        resolve(true)
+      if (API_MODE && !PICKABLE_STATUSES.includes(status)) {
+        toast(t('Ce statut ne peut pas être choisi manuellement.'))
+        return resolve(false)
       }
+      if (STATUSES_WITH_DIALOG.includes(status)) setPending({ ids, status, resolve })
+      else void apply(ids, status, {}).then(resolve)
     })
 
   const dialog = pending ? (
@@ -190,9 +219,9 @@ export function useChangeStatus({ via, silent }: { via?: StatusChange['via']; si
       key={pending.ids.join(',') + pending.status}
       ids={pending.ids}
       status={pending.status}
-      onConfirm={(d) => {
-        apply(pending.ids, pending.status, d)
-        pending.resolve(true)
+      onConfirm={async (d) => {
+        const ok = await apply(pending.ids, pending.status, d)
+        pending.resolve(ok)
         setPending(null)
       }}
       onCancel={() => {

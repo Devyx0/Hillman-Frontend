@@ -2,15 +2,23 @@
  * New quote: company → client (existing, across all companies, or new with duplicate check) →
  * job type → template → rep. Creates the quote in the store and opens it in the builder.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, FilePlus2, FileText, Search, UserPlus, Users } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, FilePlus2, FileText, LoaderCircle, Search, UserPlus, Users } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { useAccess } from '../../auth/access'
 import { useApp } from '../../context/AppContext'
 import { LEAD_PROFILES, leadById } from '../../data/leads'
 import { CLIENTS, COMPANIES, QUOTES, REPS, WORK_TYPES, clientById, companyById, fullName, type Client, type CompanyId } from '../../data/mock'
 import { addQuote, findDuplicateClients, updateLead, useStore } from '../../data/store'
+import { API_MODE } from '../../api/config'
+import { errorMessage } from '../../api/http'
+import type { CatalogueTemplate } from '../../api/types'
+import { createQuote } from '../../data/actions'
+import { loadCatalogue, roleIn, searchClients, workTypeByName } from '../../data/api-sync'
+import { companyReps as companyRepsOf } from '../../data/reps'
+import { activeSources } from '../../data/settings'
+import { Field } from '../ui'
 import { t } from '../../i18n'
 import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
@@ -47,7 +55,9 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   )
 
   const initialCompany = (): CompanyId | undefined => {
-    const wanted = prefill.company ?? lead?.company ?? (scope !== 'all' ? scope : undefined)
+    // API mode: a quote is in its client's company.
+    const clientCompany = API_MODE ? clientById(prefill.clientId ?? lead?.clientId)?.companyId : undefined
+    const wanted = clientCompany ?? prefill.company ?? lead?.company ?? (scope !== 'all' ? scope : undefined)
     if (wanted && companies.includes(wanted)) return wanted
     return companies.length === 1 ? companies[0] : undefined
   }
@@ -56,7 +66,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   // A lead whose contact matches exactly one existing client starts with that client selected.
   const [autoMatchId] = useState<string | undefined>(() => {
     if (passedClient || !lead) return undefined
-    const m = findMatches()
+    const m = findMatches().filter((c) => !API_MODE || c.companyId === initialCompany())
     return m.length === 1 ? m[0].id : undefined
   })
   const [clientId, setClientId] = useState<string | undefined>(passedClient ?? autoMatchId)
@@ -75,8 +85,32 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   }
 
   const client = clientById(clientId)
-  const companyReps = company ? REPS.filter((r) => r.company === company) : []
+  const companyMatches = contactMatches.filter((c) => !API_MODE || c.companyId === company)
+  const companyReps = company ? (API_MODE ? companyRepsOf(company) : REPS.filter((r) => r.company === company)) : []
   const workTypes = company ? [...new Set(WORK_TYPES[company])] : []
+  // API mode: the company's templates from its catalogue, and the quote's source (required by the server).
+  const [apiTemplates, setApiTemplates] = useState<CatalogueTemplate[] | null>(null)
+  const [templatesError, setTemplatesError] = useState<string | null>(null)
+  useEffect(() => {
+    if (!API_MODE || !company) return
+    let live = true
+    setApiTemplates(null)
+    setTemplatesError(null)
+    loadCatalogue(company).then(
+      (c) => live && setApiTemplates(c.quote_templates),
+      (e) => live && setTemplatesError(errorMessage(e)),
+    )
+    return () => {
+      live = false
+    }
+  }, [company])
+  const sources = activeSources()
+  const [sourceChoice, setSourceChoice] = useState<string | null>(null)
+  const source = sourceChoice ?? (lead?.channel && sources.includes(lead.channel) ? lead.channel : (sources[0] ?? ''))
+  const [busy, setBusy] = useState(false)
+  const [serverError, setServerError] = useState<string | null>(null)
+  // API mode: clients found on the server for the search (the lists hold only part of them).
+  const [remoteHits, setRemoteHits] = useState<Client[]>([])
 
   /** Job type: what the lead asks for (keywords), else the client's last quote with this company, else the first type. */
   const suggestedWork = (): string => {
@@ -104,12 +138,18 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
 
   // The company's templates; those for the chosen job type first.
   const matchesWork = (kind: string) => !!workType && normalize(workType).startsWith(normalize(kind))
-  const templates = company ? QUOTE_TEMPLATES.filter((tp) => tp.company === company).sort((a, b) => Number(matchesWork(b.workType)) - Number(matchesWork(a.workType))) : []
-  const suggestedTemplate = templates.find((tp) => matchesWork(tp.workType))?.id ?? NO_TEMPLATE
-  const templateId = templateChoice !== null && (templateChoice === NO_TEMPLATE || templates.some((tp) => tp.id === templateChoice)) ? templateChoice : suggestedTemplate
+  const templates = company && !API_MODE ? QUOTE_TEMPLATES.filter((tp) => tp.company === company).sort((a, b) => Number(matchesWork(b.workType)) - Number(matchesWork(a.workType))) : []
+  // API mode: templates for this work type, or for any work type (no work type set on the template).
+  const workTypeId = company && workType ? workTypeByName(company, workType)?.id : undefined
+  const apiChoices = (apiTemplates ?? []).filter((tp) => !tp.work_type_id || tp.work_type_id === workTypeId).sort((a, b) => Number(!!b.work_type_id) - Number(!!a.work_type_id) || a.sort_order - b.sort_order)
+  const suggestedTemplate = API_MODE ? (apiChoices.find((tp) => tp.work_type_id === workTypeId)?.id ?? NO_TEMPLATE) : (templates.find((tp) => matchesWork(tp.workType))?.id ?? NO_TEMPLATE)
+  const templateIds = API_MODE ? apiChoices.map((tp) => tp.id) : templates.map((tp) => tp.id)
+  const templateId = templateChoice !== null && (templateChoice === NO_TEMPLATE || templateIds.includes(templateChoice)) ? templateChoice : suggestedTemplate
+  const templateName = API_MODE ? apiChoices.find((tp) => tp.id === templateId)?.name : templateById(templateId)?.name
 
   // Without `quotes.viewAll` a rep creates quotes only for themselves.
-  const repLocked = !can('quotes.viewAll') && !!user && companyReps.some((r) => r.id === user.repId)
+  // API mode: a representative can only assign a quote to themselves (the server enforces it).
+  const repLocked = API_MODE ? !!company && roleIn(company) === 'representative' : !can('quotes.viewAll') && !!user && companyReps.some((r) => r.id === user.repId)
   const defaultRep = () => {
     if (user && companyReps.some((r) => r.id === user.repId)) return user.repId
     if (lead?.repId && companyReps.some((r) => r.id === lead.repId)) return lead.repId
@@ -122,14 +162,36 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     const digits = query.replace(/\D/g, '')
     if (!q) return []
     // Search covers the clients the user may see; a returning client of another rep is found by the
-    // duplicate check of the new-client form ("Utiliser ce client").
-    return CLIENTS.filter((c) => {
+    // duplicate check of the new-client form ("Utiliser ce client"). API mode: the quote's company only.
+    const local = CLIENTS.filter((c) => {
       if (!access.client(c)) return false
+      if (API_MODE && c.companyId !== company) return false
       const hay = normalize(`${fullName(c)} ${c.company ?? ''} ${c.email} ${c.no} ${c.street} ${c.city}`)
       const phones = `${c.phone}${c.mobile ?? ''}`.replace(/\D/g, '')
       return hay.includes(q) || (digits.length >= 3 && phones.includes(digits))
-    }).slice(0, 8)
-  }, [query, access])
+    })
+    const seen = new Set(local.map((c) => c.id))
+    return [...local, ...remoteHits.filter((c) => !seen.has(c.id) && c.companyId === company)].slice(0, 8)
+  }, [query, access, company, remoteHits])
+
+  // API mode: also ask the server (debounced), since the cached list may not hold every client.
+  useEffect(() => {
+    if (!API_MODE || !company || query.trim().length < 2) {
+      setRemoteHits([])
+      return
+    }
+    let live = true
+    const timer = window.setTimeout(() => {
+      searchClients(query.trim(), { company }).then(
+        (hits) => live && setRemoteHits(hits),
+        () => live && setRemoteHits([]),
+      )
+    }, 300)
+    return () => {
+      live = false
+      window.clearTimeout(timer)
+    }
+  }, [query, company])
 
   if (!can('quotes.edit')) return <NoAccess>{t('Votre rôle ne permet pas de créer des soumissions.')}</NoAccess>
   if (allowed.length === 0) return <NoAccess>{t("Votre compte n'est associé à aucune compagnie.")}</NoAccess>
@@ -140,7 +202,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     if (i >= 0 && !company) return t('Choisissez une compagnie pour continuer.')
     if (i >= 1 && !client) return t('Choisissez un client existant ou créez une nouvelle fiche pour continuer.')
     if (i >= 2 && !workType) return t('Choisissez le type de travaux pour continuer.')
-    if (i >= 4 && !repId) return companyReps.length ? t('Choisissez un représentant pour continuer.') : t('Aucun représentant pour cette compagnie.')
+    if (i >= 4 && !repId && !(API_MODE && repLocked)) return companyReps.length ? t('Choisissez un représentant pour continuer.') : t('Aucun représentant pour cette compagnie.')
+    if (i >= 4 && API_MODE && !source) return t('Choisissez la source pour continuer.')
     return ''
   }
   const missing = missingAt(step)
@@ -159,10 +222,30 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     go(2)
   }
 
+  const createApi = async () => {
+    if (!company || !client) return
+    setBusy(true)
+    setServerError(null)
+    try {
+      // A rep's quote is always theirs: the server assigns it when no rep is sent.
+      const q = await createQuote({ company, clientId: client.id, workType, source, repId: repLocked ? undefined : repId, templateId: templateId || undefined })
+      toast(t('Soumission {no} créée', { no: q.no }))
+      onClose()
+      navigate(`/soumissions/${q.id}`)
+    } catch (err) {
+      setServerError(errorMessage(err))
+      setBusy(false)
+    }
+  }
+
   const create = () => {
     const blocker = missingAt(4)
     if (blocker || !company || !client) {
       setNudge(true)
+      return
+    }
+    if (API_MODE) {
+      if (!busy) void createApi()
       return
     }
     const q = addQuote({ clientId: client.id, company, repId, workType, templateId: templateId || undefined, leadId: lead?.id, source: lead?.channel ?? client.source, city: client.city })
@@ -206,6 +289,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                     setWorkChoice(null)
                     setTemplateChoice(null)
                     setRepChoice(null)
+                    // API mode: the client must belong to the quote's company.
+                    if (API_MODE && client && client.companyId !== c.id) setClientId(undefined)
                   }
                   setCompany(c.id)
                   setNudge(false)
@@ -231,10 +316,10 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 <ClientCard c={client} selected onClick={() => go(2)} />
               </div>
             )}
-            {contactMatches.length > 0 && !client && (
+            {companyMatches.length > 0 && !client && (
               <div className="space-y-2">
                 <p className="label-caps">{t('Clients existants qui correspondent au lead')}</p>
-                {contactMatches.slice(0, 4).map((c) => (
+                {companyMatches.slice(0, 4).map((c) => (
                   <ClientCard key={c.id} c={c} onClick={() => pickClient(c)} />
                 ))}
               </div>
@@ -246,7 +331,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
               </button>
             )}
             <div className="space-y-2">
-              <p className="label-caps">{t('Rechercher un client (toutes les compagnies)')}</p>
+              <p className="label-caps">{API_MODE ? t('Rechercher un client de cette compagnie') : t('Rechercher un client (toutes les compagnies)')}</p>
               <label className="relative block">
                 <Search className="w-4 h-4 text-ink-mute absolute left-3 top-1/2 -translate-y-1/2" />
                 <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('Nom, téléphone, adresse, courriel…')} className="form-input pl-9" aria-label={t('Rechercher un client')} autoFocus={!contact.name} />
@@ -291,6 +376,22 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
               <span className="flex-1 text-sm font-semibold text-ink">{t('Aucun modèle · soumission vierge')}</span>
               {templateId === NO_TEMPLATE && <Check className="w-4 h-4 text-primary-press" />}
             </button>
+            {API_MODE && apiTemplates === null && !templatesError && <p className="text-xs text-ink-mute px-1 flex items-center gap-2"><LoaderCircle className="w-3.5 h-3.5 animate-spin" />{t('Chargement…')}</p>}
+            {API_MODE && templatesError && <p className="text-xs text-tone-critical-ink px-1">{templatesError}</p>}
+            {API_MODE &&
+              apiChoices.map((tp) => (
+                <button key={tp.id} role="radio" aria-checked={templateId === tp.id} onClick={() => setTemplateChoice(tp.id)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === tp.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
+                  <FileText className="w-4 h-4 text-ink-mute shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-ink">{tp.name}</span>
+                    <span className="block text-xs text-ink-mute">
+                      {t('{n} clauses', { n: tp.items.filter((i) => i.scope_item_id).length })} · {t('{n} lignes de coûts', { n: tp.items.filter((i) => i.cost_item_id).length })} · {t('{n} ajouts', { n: tp.items.filter((i) => i.addon_preset_id).length })}
+                    </span>
+                  </span>
+                  {!!tp.work_type_id && tp.work_type_id === workTypeId && <span className="badge bg-tone-good-soft text-tone-good-ink !text-2xs shrink-0">{t('Suggéré')}</span>}
+                  {templateId === tp.id && <Check className="w-4 h-4 text-primary-press shrink-0" />}
+                </button>
+              ))}
             {templates.map((tp) => (
               <button key={tp.id} role="radio" aria-checked={templateId === tp.id} onClick={() => setTemplateChoice(tp.id)} className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left', templateId === tp.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}>
                 <FileText className="w-4 h-4 text-ink-mute shrink-0" />
@@ -304,7 +405,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 {templateId === tp.id && <Check className="w-4 h-4 text-primary-press shrink-0" />}
               </button>
             ))}
-            {templates.length === 0 && <p className="text-xs text-ink-mute px-1">{t("Aucun modèle pour cette compagnie. Créez-en dans Catalogue → Modèles.")}</p>}
+            {!API_MODE && templates.length === 0 && <p className="text-xs text-ink-mute px-1">{t("Aucun modèle pour cette compagnie. Créez-en dans Catalogue → Modèles.")}</p>}
+            {API_MODE && apiTemplates !== null && apiChoices.length === 0 && <p className="text-xs text-ink-mute px-1">{t('Aucun modèle pour ce type de travaux.')}</p>}
           </div>
         )}
 
@@ -325,6 +427,17 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 </button>
               ))}
             </div>
+            {API_MODE && (
+              <Field label={t('Source')}>
+                <select className="form-input" value={source} onChange={(e) => setSourceChoice(e.target.value)}>
+                  {sources.map((s) => (
+                    <option key={s} value={s}>
+                      {t(s)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <dl className="rounded-xl bg-sand p-4 grid grid-cols-[7rem_minmax(0,1fr)] gap-y-2 text-sm">
               <dt className="text-ink-mute">{t('Compagnie')}</dt>
               <dd>
@@ -335,7 +448,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
               <dt className="text-ink-mute">{t('Travaux')}</dt>
               <dd className="text-ink">{t(workType)}</dd>
               <dt className="text-ink-mute">{t('Modèle')}</dt>
-              <dd className="text-ink">{templateById(templateId) ? t(templateById(templateId)!.name) : t('Aucun')}</dd>
+              <dd className="text-ink">{templateName ? t(templateName) : t('Aucun')}</dd>
               <dt className="text-ink-mute">{t('Numéro')}</dt>
               <dd className="text-ink-mute">{t('Attribué à la création ({code}…)', { code: companyById(company).code })}</dd>
             </dl>
@@ -354,14 +467,15 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           </button>
         )}
         {nudge && missing && <MissingNotice messages={[missing]} />}
+        {serverError && <MissingNotice messages={[serverError]} />}
         {step < 4 ? (
           <button onClick={next} aria-disabled={!!missing} className={cn('btn btn-sm btn-primary', missing && 'opacity-60')}>
             {t('Continuer')}
             <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
-          <button onClick={create} aria-disabled={!!missing} className={cn('btn btn-sm btn-primary', missing && 'opacity-60')}>
-            <FilePlus2 className="w-4 h-4" />
+          <button onClick={create} aria-disabled={!!missing} disabled={busy} className={cn('btn btn-sm btn-primary', missing && 'opacity-60')}>
+            {busy ? <LoaderCircle className="w-4 h-4 animate-spin" /> : <FilePlus2 className="w-4 h-4" />}
             {t('Créer la soumission')}
           </button>
         )}

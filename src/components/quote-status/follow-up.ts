@@ -6,6 +6,7 @@ import { CLIENTS, TODAY } from '../../data/mock'
 import { FOLLOW_UP_SEQUENCES, STATUS_DEFS, isOptedOut } from '../../data/settings'
 import type { QuoteRecord } from '../../data/store'
 import { t } from '../../i18n'
+import { API_MODE } from '../../api/config'
 
 export type FollowUpKind = 'next' | 'paused' | 'stopped' | 'draft' | 'finished' | 'disabled'
 
@@ -53,6 +54,12 @@ export function followUpState(q: QuoteRecord): FollowUpInfo {
   const seq = FOLLOW_UP_SEQUENCES[q.company]
 
   if (def?.stopsFollowUps) return { ...base, kind: 'stopped', label: t('Relances arrêtées · {why}', { why: stopWhy(q.status) }) }
+  // API mode: the automatic sequence is not built on the server yet (phases 3–4); only its stop is recorded.
+  if (API_MODE) {
+    if (q.followUpStopped) return { ...base, kind: 'stopped', label: t('Relances arrêtées · {why}', { why: stopWhy(q.followUpStopped) }) }
+    if (q.status === 'En cours') return { ...base, kind: 'draft', label: t('Pas encore envoyée') }
+    return { ...base, kind: 'disabled', label: t('Relances désactivées') }
+  }
   if (q.followUpStopped) return { ...base, kind: 'stopped', label: t('Relances arrêtées · {why}', { why: stopWhy(q.followUpStopped) }) }
   if (q.status === 'Client va nous rappeler' && seq?.stopOnReply) return { ...base, kind: 'stopped', label: t('Relances arrêtées · {why}', { why: stopWhy(q.status) }) }
   if (q.status === 'En cours') return { ...base, kind: 'draft', label: t('Pas encore envoyée') }

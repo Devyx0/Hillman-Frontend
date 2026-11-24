@@ -1,5 +1,6 @@
 import type { Scope } from '../context/AppContext'
-import { QUOTES, type Client, type CompanyId } from './mock'
+import { QUOTES, TODAY, type Client, type CompanyId } from './mock'
+import { API_MODE } from '../api/config'
 import { t } from '../i18n'
 
 /**
@@ -19,6 +20,8 @@ const isSeeded = (id: string) => parseInt(id.slice(1), 10) <= 66700
 
 /** Companies that have served a client (mockup: `m4`). */
 export function companiesServing(client: Client): CompanyId[] {
+  // API mode: a client record belongs to exactly one company.
+  if (API_MODE) return client.companyId ? [client.companyId] : []
   const set = new Set<CompanyId>(QUOTES.filter((q) => q.clientId === client.id).map((q) => q.company))
   for (const c of CLIENT_COMPANIES[client.id] ?? []) set.add(c)
   const n = parseInt(client.id.slice(1), 10)
@@ -33,7 +36,7 @@ export function companiesServing(client: Client): CompanyId[] {
 
 /** Relative day label (mockup: `f4`). */
 export const relativeDay = (iso: string) => {
-  const days = Math.round((new Date(2026, 9, 20).getTime() - new Date(iso + 'T12:00').getTime()) / 864e5)
+  const days = Math.round((new Date(TODAY + 'T12:00').getTime() - new Date(iso + 'T12:00').getTime()) / 864e5)
   return days <= 0 ? t("Aujourd'hui") : days === 1 ? t('Hier') : t('Il y a {n} j', { n: days })
 }
 

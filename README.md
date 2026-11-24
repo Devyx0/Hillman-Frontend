@@ -30,9 +30,42 @@ npm run dev
 | `src/layout/AppLayout.tsx` | Sidebar, top bar, company switcher, ⌘K search, toasts |
 | `src/pages/*` | One file per route |
 
+## Backend (API mode)
+
+The app runs against the Hillman Centrale API ([Hillman-Backend](../Hillman-Backend)) when these are set
+(copy `.env.example` to `.env.local`, which git ignores):
+
+| Variable | What |
+| --- | --- |
+| `VITE_API_URL` | API base URL, e.g. `http://localhost:3000` (the API's `CORS_ORIGINS` must include this app's origin) |
+| `VITE_SUPABASE_URL` | Supabase project of the API (sign-in) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Its publishable key (public by design — never the secret key) |
+
+Without them the app keeps the in-memory demo below. With them:
+
+- **Sign-in** is Supabase Auth (email + password); the access token is sent as `Bearer` to the API, refreshed
+  before it expires and once more on a 401. Password reset and invitation e-mails come back to `/#/mot-de-passe`;
+  add the app's URL to the Supabase project's allowed redirect URLs.
+- After sign-in, `GET /me` decides the role (highest of the memberships) and companies, then `src/data/api-sync.ts`
+  loads companies, work types, reps, lead sources, clients, quotes and leads into the same collections the screens
+  read. Writes go through `src/data/actions.ts` (one function per API action) and update that cache.
+- `src/api/` holds the client: `endpoints.ts` (one function per route), `types.ts` (response shapes),
+  `mappers.ts` (French UI values ↔ API enums, phones, money), `http.ts` (errors, retry on 401), `auth.ts`.
+- The quote editor (`src/pages/quote-builder/api/`) works on the server's quote tabs: obligations, clauses,
+  expertises, warranties, cost lines, price / discount / « = », add-ons, notes, photos (with annotations), PDFs and,
+  for admins, the change history. Totals, taxes and margins come from the server.
+- Also wired: duplicate check on new clients (409), Loi 25 consents on the client record, client / lead / quote
+  deletion (admin), accept at the office / refuse with a reason, duplicate / new version, Group view on the
+  all-companies dashboard (admin), audit log in Paramètres → Sécurité (admin), the company catalogue (read-only).
+- Not on the server yet, so local to the session: conversations, agenda and work days, follow-up sequences,
+  payments, the client portal and most Paramètres sections (a notice says so). `POST /intake/leads` is for websites
+  and ad platforms (intake key, no user token); the staff UI does not call it.
+
+Run both: `npm run dev` here and `npm run dev` in Hillman-Backend (`.claude/launch.json` has both).
+
 ## Demo accounts
 
-There is no backend yet: sign in at `/connexion` with any demo account listed on the sign-in page
+Mock mode (no API variables): sign in at `/connexion` with any demo account listed on the sign-in page
 (shared demo password shown there, defined in `src/auth/permissions.ts`). Admins can use "Voir comme…" in the
 user menu to preview a rep's or the coordinator's view. All data lives in memory and resets on reload.
 
