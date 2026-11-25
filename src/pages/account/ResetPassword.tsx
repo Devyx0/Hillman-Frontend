@@ -29,7 +29,7 @@ export default function ResetPassword() {
   if (API_MODE) {
     // Supabase e-mail links land here (see consumeAuthRedirect): `nouveau=1` with a session, or `lien=invalide`.
     if (params.get('lien') === 'invalide') return <InvalidLink />
-    if (params.get('nouveau') !== null) return <ApiSetNewPassword />
+    if (params.get('nouveau') !== null) return <ApiSetNewPassword invitation={params.get('nouveau') === 'invitation'} />
     return <RequestLink />
   }
   const token = params.get('token')
@@ -54,7 +54,7 @@ function InvalidLink() {
 }
 
 /** API mode: the reset / invitation link signed the person in; they choose their password. */
-function ApiSetNewPassword() {
+function ApiSetNewPassword({ invitation }: { invitation: boolean }) {
   const navigate = useNavigate()
   const session = getSession()
   const [password, setPassword] = useState('')
@@ -98,7 +98,10 @@ function ApiSetNewPassword() {
     }
   }
   return (
-    <AuthShell title={t('Nouveau mot de passe')} subtitle={session.email ? t('Choisissez un nouveau mot de passe pour {email}.', { email: session.email }) : undefined}>
+    <AuthShell
+      title={invitation ? t('Activer mon compte') : t('Nouveau mot de passe')}
+      subtitle={invitation ? t('Bienvenue! Choisissez votre mot de passe pour {email}.', { email: session.email }) : session.email ? t('Choisissez un nouveau mot de passe pour {email}.', { email: session.email }) : undefined}
+    >
       <form onSubmit={submit} noValidate className="space-y-4">
         <div className="flex flex-col gap-1">
           <label htmlFor="reset-password" className="label-caps">

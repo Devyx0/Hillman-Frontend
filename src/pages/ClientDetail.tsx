@@ -5,6 +5,7 @@ import { MessageButton, type MessageCtx } from '../components/messaging'
 import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, ThreadPanel, Timeline, type TimelineItem } from '../components/record'
 import { ErrorState, SkeletonRows, confirmAction } from '../components/states'
 import { API_MODE } from '../api/config'
+import { ApiNotes } from '../components/ApiNotes'
 import { ApiError, errorMessage } from '../api/http'
 import { STATUS_FR, subtotalFromTotal, toNum } from '../api/mappers'
 import type { ApiClientDetail } from '../api/types'
@@ -550,7 +551,8 @@ function ClientRecord({ client, detail }: { client: Client; detail: ApiClientDet
                 </table>
               </div>
             )}
-            {tab === 'notes' && <Notes canDelete={access.canDelete} initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
+            {tab === 'notes' && API_MODE && <ApiNotes subject="client" id={client.id} company={client.companyId} />}
+            {tab === 'notes' && !API_MODE && <Notes canDelete={access.canDelete} initial={isDemo ? [{ at: t('16 oct.'), by: 'Jean-Pierre Hillman', text: t('Décide avec son conjoint. Préfère les textos après 17 h.') }] : []} />}
             {tab === 'fichiers' && API_MODE && <ClientDocuments quotes={quotes} />}
             {tab === 'fichiers' && !API_MODE && quotes.length === 0 && (
               <div className="bg-white rounded-xl shadow-card">

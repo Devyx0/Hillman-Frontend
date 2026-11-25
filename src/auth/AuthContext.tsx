@@ -27,6 +27,8 @@ interface AuthState {
   can: (p: Permission) => boolean
   /** Companies the user may see. */
   companies: CompanyId[]
+  /** API mode: reflect a profile change (PATCH /me) in the signed-in account. */
+  patchUser: (patch: Partial<Pick<Account, 'name' | 'email'>>) => void
 }
 
 const AuthContext = createContext<AuthState>({
@@ -39,6 +41,7 @@ const AuthContext = createContext<AuthState>({
   impersonate: () => {},
   can: () => false,
   companies: [],
+  patchUser: () => {},
 })
 
 function readSession(): Account | null {
@@ -188,7 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const can = (p: Permission) => !!user && ROLE_PERMISSIONS[user.role].has(p)
   const companies = user?.companies ?? []
 
-  return <AuthContext.Provider value={{ user, status, error, retry: boot, login, logout, impersonate, can, companies }}>{children}</AuthContext.Provider>
+  const patchUser = (patch: Partial<Pick<Account, 'name' | 'email'>>) => setUser((u) => (u ? { ...u, ...patch } : u))
+
+  return <AuthContext.Provider value={{ user, status, error, retry: boot, login, logout, impersonate, can, companies, patchUser }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext)

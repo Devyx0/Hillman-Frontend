@@ -404,6 +404,20 @@ export function resetData() {
   commit()
 }
 
+/** Re-read a company's representatives (after an invitation or a role change in Paramètres → Utilisateurs). */
+export async function refreshReps(slug: CompanyId) {
+  const uuid = companyUuid(slug)
+  if (!uuid) return
+  const reps = await api.listRepresentatives(uuid)
+  REF.reps.set(slug, reps)
+  for (const r of reps) {
+    ensureRep(r.id, r.first_name, r.last_name, slug)
+    const rep = REPS.find((x) => x.id === r.id)!
+    rep.role = ROLE_FR[r.role] ?? ''
+  }
+  commit()
+}
+
 /** Re-read one client (record + its quotes) from the server. */
 export async function refreshClient(id: Uuid) {
   const c = await api.getClient(id)

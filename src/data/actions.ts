@@ -7,8 +7,9 @@ import * as api from '../api/endpoints'
 import { ApiError } from '../api/http'
 import { STATUS_API, clientTypeApi, manualStatusApi, refusalApi, stageApi } from '../api/mappers'
 import type { ApiQuote, ClientFields, DuplicateMatch, UpdateLeadBody, UpdateQuoteBody } from '../api/types'
-import { cacheClient, cacheLead, cacheQuote, companyUuid, refreshClient, roleIn, sourceByName, uncache, workTypeByName } from './api-sync'
-import { CLIENTS, QUOTES, type Client, type CompanyId, type Lead } from './mock'
+import { REF, cacheClient, cacheLead, cacheQuote, companyUuid, refreshClient, roleIn, sourceByName, uncache, workTypeByName } from './api-sync'
+import { formatPhone } from '../api/mappers'
+import { CLIENTS, ME, QUOTES, REPS, type Client, type CompanyId, type Lead } from './mock'
 import { commit, quoteById, type QuoteRecord } from './store'
 
 const nz = (s: string | undefined | null) => {
@@ -283,3 +284,62 @@ export async function deleteQuotes(ids: string[]) {
   commit()
 }
 
+
+// ── Lead conversion ──────────────────────────────────────────────────────────
+export interface ConvertLeadInput {
+  company: CompanyId
+  /** Existing client of the lead's company… */
+  clientId?: string
+  /** …or a new one, created in the same transaction (duplicate check unless `force`). */
+  newClient?: ClientInput
+  force?: boolean
+  /** Work type name, as listed for the company. */
+  workType: string
+  /** Representative; empty = the server's default (the caller if a representative, else the lead's). */
+  repId?: string
+  templateId?: string
+}
+
+/**
+ * « Créer la soumission » from a lead (POST /leads/:id/convert): client, quote (lead's company and source, linked to
+ * the lead), template, and the lead becomes converted — one transaction. Rejects with DuplicateClientError when the
+ * new client looks like an existing one.
+ */
+export async function convertLead(leadId: string, input: ConvertLeadInput): Promise<QuoteRecord> {
+  const work = workTypeByName(input.company, input.workType)
+  if (!work) throw new ApiError(400, 'BAD_REQUEST', 'Type de travaux invalide pour cette compagnie.')
+  let result
+  try {
+    result = await api.convertLead(leadId, {
+      client_id: input.clientId,
+      client: input.newClient ? { ...clientFields(input.newClient), force: !!input.force } : undefined,
+      work_type_id: work.id,
+      assigned_user_id: input.repId || undefined,
+      template_id: input.templateId || undefined,
+    })
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'POSSIBLE_DUPLICATE') throw new DuplicateClientError((e.details as { matches?: DuplicateMatch[] })?.matches ?? [])
+    throw e
+  }
+  cacheLead(result.lead)
+  const record = cacheQuote(result.quote)
+  bumpClientQuotes(result.quote.client_id)
+  return record
+}
+
+/** « Clients existants qui correspondent au lead »: same phone or e-mail in the lead's company. */
+export const leadClientMatches = (leadId: string) => api.leadClientMatches(leadId)
+
+// ── My profile ───────────────────────────────────────────────────────────────
+/** PATCH /me (name, phone, agenda colour), then the name and phone shown everywhere (REPS, ME). */
+export async function updateMyProfile(body: { first_name?: string; last_name?: string; phone?: string | null; calendar_color?: string }) {
+  const profile = await api.updateMe(body)
+  const name = `${profile.first_name} ${profile.last_name}`.trim()
+  for (const r of [...REPS.filter((x) => x.id === profile.id), ME]) {
+    if (r.id !== profile.id) continue
+    Object.assign(r, { name, first: profile.first_name, phone: formatPhone(profile.phone) })
+  }
+  if (REF.me) REF.me.user = { ...REF.me.user, ...profile }
+  commit()
+  return profile
+}

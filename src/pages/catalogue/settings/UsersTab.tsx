@@ -1,4 +1,6 @@
 /** Paramètres → Utilisateurs & permissions (admin side of PDF item 1). */
+import { API_MODE } from '../../../api/config'
+import { ApiUsersTab } from './ApiUsersTab'
 import { useState } from 'react'
 import { Check, KeyRound, Link2, Lock, Mail, Pencil, Plus, RotateCcw, Search, UserCog, UserPlus, UserX } from 'lucide-react'
 import { Badge, Card, CompanyBadge, Drawer, Empty, Field } from '../../../components/ui'
@@ -28,6 +30,12 @@ function formatLogin(s?: string) {
 }
 
 export function UsersTab() {
+  // With the backend: the company's members, invitations and roles from the server.
+  if (API_MODE) return <ApiUsersTab />
+  return <MockUsersTab />
+}
+
+function MockUsersTab() {
   useStore()
   const { user } = useAuth()
   const [query, setQuery] = useState('')

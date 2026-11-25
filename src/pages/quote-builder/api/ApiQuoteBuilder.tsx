@@ -22,6 +22,8 @@ import { cn, money } from '../../../lib/utils'
 import { ApiDocumentsSection, ApiHistorySection, ApiPhotosSection } from './media'
 import { ApiCoutantsSection, ApiExpertisesSection, ApiGarantiesSection, ApiInfosSection, ApiNotesSection, ApiObligationsSection, ApiPrixSection, ApiTravauxSection } from './sections'
 import { useApiQuote, type ApiQuoteState } from './useApiQuote'
+import { ApiNotes } from '../../../components/ApiNotes'
+import { BuilderSection } from '../../../components/quote-shared'
 
 type S = ApiQuoteState & { quote: NonNullable<ApiQuoteState['quote']> }
 
@@ -81,6 +83,7 @@ const SECTIONS: { id: string; label: string; cost?: boolean; admin?: boolean }[]
   { id: 'coutants', label: 'Coûtants' },
   { id: 'prix', label: 'Prix' },
   { id: 'notes', label: 'Notes' },
+  { id: 'internes', label: 'Notes internes' },
   { id: 'photos', label: 'Photos' },
   { id: 'envoi', label: 'PDF' },
   { id: 'suivi', label: 'Journal', admin: true },
@@ -117,6 +120,10 @@ function Editor({ s }: { s: S }) {
           <ApiCoutantsSection s={s} />
           <ApiPrixSection s={s} />
           <ApiNotesSection s={s} />
+          <BuilderSection id="internes" title={t('Notes internes')}>
+            <p className="text-xs text-ink-mute -mt-2 mb-3">{t('Visibles par l’équipe seulement, jamais imprimées.')}</p>
+            <ApiNotes subject="quote" id={quote.id} company={s.company} className="p-0 shadow-none" />
+          </BuilderSection>
           <ApiPhotosSection s={s} />
           <ApiDocumentsSection s={s} />
           {isAdmin && <ApiHistorySection s={s} />}

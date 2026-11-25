@@ -228,7 +228,7 @@ export function consumeAuthRedirect(): 'recovery' | 'invite' | 'signup' | 'magic
     email: emailFromToken(access),
   })
   const type = (p.get('type') ?? 'magiclink') as 'recovery' | 'invite' | 'signup' | 'magiclink'
-  clearUrl(type === 'recovery' || type === 'invite' ? '/mot-de-passe?nouveau=1' : '/')
+  clearUrl(type === 'invite' ? '/mot-de-passe?nouveau=invitation' : type === 'recovery' ? '/mot-de-passe?nouveau=1' : '/')
   return type
 }
 
