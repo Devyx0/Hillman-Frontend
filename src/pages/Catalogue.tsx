@@ -146,7 +146,7 @@ function SettingsView() {
             <current.icon className="w-5 h-5 text-ink-mute" />
             {t(current.label)}
           </h2>
-          {API_MODE && current.id !== 'securite' && (
+          {API_MODE && current.id !== 'securite' && current.id !== 'utilisateurs' && (
             <Notice tone="info">{t('Ces paramètres ne sont pas encore enregistrés sur le serveur : les changements restent sur cet appareil jusqu’à la prochaine connexion.')}</Notice>
           )}
           {allowed(current) ? (

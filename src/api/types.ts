@@ -33,7 +33,7 @@ export interface Page<T> {
 // ── Reference data ───────────────────────────────────────────────────────────
 export interface MeResponse {
   user: { id: Uuid; email: string | null; first_name: string; last_name: string; phone: string | null; calendar_color: string | null }
-  memberships: { company_id: Uuid; company_name: string; slug: string; role: MembershipRole; is_sales_rep: boolean }[]
+  memberships: { company_id: Uuid; company_name: string; slug: string; role: MembershipRole }[]
 }
 
 export interface ApiCompany {
@@ -558,4 +558,78 @@ export interface ApiGroupSummary {
   period: { from: string | null; to: string | null }
   group: GroupBucket
   companies: (GroupBucket & { company_id: Uuid; slug: string; name: string; quote_prefix: string | null; brand_color: string | null })[]
+}
+
+// ── Lead conversion ──────────────────────────────────────────────────────────
+/** POST /leads/:id/convert: exactly one of client_id (existing client of the lead's company) or client (new). */
+export interface ConvertLeadBody {
+  client_id?: Uuid
+  client?: ClientFields & { force?: boolean }
+  work_type_id: Uuid
+  /** Default: the caller if a representative, else the lead's representative (400 when neither). */
+  assigned_user_id?: Uuid
+  template_id?: Uuid
+  work_summary?: string | null
+}
+
+export interface ConvertLeadResult {
+  lead: ApiLeadDetail
+  quote: ApiQuote
+}
+
+// ── Notes ────────────────────────────────────────────────────────────────────
+export type NoteSubject = 'client' | 'lead' | 'quote'
+
+export interface ApiNote {
+  id: Uuid
+  client_id: Uuid | null
+  lead_id: Uuid | null
+  quote_id: Uuid | null
+  author_user_id: Uuid | null
+  author_first_name: string | null
+  author_last_name: string | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+// ── Users ────────────────────────────────────────────────────────────────────
+export interface ApiMyProfile {
+  id: Uuid
+  email: string | null
+  first_name: string
+  last_name: string
+  phone: string | null
+  calendar_color: string | null
+}
+
+export interface UpdateMeBody {
+  first_name?: string
+  last_name?: string
+  phone?: string | null
+  /** #RRGGBB */
+  calendar_color?: string
+}
+
+export interface ApiCompanyUser {
+  user_id: Uuid
+  email: string | null
+  first_name: string
+  last_name: string
+  phone: string | null
+  role: MembershipRole
+  is_active: boolean
+  /** false for staff without a Supabase login */
+  has_login: boolean
+  invited_at: string | null
+  /** null = invited but never signed in */
+  last_sign_in_at: string | null
+  member_since: string
+}
+
+export interface InviteUserBody {
+  email: string
+  first_name: string
+  last_name: string
+  role: MembershipRole
 }

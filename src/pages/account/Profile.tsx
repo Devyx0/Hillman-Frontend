@@ -5,6 +5,10 @@ import { useAuth } from '../../auth/AuthContext'
 import { ACCOUNTS, ROLE_LABELS, saveAccount } from '../../auth/permissions'
 import { API_MODE } from '../../api/config'
 import { updatePassword, verifyPassword } from '../../api/auth'
+import { errorMessage } from '../../api/http'
+import { formatPhone, isValidPhone } from '../../api/mappers'
+import { updateMyProfile } from '../../data/actions'
+import { REF } from '../../data/api-sync'
 import { checkPassword, passwordIsStrong, profileExtras, saveProfileExtras, setPassword as storePassword, setViewAsOrigin, type NotificationEvent } from '../../auth/session'
 import { Notice } from '../../components/states'
 import { CalendarConnectTab } from '../catalogue/CalendarConnectTab'
@@ -63,7 +67,7 @@ export default function Profile() {
         }
       />
 
-      <InfoCard key={`info-${user.id}`} refresh={() => impersonate(user.id)} avatarColor={rep?.color} />
+      {API_MODE ? <ApiInfoCard /> : <InfoCard key={`info-${user.id}`} refresh={() => impersonate(user.id)} avatarColor={rep?.color} />}
       <LanguageCard />
       <PasswordCard key={`pw-${user.id}`} />
       <NotificationsCard key={`notif-${user.id}`} />
@@ -139,6 +143,86 @@ function InfoCard({ refresh, avatarColor }: { refresh: () => void; avatarColor?:
         </fieldset>
         {error && <Notice tone="critical">{error}</Notice>}
         <div className={cn('flex justify-end', API_MODE && 'hidden')}>
+          <button type="submit" className="btn btn-sm btn-primary" disabled={!dirty || busy}>
+            {busy && <LoaderCircle className="w-4 h-4 animate-spin" />}
+            {t('Enregistrer')}
+          </button>
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+/** API mode: PATCH /me — first and last name, phone, agenda colour. The e-mail is the sign-in and stays as is. */
+function ApiInfoCard() {
+  const { user, patchUser } = useAuth()
+  const account = user!
+  const profile = REF.me?.user
+  const initial = { first: profile?.first_name ?? '', last: profile?.last_name ?? '', phone: formatPhone(profile?.phone), color: profile?.calendar_color ?? '#3b82f6' }
+  const [f, setF] = useState(initial)
+  const [saved, setSaved] = useState(initial)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const dirty = JSON.stringify(f) !== JSON.stringify(saved)
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!f.first.trim() || !f.last.trim()) return setError(t('Entrez votre prénom et votre nom.'))
+    if (f.phone.trim() && !isValidPhone(f.phone)) return setError(t('Numéro de téléphone invalide (10 chiffres attendus).'))
+    setError(null)
+    setBusy(true)
+    try {
+      const p = await updateMyProfile({
+        first_name: f.first.trim(),
+        last_name: f.last.trim(),
+        phone: f.phone.trim() || null,
+        // The colour input always holds #rrggbb; only sent when changed.
+        ...(f.color !== saved.color ? { calendar_color: f.color } : {}),
+      })
+      const next = { first: p.first_name, last: p.last_name, phone: formatPhone(p.phone), color: p.calendar_color ?? f.color }
+      setF(next)
+      setSaved(next)
+      patchUser({ name: `${p.first_name} ${p.last_name}`.trim() })
+      toast(t('Profil enregistré'))
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card title={t('Informations')} icon={UserRound}>
+      <form onSubmit={save} noValidate className="space-y-4">
+        <div className="flex items-center gap-4">
+          <Avatar name={`${f.first} ${f.last}`.trim() || account.name} size="xl" />
+          <div className="min-w-0">
+            <p className="text-md font-semibold text-ink truncate">{account.name}</p>
+            <p className="text-xs text-ink-mute truncate">{account.email}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label={t('Prénom')}>
+            <input className="form-input" value={f.first} onChange={(e) => setF({ ...f, first: e.target.value })} autoComplete="given-name" maxLength={100} />
+          </Field>
+          <Field label={t('Nom')}>
+            <input className="form-input" value={f.last} onChange={(e) => setF({ ...f, last: e.target.value })} autoComplete="family-name" maxLength={100} />
+          </Field>
+          <Field label={t('Courriel')}>
+            <input className="form-input bg-sand" value={account.email} readOnly title={t('Le courriel sert à la connexion; un administrateur peut le changer.')} />
+          </Field>
+          <Field label={t('Téléphone')}>
+            <input className="form-input tnum" type="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} autoComplete="tel" />
+          </Field>
+          <Field label={t('Couleur dans l’agenda')}>
+            <span className="flex items-center gap-2">
+              <input type="color" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })} className="h-10 w-14 rounded-md border border-hairline-input bg-white p-1" aria-label={t('Couleur dans l’agenda')} />
+              <span className="text-xs text-ink-mute tnum uppercase">{f.color}</span>
+            </span>
+          </Field>
+        </div>
+        {error && <Notice tone="critical">{error}</Notice>}
+        <div className="flex justify-end">
           <button type="submit" className="btn btn-sm btn-primary" disabled={!dirty || busy}>
             {busy && <LoaderCircle className="w-4 h-4 animate-spin" />}
             {t('Enregistrer')}

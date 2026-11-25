@@ -14,7 +14,9 @@ import { addQuote, findDuplicateClients, updateLead, useStore } from '../../data
 import { API_MODE } from '../../api/config'
 import { errorMessage } from '../../api/http'
 import type { CatalogueTemplate } from '../../api/types'
-import { createQuote } from '../../data/actions'
+import { DuplicateClientError, convertLead, createQuote, leadClientMatches, recordConsent, type ClientInput } from '../../data/actions'
+import { formatPhone } from '../../api/mappers'
+import type { DuplicateMatch } from '../../api/types'
 import { loadCatalogue, roleIn, searchClients, workTypeByName } from '../../data/api-sync'
 import { companyReps as companyRepsOf } from '../../data/reps'
 import { activeSources } from '../../data/settings'
@@ -57,10 +59,13 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   const initialCompany = (): CompanyId | undefined => {
     // API mode: a quote is in its client's company.
     const clientCompany = API_MODE ? clientById(prefill.clientId ?? lead?.clientId)?.companyId : undefined
-    const wanted = clientCompany ?? prefill.company ?? lead?.company ?? (scope !== 'all' ? scope : undefined)
+    // API mode, from a lead: the conversion creates the quote in the lead's company.
+    const wanted = (API_MODE && lead ? lead.company : undefined) ?? clientCompany ?? prefill.company ?? lead?.company ?? (scope !== 'all' ? scope : undefined)
     if (wanted && companies.includes(wanted)) return wanted
     return companies.length === 1 ? companies[0] : undefined
   }
+  /** API mode: the quote comes from a lead → POST /leads/:id/convert (one transaction), not POST /quotes. */
+  const converting = API_MODE && !!lead
   const passedClient = clientById(prefill.clientId ?? lead?.clientId)?.id
   const [company, setCompany] = useState<CompanyId | undefined>(initialCompany)
   // A lead whose contact matches exactly one existing client starts with that client selected.
@@ -84,8 +89,34 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     setStepRaw(i)
   }
 
-  const client = clientById(clientId)
-  const companyMatches = contactMatches.filter((c) => !API_MODE || c.companyId === company)
+  // Conversion: a new client is sent with the conversion (created in the same transaction), not before.
+  const [pendingClient, setPendingClient] = useState<{ input: ClientInput; force: boolean; smsConsent: boolean } | null>(null)
+  // Conversion: the server's « clients existants qui correspondent au lead », and duplicates it reported.
+  const [leadMatches, setLeadMatches] = useState<DuplicateMatch[] | null>(null)
+  const [dupMatches, setDupMatches] = useState<DuplicateMatch[] | null>(null)
+  const pendingAsClient: Client | undefined = pendingClient
+    ? { id: '', first: pendingClient.input.first, last: pendingClient.input.last, company: pendingClient.input.company || undefined, phone: pendingClient.input.phone ?? '', mobile: pendingClient.input.mobile || undefined, email: pendingClient.input.email ?? '', no: pendingClient.input.no ?? '', street: pendingClient.input.street ?? '', city: pendingClient.input.city ?? '', postal: pendingClient.input.postal ?? '', since: '', tags: [], source: '', lifetime: 0, quotes: 0, lastActivity: '', consentSms: pendingClient.smsConsent, type: pendingClient.input.type ?? 'Résidentiel', companyId: company }
+    : undefined
+  const client = clientById(clientId) ?? pendingAsClient
+  const matchAsClient = (m: DuplicateMatch): Client =>
+    clientById(m.id) ?? { id: m.id, first: m.first_name ?? '', last: m.last_name ?? '', company: m.organization_name ?? undefined, phone: formatPhone(m.phone), mobile: m.alternate_phone ? formatPhone(m.alternate_phone) : undefined, email: m.email ?? '', no: '', street: '', city: m.city ?? '', postal: '', since: '', tags: [], source: '', lifetime: 0, quotes: 0, lastActivity: '', consentSms: false, type: '', companyId: company, partial: true }
+  const companyMatches = converting ? (leadMatches ?? []).map(matchAsClient) : contactMatches.filter((c) => !API_MODE || c.companyId === company)
+  useEffect(() => {
+    if (!converting || !lead) return
+    let live = true
+    leadClientMatches(lead.id).then(
+      (m) => {
+        if (!live) return
+        setLeadMatches(m)
+        // Exactly one existing client matches: start with it selected (as for the demo data).
+        setClientId((cur) => cur ?? (m.length === 1 && !passedClient ? m[0].id : cur))
+      },
+      () => live && setLeadMatches([]),
+    )
+    return () => {
+      live = false
+    }
+  }, [converting, lead?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const companyReps = company ? (API_MODE ? companyRepsOf(company) : REPS.filter((r) => r.company === company)) : []
   const workTypes = company ? [...new Set(WORK_TYPES[company])] : []
   // API mode: the company's templates from its catalogue, and the quote's source (required by the server).
@@ -203,7 +234,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
     if (i >= 1 && !client) return t('Choisissez un client existant ou créez une nouvelle fiche pour continuer.')
     if (i >= 2 && !workType) return t('Choisissez le type de travaux pour continuer.')
     if (i >= 4 && !repId && !(API_MODE && repLocked)) return companyReps.length ? t('Choisissez un représentant pour continuer.') : t('Aucun représentant pour cette compagnie.')
-    if (i >= 4 && API_MODE && !source) return t('Choisissez la source pour continuer.')
+    if (i >= 4 && API_MODE && !converting && !source) return t('Choisissez la source pour continuer.')
     return ''
   }
   const missing = missingAt(step)
@@ -218,12 +249,47 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
   }
   const pickClient = (c: Client) => {
     setClientId(c.id)
+    setPendingClient(null)
+    setDupMatches(null)
     setClientMode('search')
     go(2)
   }
 
+  const convertApi = async (pending = pendingClient) => {
+    if (!company || !lead || (!clientId && !pending)) return
+    setBusy(true)
+    setServerError(null)
+    try {
+      const q = await convertLead(lead.id, {
+        company,
+        clientId: pending ? undefined : clientId,
+        newClient: pending?.input,
+        force: pending?.force,
+        workType,
+        repId: repLocked ? undefined : repId,
+        templateId: templateId || undefined,
+      })
+      // The consent checkbox of the new-client form: recorded on the client the conversion created.
+      if (pending?.smsConsent) await recordConsent(q.clientId, { channel: 'sms', is_granted: true, source: 'verbal' }).catch((e) => toast(t("Le consentement aux textos n'a pas pu être enregistré : {error}", { error: errorMessage(e) })))
+      toast(t('Soumission {no} créée', { no: q.no }))
+      onClose()
+      navigate(`/soumissions/${q.id}`)
+    } catch (err) {
+      setBusy(false)
+      if (err instanceof DuplicateClientError && pending) {
+        // Back to the new-client form, with the server's matches: use one, or create anyway.
+        setDupMatches(err.matches)
+        setClientMode('new')
+        go(1)
+        return
+      }
+      setServerError(errorMessage(err))
+    }
+  }
+
   const createApi = async () => {
     if (!company || !client) return
+    if (converting) return convertApi()
     setBusy(true)
     setServerError(null)
     try {
@@ -263,7 +329,35 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           <Steps steps={steps} current={step} onPick={go} />
           <p className="text-sm font-semibold text-ink mt-4">{t('Nouveau client')}</p>
         </div>
-        <ClientForm prefill={{ ...contact, company }} company={company} existingLabel={t('Utiliser ce client')} onUseExisting={pickClient} onCreated={pickClient} onCancel={() => setClientMode('search')} cancelLabel={t('Retour')} />
+        <ClientForm
+          key={dupMatches ? 'dups' : 'form'}
+          prefill={pendingClient ? { ...contact, name: `${pendingClient.input.first} ${pendingClient.input.last}`.trim(), companyName: pendingClient.input.company, phone: pendingClient.input.phone, email: pendingClient.input.email, no: pendingClient.input.no, street: pendingClient.input.street, city: pendingClient.input.city, postal: pendingClient.input.postal, type: pendingClient.input.type, company } : { ...contact, company }}
+          company={company}
+          existingLabel={t('Utiliser ce client')}
+          onUseExisting={pickClient}
+          onCreated={pickClient}
+          serverMatches={dupMatches ?? undefined}
+          onDeferred={
+            converting
+              ? (input, o) => {
+                  const pending = { input, force: o.force, smsConsent: o.smsConsent }
+                  setPendingClient(pending)
+                  setClientId(undefined)
+                  setClientMode('search')
+                  // After a duplicate warning from the conversion itself: retry right away (everything else is chosen).
+                  if (dupMatches) {
+                    setDupMatches(null)
+                    void convertApi(pending)
+                  } else go(2)
+                }
+              : undefined
+          }
+          onCancel={() => {
+            setDupMatches(null)
+            setClientMode('search')
+          }}
+          cancelLabel={t('Retour')}
+        />
       </div>
     )
 
@@ -284,6 +378,8 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 key={c.id}
                 role="radio"
                 aria-checked={company === c.id}
+                // From a lead (API mode) the quote is in the lead's company.
+                disabled={converting && c.id !== lead?.company}
                 onClick={() => {
                   if (company !== c.id) {
                     setWorkChoice(null)
@@ -295,7 +391,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                   setCompany(c.id)
                   setNudge(false)
                 }}
-                className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors', company === c.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}
+                className={cn('w-full flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors disabled:opacity-40', company === c.id ? 'border-primary bg-primary-wash' : 'border-hairline hover:border-primary')}
               >
                 <span className={cn('w-2.5 h-2.5 rounded-full', c.dot)} />
                 <span className="flex-1 min-w-0">
@@ -312,14 +408,16 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
           <div className="space-y-4">
             {client && (
               <div className="space-y-1.5">
-                <p className="label-caps">{clientId === autoMatchId ? t('Client existant qui correspond au lead') : t('Client sélectionné')}</p>
-                <ClientCard c={client} selected onClick={() => go(2)} />
+                <p className="label-caps">
+                  {pendingClient ? t('Nouveau client · créé avec la soumission') : clientId === autoMatchId || (converting && leadMatches?.some((m) => m.id === clientId)) ? t('Client existant qui correspond au lead') : t('Client sélectionné')}
+                </p>
+                <ClientCard c={client} selected onClick={() => (pendingClient ? setClientMode('new') : go(2))} />
               </div>
             )}
-            {companyMatches.length > 0 && !client && (
+            {companyMatches.length > 0 && (!client || (converting && companyMatches.some((m) => m.id !== clientId))) && (
               <div className="space-y-2">
                 <p className="label-caps">{t('Clients existants qui correspondent au lead')}</p>
-                {companyMatches.slice(0, 4).map((c) => (
+                {companyMatches.filter((c) => c.id !== clientId).slice(0, 4).map((c) => (
                   <ClientCard key={c.id} c={c} onClick={() => pickClient(c)} />
                 ))}
               </div>
@@ -427,7 +525,7 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
                 </button>
               ))}
             </div>
-            {API_MODE && (
+            {API_MODE && !converting && (
               <Field label={t('Source')}>
                 <select className="form-input" value={source} onChange={(e) => setSourceChoice(e.target.value)}>
                   {sources.map((s) => (

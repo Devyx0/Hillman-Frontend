@@ -6,6 +6,7 @@ import { http, request } from './http'
 import type {
   ApiCatalogue, ApiClient, ApiClientDetail, ApiCompany, ApiConsents, ApiDocument, ApiGroupSummary, ApiLead, ApiLeadDetail,
   ApiLeadSource, ApiQuote, ApiQuoteListItem, ApiRepresentative, ApiSavedConsent, ApiWorkType, ApiAuditEntry, AuditAction, AuditTable,
+  ApiCompanyUser, ApiMyProfile, ApiNote, ConvertLeadBody, ConvertLeadResult, DuplicateMatch, InviteUserBody, NoteSubject, UpdateMeBody,
   ClientFields, ClientType, CreateConsentBody, CreateLeadBody, DownloadLink, ExpertiseStatus, IntakeLeadBody, LeadStage,
   ManualQuoteStatus, MeResponse, Page, QuoteStatus, RefusalReason, UpdateLeadBody, UpdateQuoteBody, Uuid,
 } from './types'
@@ -15,6 +16,8 @@ const enc = encodeURIComponent
 // ── Reference data ───────────────────────────────────────────────────────────
 export const getMe = () => http.get<MeResponse>('/me')
 export const listCompanies = () => http.get<ApiCompany[]>('/companies')
+/** My profile: name, phone, agenda colour (the password goes through Supabase Auth). */
+export const updateMe = (body: UpdateMeBody) => http.patch<ApiMyProfile>('/me', body)
 export const listWorkTypes = (companyId: Uuid) => http.get<ApiWorkType[]>(`/companies/${enc(companyId)}/work-types`)
 export const listRepresentatives = (companyId: Uuid) => http.get<ApiRepresentative[]>(`/companies/${enc(companyId)}/representatives`)
 export const listLeadSources = () => http.get<ApiLeadSource[]>('/lead-sources')
@@ -36,6 +39,10 @@ export const listLeads = (
 export const getLead = (id: Uuid) => http.get<ApiLeadDetail>(`/leads/${enc(id)}`)
 export const updateLead = (id: Uuid, body: UpdateLeadBody) => http.patch<ApiLead>(`/leads/${enc(id)}`, body)
 export const deleteLead = (id: Uuid) => http.del(`/leads/${enc(id)}`)
+/** « Clients existants qui correspondent au lead »: same phone or e-mail, in the lead's company. */
+export const leadClientMatches = (id: Uuid) => http.get<DuplicateMatch[]>(`/leads/${enc(id)}/client-matches`)
+/** « Créer la soumission » from a lead: client (existing or new), quote, template and lead → converted, in one transaction. */
+export const convertLead = (id: Uuid, body: ConvertLeadBody) => http.post<ConvertLeadResult>(`/leads/${enc(id)}/convert`, body)
 
 /**
  * Automatic intake (websites, ad platforms, phone agent). No user token: the `X-Intake-Key` decides company and
@@ -123,6 +130,25 @@ export const quoteHistory = (id: Uuid, includeValues = false) =>
 
 // ── Group view (admin) ───────────────────────────────────────────────────────
 export const groupSummary = (q: { from?: string; to?: string } = {}) => http.get<ApiGroupSummary>('/group/summary', q)
+
+// ── Notes (clients, leads, quotes) ───────────────────────────────────────────
+const NOTE_PATH: Record<NoteSubject, string> = { client: 'clients', lead: 'leads', quote: 'quotes' }
+/** Newest first, with the author's name. */
+export const listNotes = (subject: NoteSubject, id: Uuid) => http.get<ApiNote[]>(`/${NOTE_PATH[subject]}/${enc(id)}/notes`)
+export const createNote = (subject: NoteSubject, id: Uuid, body: string) => http.post<ApiNote>(`/${NOTE_PATH[subject]}/${enc(id)}/notes`, { body })
+/** Author, or admin of the subject's company. */
+export const updateNote = (noteId: Uuid, body: string) => http.patch<ApiNote>(`/notes/${enc(noteId)}`, { body })
+/** Soft delete; author, or admin of the subject's company. */
+export const deleteNote = (noteId: Uuid) => http.del(`/notes/${enc(noteId)}`)
+
+// ── Users of a company (admin) ───────────────────────────────────────────────
+export const listCompanyUsers = (companyId: Uuid) => http.get<ApiCompanyUser[]>(`/companies/${enc(companyId)}/users`)
+/** Known e-mail: membership added without e-mail (invited=false). New e-mail: Supabase invitation (invited=true). */
+export const inviteUser = (companyId: Uuid, body: InviteUserBody) =>
+  http.post<ApiCompanyUser & { invited: boolean }>(`/companies/${enc(companyId)}/users/invite`, body)
+/** Role or active state. The company keeps an active admin; an admin cannot demote or deactivate themselves (422). */
+export const updateMembership = (companyId: Uuid, userId: Uuid, body: { role?: ApiCompanyUser['role']; is_active?: boolean }) =>
+  http.patch<ApiCompanyUser>(`/companies/${enc(companyId)}/users/${enc(userId)}`, body)
 
 /** Every page of a cursor-paginated list (200 rows per request). */
 export async function fetchAll<T>(load: (cursor?: string) => Promise<Page<T>>, max = 5000): Promise<T[]> {

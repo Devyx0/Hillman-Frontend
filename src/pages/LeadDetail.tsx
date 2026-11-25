@@ -17,6 +17,7 @@ import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { API_MODE } from '../api/config'
+import { ApiNotes } from '../components/ApiNotes'
 import * as api from '../api/endpoints'
 import { errorMessage } from '../api/http'
 import { isValidPhone } from '../api/mappers'
@@ -342,7 +343,8 @@ export default function LeadDetail() {
             />
             {tab === 'conversation' && <ThreadPanel thread={thread} phone={lead.phone} lang={lang} />}
             {tab === 'activite' && <Timeline items={activity} />}
-            {tab === 'notes' && <Notes canDelete={access.canDelete} initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
+            {tab === 'notes' && API_MODE && <ApiNotes subject="lead" id={lead.id} company={lead.company} />}
+            {tab === 'notes' && !API_MODE && <Notes canDelete={access.canDelete} initial={lead.id === 'l3' ? [{ at: t('Hier'), by: 'Hélène Petitpas', text: t('Le CA se réunit jeudi. Demander les plans des toits.') }] : []} />}
           </>
         }
         right={

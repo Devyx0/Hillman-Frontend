@@ -13,7 +13,7 @@ import { API_MODE } from '../../api/config'
 import { errorMessage } from '../../api/http'
 import { formatPhone, isValidPhone } from '../../api/mappers'
 import type { DuplicateMatch } from '../../api/types'
-import { DuplicateClientError, createClient } from '../../data/actions'
+import { DuplicateClientError, createClient, type ClientInput } from '../../data/actions'
 import { CLIENTS } from '../../data/mock'
 import { langName, t, type Lang } from '../../i18n'
 import { toast } from '../../lib/toast'
@@ -35,11 +35,16 @@ interface Props {
   existingLabel: string | ((c: Client) => string)
   onUseExisting: (c: Client) => void
   onCreated: (c: Client) => void
+  /**
+   * API mode, lead conversion: the client is not created here but sent with the conversion (one transaction).
+   * Receives the validated fields; `force` when a likely duplicate was shown and the user creates anyway.
+   */
+  onDeferred?: (input: ClientInput, opts: { force: boolean; smsConsent: boolean }) => void
   onCancel: () => void
   cancelLabel?: string
 }
 
-export default function ClientForm({ prefill = {}, company: fixedCompany, existingLabel, onUseExisting, onCreated, onCancel, cancelLabel }: Props) {
+export default function ClientForm({ prefill = {}, company: fixedCompany, existingLabel, onUseExisting, onCreated, onDeferred, onCancel, cancelLabel, serverMatches }: Props & { serverMatches?: DuplicateMatch[] }) {
   useStore()
   const { companies, user } = useAuth()
   const sources = activeSources()
@@ -66,7 +71,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   /** API mode: likely duplicates reported by the server (same phone or e-mail in that company). */
-  const [serverDups, setServerDups] = useState<DuplicateMatch[] | null>(null)
+  const [serverDups, setServerDups] = useState<DuplicateMatch[] | null>(serverMatches?.length ? serverMatches : null)
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => {
     setServerDups(null)
     setF((prev) => ({ ...prev, [k]: v }))
@@ -98,23 +103,28 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
 
   /** API mode: create through the server (it checks duplicates in that company unless forced). */
   const submitApi = async () => {
+    const input: ClientInput = {
+      first: f.first.trim(),
+      last: f.last.trim(),
+      company: f.type !== 'Résidentiel' ? f.company.trim() : '',
+      phone: f.phone.trim() || f.mobile.trim(),
+      mobile: f.phone.trim() ? f.mobile.trim() : '',
+      email: f.email.trim(),
+      no: f.no.trim(),
+      street: f.street.trim(),
+      city: f.city.trim(),
+      postal: f.postal.trim(),
+      type: f.type,
+    }
+    if (onDeferred) {
+      onDeferred(input, { force: dups.length > 0, smsConsent: f.consentSms })
+      return
+    }
     setBusy(true)
     setServerError(null)
     try {
       const { client, consentError } = await createClient(
-        {
-          first: f.first.trim(),
-          last: f.last.trim(),
-          company: f.type !== 'Résidentiel' ? f.company.trim() : '',
-          phone: f.phone.trim() || f.mobile.trim(),
-          mobile: f.phone.trim() ? f.mobile.trim() : '',
-          email: f.email.trim(),
-          no: f.no.trim(),
-          street: f.street.trim(),
-          city: f.city.trim(),
-          postal: f.postal.trim(),
-          type: f.type,
-        },
+        input,
         company,
         // A duplicate already shown (locally or by the server) and confirmed with « Créer quand même ».
         { force: dups.length > 0, smsConsent: f.consentSms },
