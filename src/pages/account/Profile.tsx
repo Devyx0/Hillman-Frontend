@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Bell, CalendarDays, KeyRound, Languages, LoaderCircle, LogOut, UserRound } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
 import { ACCOUNTS, ROLE_LABELS, saveAccount } from '../../auth/permissions'
+import { API_MODE } from '../../api/config'
+import { updatePassword, verifyPassword } from '../../api/auth'
 import { checkPassword, passwordIsStrong, profileExtras, saveProfileExtras, setPassword as storePassword, setViewAsOrigin, type NotificationEvent } from '../../auth/session'
 import { Notice } from '../../components/states'
 import { CalendarConnectTab } from '../catalogue/CalendarConnectTab'
@@ -98,6 +100,7 @@ function InfoCard({ refresh, avatarColor }: { refresh: () => void; avatarColor?:
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
+    if (API_MODE) return
     if (!name.trim()) return setError(t('Entrez votre nom.'))
     if (!EMAIL_RE.test(email.trim())) return setError(t("Ce courriel n'est pas valide."))
     if (ACCOUNTS.some((a) => a.id !== account.id && a.email.toLowerCase() === email.trim().toLowerCase())) return setError(t('Ce courriel est déjà utilisé par un autre compte.'))
@@ -121,7 +124,9 @@ function InfoCard({ refresh, avatarColor }: { refresh: () => void; avatarColor?:
             <p className="text-xs text-ink-mute truncate">{account.email}</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* The API has no endpoint to edit one's own profile yet: shown read-only. */}
+        {API_MODE && <Notice tone="info">{t('Votre nom, courriel et téléphone sont gérés par un administrateur.')}</Notice>}
+        <fieldset disabled={API_MODE} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label={t('Nom complet')}>
             <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
           </Field>
@@ -131,9 +136,9 @@ function InfoCard({ refresh, avatarColor }: { refresh: () => void; avatarColor?:
           <Field label={t('Téléphone')}>
             <input className="form-input tnum" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" />
           </Field>
-        </div>
+        </fieldset>
         {error && <Notice tone="critical">{error}</Notice>}
-        <div className="flex justify-end">
+        <div className={cn('flex justify-end', API_MODE && 'hidden')}>
           <button type="submit" className="btn btn-sm btn-primary" disabled={!dirty || busy}>
             {busy && <LoaderCircle className="w-4 h-4 animate-spin" />}
             {t('Enregistrer')}
@@ -185,6 +190,28 @@ function PasswordCard() {
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
+    if (API_MODE) {
+      if (!passwordIsStrong(next)) return setError(t('Le mot de passe ne respecte pas les règles.'))
+      if (next !== confirm) return setError(t('Les mots de passe ne correspondent pas.'))
+      setError(null)
+      setBusy(true)
+      try {
+        if (!(await verifyPassword(current))) {
+          setBusy(false)
+          return setError(t('Le mot de passe actuel est incorrect.'))
+        }
+        await updatePassword(next)
+      } catch (err) {
+        setBusy(false)
+        return setError(t((err as Error).message))
+      }
+      setBusy(false)
+      setCurrent('')
+      setNext('')
+      setConfirm('')
+      toast(t('Mot de passe modifié'))
+      return
+    }
     if (!checkPassword(account.id, current)) return setError(t('Le mot de passe actuel est incorrect.'))
     if (!passwordIsStrong(next)) return setError(t('Le mot de passe ne respecte pas les règles.'))
     if (next !== confirm) return setError(t('Les mots de passe ne correspondent pas.'))

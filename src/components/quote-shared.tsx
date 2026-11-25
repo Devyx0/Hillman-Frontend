@@ -7,6 +7,8 @@
 import { useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Image, Star } from 'lucide-react'
 import { STATUS_DEFS } from '../data/settings'
+import { API_MODE } from '../api/config'
+import { PICKABLE_STATUSES } from '../api/mappers'
 import type { QuoteStatusRecord, StatusChange } from '../data/store'
 import { t } from '../i18n'
 import { cn } from '../lib/utils'
@@ -54,7 +56,7 @@ export function StatusPicker({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div role="menu" className={cn('absolute top-full mt-1 z-50 w-60 bg-white rounded-lg border border-hairline shadow-xl py-1 menu-in', align === 'right' ? 'right-0' : 'left-0')}>
-            {STATUS_DEFS.map(({ name: s }) => (
+            {STATUS_DEFS.filter(({ name }) => !API_MODE || PICKABLE_STATUSES.includes(name)).map(({ name: s }) => (
               <button
                 key={s}
                 role="menuitem"

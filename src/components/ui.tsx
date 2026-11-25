@@ -189,13 +189,14 @@ export function Avatar({ name, size = 'sm', color, className }: { name: string; 
 
 /** Mockup: `Tt`. */
 export function RepAvatar({ id, size = 'sm', className }: { id: string; size?: AvatarSize; className?: string }) {
-  const rep = repById(id)!
+  // Unassigned (or a person not loaded): a neutral avatar instead of a crash.
+  const rep = repById(id) ?? { name: '—', color: 'sand' }
   return <Avatar name={rep.name} size={size} color={rep.color} className={className} />
 }
 
 /** Mockup: `Cd`. */
 export function RepName({ id, size = 'sm' }: { id: string; size?: AvatarSize }) {
-  const rep = repById(id)!
+  const rep = repById(id) ?? { name: t('Non assigné') }
   return (
     <span className="inline-flex items-center gap-2 min-w-0">
       <RepAvatar id={id} size={size} />

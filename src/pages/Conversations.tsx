@@ -7,6 +7,7 @@ import { Avatar, Badge, CHANNEL_ICONS, CompanyBadge, Empty, StatusBadge, type Ic
 import { inScope, useApp } from '../context/AppContext'
 import { useAuth } from '../auth/AuthContext'
 import { useAccess } from '../auth/access'
+import { API_MODE } from '../api/config'
 import { APPOINTMENTS, CLIENTS, LEADS, ME, QUOTES, THREADS, clientById, clientLang, companyById, fullName, repById, type CompanyId, type Thread } from '../data/mock'
 import { SENT_LOG, type SentRecord } from '../data/quote-builder'
 import { isOptedOut } from '../data/settings'
@@ -49,9 +50,12 @@ function threadPhone(thread: Thread) {
  * Demo threads for the texting edge cases: a client who replied STOP (number opted out) and a
  * follow-up text the provider could not deliver. Text stays French; it is translated when shown.
  */
+// Demo only: with the backend these would put fake messages (and a STOP opt-out) on real clients.
+const DEMO_THREADS: ChatThread[] = API_MODE ? [] : demoThreads()
+function demoThreads(): ChatThread[] {
 const STOP_CLIENT = CLIENTS[7]
 const FAILED_CLIENT = CLIENTS[11]
-const DEMO_THREADS: ChatThread[] = [
+return [
   {
     id: 'd-stop', clientId: STOP_CLIENT.id, name: fullName(STOP_CLIENT), company: 'toit', channel: 'sms', unread: 0, last: 'STOP', at: '7 h 05', assigned: 'jph',
     messages: [
@@ -68,6 +72,7 @@ const DEMO_THREADS: ChatThread[] = [
     ],
   },
 ]
+}
 // Replies received before the app was opened: apply STOP to the opt-out list (Settings).
 for (const th of [...THREADS, ...DEMO_THREADS]) applyStopReplies(th.messages, threadPhone(th))
 
@@ -379,7 +384,8 @@ export default function Conversations() {
     const q = quoteByNo(e.quoteNo)
     return q ? access.quote(q) : e.by === user?.name
   }
-  const allSent: SentEmail[] = [...SENT_LOG.map(fromSentLog), ...SENT_EMAILS].filter((e) => access.company(e.company) && ownSent(e))
+  // API mode: only what was sent in this session; the demo log names demo clients.
+  const allSent: SentEmail[] = [...SENT_LOG.map(fromSentLog), ...(API_MODE ? [] : SENT_EMAILS)].filter((e) => access.company(e.company) && ownSent(e))
   const sentRows = allSent
     .filter((e) => inScope(scope, e.company))
     .filter((e) => sentType === 'all' || e.type === sentType)

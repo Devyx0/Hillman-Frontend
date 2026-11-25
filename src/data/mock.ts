@@ -7,6 +7,7 @@
  */
 import { GUTTER_SEEDS, costForFeet, seedGutterQuote } from './gutter-quantities'
 import { JOB_QUOTES } from './job-quotes'
+import { API_MODE } from '../api/config'
 
 export type CompanyId = 'toit' | 'sg' | 'reno'
 
@@ -21,7 +22,13 @@ export interface Company {
   dot: string
 }
 
-export const TODAY = '2026-10-20'
+/** Today's date. The demo data is frozen on 2026-10-20; with the backend it is the real (local) date. */
+export const TODAY = API_MODE
+  ? (() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })()
+  : '2026-10-20'
 
 export const COMPANY_NAMES: Record<CompanyId, string> = {
   toit: 'Toitures Hillman',
@@ -141,6 +148,10 @@ export interface Client {
   language?: 'fr' | 'en'
   /** Rep id of the user who created the record in the app (their "own" client until a quote exists). */
   createdBy?: string
+  /** API mode: the company the client belongs to (a client record belongs to one company). */
+  companyId?: CompanyId
+  /** API mode: built from a quote row only; the full record is loaded when the client is opened. */
+  partial?: boolean
 }
 
 /** The client's communication language (French unless set). */
@@ -185,7 +196,8 @@ Object.assign(CLIENTS[0], {
 // A few English-speaking clients, so client-language drafts, portal and PDF can be demoed.
 for (const i of [3, 11, 20]) CLIENTS[i].language = 'en'
 
-export const fullName = (c: { first: string; last: string }) => `${c.first} ${c.last}`
+/** "First Last"; an organisation-only client (no person's name) shows the organisation. */
+export const fullName = (c: { first: string; last: string; company?: string }) => `${c.first} ${c.last}`.trim() || c.company || '—'
 export const clientById = (id?: string): Client | undefined => CLIENTS.find((c) => c.id === id)
 
 // ── Quotes (soumissions) ────────────────────────────────────────────────────
@@ -328,6 +340,12 @@ export interface Lead {
   repId?: string
   /** Rep id of the user who created the lead in the app. */
   createdBy?: string
+  /** API mode: lead source id. */
+  sourceId?: string
+  /** API mode: street address entered on the lead. */
+  address?: string
+  /** API mode: when the lead was received (ISO timestamp). */
+  receivedAt?: string
 }
 
 export const LEADS: Lead[] = [

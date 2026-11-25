@@ -16,9 +16,10 @@ import type { Permission } from './permissions'
 import { CLIENTS, LEADS, QUOTES, type Appointment, type Client, type CompanyId, type Lead, type Quote, type Thread } from '../data/mock'
 import { useStore } from '../data/store'
 import { DEFAULT_LEAD_REP } from '../data/leads'
+import { API_MODE } from '../api/config'
 
 /** Rep in charge of a lead (unassigned leads fall to the company's default rep, as shown on screen). */
-export const leadRepId = (l: Pick<Lead, 'repId' | 'company'>) => l.repId ?? DEFAULT_LEAD_REP[l.company]
+export const leadRepId = (l: Pick<Lead, 'repId' | 'company'>) => l.repId ?? (API_MODE ? undefined : DEFAULT_LEAD_REP[l.company])
 
 /** Clients a rep works with: one of their quotes or leads, or created by them. */
 export function ownClientIds(repId: string): Set<string> {

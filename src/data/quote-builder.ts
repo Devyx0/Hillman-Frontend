@@ -28,6 +28,7 @@
  *   s4 → shortDate, l4 → marginPct, i4 → isAutoAction, jn → TARGET_MARGIN,
  *   jx → BUILDER_SECTIONS, c4 → BUILDER_SECTIONS_SHORT
  */
+import { API_MODE } from '../api/config'
 import {
   BadgeDollarSign,
   Calculator,
@@ -494,7 +495,11 @@ export function internalNote(q: { id: string }) {
 export const shortDate = (iso: string) => new Date(iso + 'T12:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 
 /** Gross margin in percent (mockup: `l4`). */
-export const marginPct = (q: { amount: number; cost: number }) => (q.amount ? ((q.amount - q.cost) / q.amount) * 100 : 0)
+export const marginPct = (q: { amount: number; cost: number; marginPct?: number | null }) => {
+  // API mode: the margin comes from the server, only for admin / coordination of the quote's company (NaN = not shown).
+  if (API_MODE) return q.marginPct == null ? NaN : q.marginPct
+  return q.amount ? ((q.amount - q.cost) / q.amount) * 100 : 0
+}
 
 /** Whether a next action is automated (mockup: `i4`). */
 export const isAutoAction = (action?: string) => !!action && /auto/i.test(action)

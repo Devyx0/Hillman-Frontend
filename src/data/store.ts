@@ -135,6 +135,14 @@ export interface QuoteExtra {
   templateId?: string
   /** Gutter model (5 or 6 inches). */
   gutterSize?: 5 | 6
+  /** API mode: tax-included total computed by the server. */
+  total?: number
+  /** API mode: margin in % (admin and coordination only). */
+  marginPct?: number | null
+  /** API mode: short description of the work (« Travaux »). */
+  workSummary?: string
+  /** API mode: label of a version (e.g. "B"). */
+  variantLabel?: string
 }
 
 export type QuoteRecord = Quote & QuoteExtra

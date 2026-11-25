@@ -25,6 +25,17 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../Hillman-Backend",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }

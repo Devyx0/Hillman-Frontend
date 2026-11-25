@@ -38,7 +38,7 @@ import {
 import { toast } from '../../lib/toast'
 import { cn, formatHour, money } from '../../lib/utils'
 import { locale, t } from '../../i18n'
-import { AGENDA_REPS, TODAY_INDEX } from './calendar'
+import { agendaReps, TODAY_INDEX } from './calendar'
 
 /** "lun. 21 oct." */
 export const shortDay = (day: number) => dayDate(day).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })
@@ -275,7 +275,7 @@ function AbsenceForm({ editing, onClose }: { editing?: Absence; onClose: () => v
   const { user, can } = useAuth()
   const { scope } = useApp()
   const manager = can('jobs.schedule') || can('calendar.allReps')
-  const repOptions = AGENDA_REPS.filter((r) => (manager ? r.company === 'all' || inScope(scope, r.company) || r.id === editing?.repId : r.id === user?.repId))
+  const repOptions = agendaReps().filter((r) => (manager ? r.company === 'all' || inScope(scope, r.company) || r.id === editing?.repId : r.id === user?.repId))
   const [repId, setRepId] = useState(editing?.repId ?? (repOptions.find((r) => r.id === user?.repId) ?? repOptions[0])?.id ?? '')
   const [reason, setReason] = useState(editing?.reason ?? 'Congé')
   const [start, setStart] = useState(dayIso(editing?.day ?? TODAY_INDEX + 1))

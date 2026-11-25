@@ -1,14 +1,30 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { NoAccess } from '../components/states'
+import { ErrorState, Loading, NoAccess } from '../components/states'
+import { t } from '../i18n'
 import { Page } from '../components/ui'
 import { useAuth } from './AuthContext'
 import type { Permission } from './permissions'
 
 /** Sends signed-out visitors to /connexion, remembering where they were going. */
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, status, error, retry, logout } = useAuth()
   const location = useLocation()
+  // API mode: the session is being checked and the user's data loaded.
+  if (status === 'loading') return <Loading className="min-h-screen" />
+  if (status === 'error')
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="card max-w-md w-full">
+          <ErrorState onRetry={retry}>{error ?? undefined}</ErrorState>
+          <div className="px-5 pb-5 text-center">
+            <button className="text-xs font-semibold text-ink-mute hover:text-ink" onClick={logout}>
+              {t('Se déconnecter')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   if (!user) return <Navigate to="/connexion" replace state={{ from: location.pathname + location.search }} />
   return <>{children}</>
 }

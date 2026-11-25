@@ -10,7 +10,7 @@ import { quoteById, quoteByNo, request, useStore } from '../data/store'
 import { ABSENCES, dayDate, jobById, type Absence, type AppointmentRecord, type JobRecord } from '../data/calendar'
 import { cn } from '../lib/utils'
 import { locale, t } from '../i18n'
-import { AGENDA_REPS, DayView, MonthView, TODAY_INDEX, WeekView, calendarEvents, capitalize, type CalEvent } from './agenda/calendar'
+import { agendaReps, DayView, MonthView, TODAY_INDEX, WeekView, calendarEvents, capitalize, type CalEvent } from './agenda/calendar'
 import { AppointmentDrawer, AppointmentForm, prefillFromQuote, type AppointmentPrefill } from './agenda/drawers'
 import { AbsenceDrawer, AbsencesPanel, JobDrawer, ScheduleDrawer, UnscheduledPanel, WorkOrderDrawer, type ScheduleTarget } from './agenda/jobs'
 
@@ -42,7 +42,7 @@ export default function Agenda() {
   const [absence, setAbsence] = useState<Absence | 'new' | null>(null)
 
   const allReps = can('calendar.allReps')
-  const reps = allReps ? AGENDA_REPS.filter((r) => r.company === 'all' || inScope(scope, r.company)) : AGENDA_REPS.filter((r) => r.id === user?.repId)
+  const reps = allReps ? agendaReps().filter((r) => r.company === 'all' || inScope(scope, r.company)) : agendaReps().filter((r) => r.id === user?.repId)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const visibleRepIds = reps.filter((r) => !hidden.has(r.id)).map((r) => r.id)
   const evts = calendarEvents(visibleRepIds)

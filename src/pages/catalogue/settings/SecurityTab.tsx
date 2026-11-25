@@ -8,6 +8,8 @@ import { normalize } from '../../../lib/utils'
 import { locale, t } from '../../../i18n'
 import { en } from '../../../i18n/en'
 import { CHANGE_LOG, type ChangeArea, type ChangeEntry } from './data'
+import { API_MODE } from '../../../api/config'
+import { ApiAuditLog } from './ApiAuditLog'
 
 const AREA_LABEL: Record<ChangeArea, string> = { soumissions: 'Soumissions', agenda: 'Agenda', parametres: 'Paramètres', utilisateurs: 'Utilisateurs', catalogue: 'Catalogue' }
 
@@ -24,6 +26,12 @@ function when(at: string) {
 }
 
 export function SecurityTab() {
+  // With the backend the journal is the server's audit log (admin only).
+  if (API_MODE) return <ApiAuditLog />
+  return <MockSecurityTab />
+}
+
+function MockSecurityTab() {
   useStore()
   const [who, setWho] = useState('all')
   const [area, setArea] = useState<'all' | ChangeArea>('all')
