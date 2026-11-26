@@ -12,6 +12,7 @@ import { toast } from '../../lib/toast'
 import { cn, money } from '../../lib/utils'
 import { ActualProfit } from './CoutantsSection'
 import type { Builder } from './useQuoteBuilder'
+import { Dropdown } from '../../components/dropdown'
 
 const DAY = 864e5
 const addDays = (iso: string, n: number) => new Date(new Date(iso + 'T12:00').getTime() + n * DAY).toISOString().slice(0, 10)
@@ -213,13 +214,13 @@ function Payments({ b }: { b: Builder }) {
               <input inputMode="decimal" className="form-input tnum" value={form.amount} placeholder={String(Math.round((nextStep?.amount ?? balance) * 100) / 100)} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             </Field>
             <Field label={t('Mode')} className="col-span-2 sm:col-span-1">
-              <select className="form-input" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+              <Dropdown className="form-input" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
                 {METHODS.map((m) => (
                   <option key={m} value={m}>
                     {t(m)}
                   </option>
                 ))}
-              </select>
+              </Dropdown>
             </Field>
             <button className="btn btn-sm btn-primary h-10 col-span-2 sm:col-span-1" onClick={submit}>
               {t('Enregistrer un paiement')}

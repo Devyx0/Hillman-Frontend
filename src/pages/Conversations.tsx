@@ -15,6 +15,7 @@ import { quoteById, quoteByNo, request, useStore } from '../data/store'
 import { toast } from '../lib/toast'
 import { cn, formatHour, money } from '../lib/utils'
 import { getLang, t } from '../i18n'
+import { Dropdown } from '../components/dropdown'
 
 type ThreadFilter = 'all' | 'unread' | 'ai' | 'mine' | 'sms' | 'email' | 'call'
 
@@ -450,25 +451,25 @@ export default function Conversations() {
           </div>
           {view === 'sent' ? (
             <div className="grid grid-cols-3 gap-1.5">
-              <select aria-label={t("Type d'envoi")} value={sentType} onChange={(e) => setSentType(e.target.value)} className="form-input h-8 text-xs px-2">
+              <Dropdown aria-label={t("Type d'envoi")} value={sentType} onChange={(e) => setSentType(e.target.value)} className="form-input h-8 text-xs px-2">
                 <option value="all">{t('Tous types')}</option>
                 <option value="Soumission">{t('Soumission')}</option>
                 <option value="Rappel">{t('Rappel')}</option>
-              </select>
-              <select aria-label={t('Envoyé par')} value={sentBy} onChange={(e) => setSentBy(e.target.value)} className="form-input h-8 text-xs px-2">
+              </Dropdown>
+              <Dropdown aria-label={t('Envoyé par')} value={sentBy} onChange={(e) => setSentBy(e.target.value)} className="form-input h-8 text-xs px-2">
                 <option value="all">{t('Tous envoyeurs')}</option>
                 {senders.map((s) => (
                   <option key={s} value={s}>
                     {s === 'Automatique' ? t(s) : s}
                   </option>
                 ))}
-              </select>
-              <select aria-label={t("Date d'envoi")} value={sentDay} onChange={(e) => setSentDay(e.target.value)} className="form-input h-8 text-xs px-2">
+              </Dropdown>
+              <Dropdown aria-label={t("Date d'envoi")} value={sentDay} onChange={(e) => setSentDay(e.target.value)} className="form-input h-8 text-xs px-2">
                 <option value="all">{t('Toutes dates')}</option>
                 <option value="today">{t("Aujourd'hui")}</option>
                 <option value="yesterday">{t('Hier')}</option>
                 <option value="week">{t('Cette semaine')}</option>
-              </select>
+              </Dropdown>
             </div>
           ) : (
             <div className="flex gap-1 overflow-x-auto nav-scroll -mx-1 px-1 pb-1">

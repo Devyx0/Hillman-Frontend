@@ -3,20 +3,22 @@
  * download) and the change history (admin).
  */
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Download, FileText, History, ImageOff, LoaderCircle, Pencil, Star, Trash2 } from 'lucide-react'
+import { ArrowRight, ArrowRightLeft, Camera, CircleDollarSign, Download, FileText, History, ImageOff, LoaderCircle, Merge, PenLine, Pencil, Plus, Send, Star, Trash2 } from 'lucide-react'
 import * as api from '../../../api/endpoints'
 import { errorMessage } from '../../../api/http'
-import { STATUS_FR, REFUSAL_FR } from '../../../api/mappers'
+import { STATUS_FR, REFUSAL_FR, localDate } from '../../../api/mappers'
 import type { ApiAuditEntry, ApiDocument, ApiQuote, QuotePhoto as ApiPhoto } from '../../../api/types'
 import { AnnotatedPhoto } from '../../../components/AnnotatedPhoto'
 import { openDocument } from '../../../components/client-api'
 import { BuilderSection } from '../../../components/quote-shared'
 import { confirmAction, ErrorState, SkeletonRows } from '../../../components/states'
-import { Empty } from '../../../components/ui'
+import { Avatar, Empty } from '../../../components/ui'
+import { sourceById } from '../../../data/api-sync'
+import { TODAY, repById } from '../../../data/mock'
 import type { QuotePhoto, Shape } from '../../../data/quote-builder'
 import { locale, t } from '../../../i18n'
 import { toast } from '../../../lib/toast'
-import { cn } from '../../../lib/utils'
+import { cn, money } from '../../../lib/utils'
 import { AnnotationEditor } from '../AnnotationEditor'
 import type { ApiQuoteState } from './useApiQuote'
 
@@ -209,7 +211,7 @@ export function ApiDocumentsSection({ s }: { s: S }) {
   }
 
   return (
-    <BuilderSection id="envoi" title={t('PDF')}>
+    <BuilderSection id="pdf" title={t('PDF')}>
       <div className="flex flex-col md:flex-row md:items-end gap-4">
         <div className="flex-1 space-y-2">
           <label className="flex items-center gap-2 text-sm">
@@ -262,18 +264,22 @@ export function ApiDocumentsSection({ s }: { s: S }) {
 }
 
 // ── Status details and history ───────────────────────────────────────────────
-const ACTION_LABEL: Record<string, string> = {
-  create: 'Création',
-  update: 'Modification',
-  delete: 'Suppression',
-  status_change: 'Changement de statut',
-  price_change: 'Changement de prix',
-  send: 'Envoi',
-  sign: 'Signature',
-  merge: 'Fusion',
-  export: 'Exportation',
+type ActionStyle = { label: string; icon: typeof History; tone: string }
+const ACTIONS: Record<string, ActionStyle> = {
+  create: { label: 'Création', icon: Plus, tone: 'bg-tone-good-soft text-tone-good-ink' },
+  update: { label: 'Modification', icon: Pencil, tone: 'bg-sand text-ink-secondary' },
+  delete: { label: 'Suppression', icon: Trash2, tone: 'bg-tone-critical-soft text-tone-critical-ink' },
+  status_change: { label: 'Changement de statut', icon: ArrowRightLeft, tone: 'bg-tone-warn-soft text-tone-warn-ink' },
+  price_change: { label: 'Changement de prix', icon: CircleDollarSign, tone: 'bg-primary-wash text-primary-press' },
+  send: { label: 'Envoi', icon: Send, tone: 'bg-tone-neutral-soft text-tone-neutral-ink' },
+  sign: { label: 'Signature', icon: PenLine, tone: 'bg-tone-good-soft text-tone-good-ink' },
+  merge: { label: 'Fusion', icon: Merge, tone: 'bg-sand text-ink-secondary' },
+  export: { label: 'Exportation', icon: Download, tone: 'bg-sand text-ink-secondary' },
 }
+const actionOf = (a: string): ActionStyle => ACTIONS[a] ?? { label: a, icon: History, tone: 'bg-sand text-ink-secondary' }
+
 const TABLE_LABEL: Record<string, string> = { quotes: 'Soumission', quote_addons: 'Ajout', quote_cost_lines: 'Ligne de coûtant', clients: 'Client' }
+
 const FIELD_LABEL: Record<string, string> = {
   status: 'Statut',
   base_price: 'Prix de base',
@@ -282,28 +288,76 @@ const FIELD_LABEL: Record<string, string> = {
   gst_amount: 'TPS',
   qst_amount: 'TVQ',
   total_amount: 'Total',
+  estimated_cost_amount: 'Coût estimé',
+  final_amount: 'Montant final',
   assigned_user_id: 'Représentant',
-  quote_date: 'Date',
+  source_id: 'Source',
+  quote_date: 'Date de la soumission',
   work_summary: 'Résumé des travaux',
   payment_terms: 'Modalités de paiement',
   notes_html: 'Notes',
+  warranty_note: 'Note sur les garanties',
   price_comments: 'Commentaires sur le prix',
+  site_civic_number: 'No civique',
+  site_street: 'Rue',
+  site_city: 'Ville',
+  site_postal_code: 'Code postal',
+  site_note: 'Note sur le chantier',
   quantity: 'Quantité',
+  unit_price: 'Prix unitaire',
   amount: 'Montant',
   description: 'Description',
   is_included: 'Inclus dans le prix',
   refusal_reason: 'Raison du refus',
+  refusal_comment: 'Commentaire du refus',
   accepted_at: 'Acceptée le',
+  accepted_via: 'Acceptée par',
+  refused_at: 'Refusée le',
+  first_name: 'Prénom',
+  last_name: 'Nom',
+  organization_name: "Nom de l'entreprise",
+  phone: 'Téléphone',
+  alternate_phone: 'Cellulaire',
+  email: 'Courriel',
+  city: 'Ville',
 }
+/** Price fields in reading order (the server lists changed columns in no particular order). */
+const FIELD_ORDER = ['status', 'base_price', 'discount_amount', 'subtotal_amount', 'gst_amount', 'qst_amount', 'total_amount', 'estimated_cost_amount']
+const rank = (f: string) => {
+  const i = FIELD_ORDER.indexOf(f)
+  return i < 0 ? FIELD_ORDER.length : i
+}
+const MONEY_FIELDS = new Set(['base_price', 'discount_amount', 'subtotal_amount', 'gst_amount', 'qst_amount', 'total_amount', 'estimated_cost_amount', 'final_amount', 'amount', 'unit_price', 'unit_cost'])
+const DATE_FIELDS = new Set(['quote_date', 'accepted_at', 'refused_at', 'first_sent_at', 'last_viewed_at'])
+/** Unknown columns: "site_note" → "Site note". */
+const fieldLabel = (f: string) => (FIELD_LABEL[f] ? t(FIELD_LABEL[f]) : f.charAt(0).toUpperCase() + f.slice(1).replace(/_/g, ' '))
 
 const showValue = (field: string, v: unknown): string => {
   if (v === null || v === undefined || v === '') return '—'
   if (field === 'status' && typeof v === 'string') return t(STATUS_FR[v as keyof typeof STATUS_FR] ?? v)
   if (field === 'refusal_reason' && typeof v === 'string') return t(REFUSAL_FR[v as keyof typeof REFUSAL_FR] ?? v)
+  if (field === 'accepted_via') return v === 'office' ? t('Au bureau') : v === 'client_portal' ? t('Portail client') : String(v)
+  if (field === 'assigned_user_id' && typeof v === 'string') return repById(v)?.name ?? '—'
+  if (field === 'source_id' && typeof v === 'string') return sourceById(v)?.name ?? '—'
   if (typeof v === 'boolean') return v ? t('Oui') : t('Non')
+  if (MONEY_FIELDS.has(field) && !Number.isNaN(Number(v))) return money(Number(v))
+  if (DATE_FIELDS.has(field) && typeof v === 'string') {
+    const d = new Date(v.length === 10 ? v + 'T12:00' : v)
+    if (!Number.isNaN(d.getTime())) return d.toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+  if (field === 'notes_html' && typeof v === 'string') return v.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || '—'
   const s = typeof v === 'string' ? v : JSON.stringify(v)
   return s.length > 80 ? s.slice(0, 77) + '…' : s
 }
+
+/** "Aujourd'hui", "Hier", or the date: the day headings of the log. */
+const dayLabel = (iso: string) => {
+  const d = localDate(iso)
+  if (d === TODAY) return t("Aujourd'hui")
+  if (d === localDate(new Date(Date.now() - 864e5))) return t('Hier')
+  return new Date(iso).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(locale(), { hour: 'numeric', minute: '2-digit' })
 
 export function ApiHistorySection({ s }: { s: S }) {
   const { quote } = s
@@ -323,7 +377,7 @@ export function ApiHistorySection({ s }: { s: S }) {
   }, [quote.id, quote.updated_at, attempt])
 
   return (
-    <BuilderSection id="suivi" title={t('Journal des modifications')}>
+    <BuilderSection id="journal" title={t('Journal des modifications')}>
       {state.status === 'loading' && <SkeletonRows rows={3} />}
       {state.status === 'error' && <ErrorState onRetry={() => setAttempt((n) => n + 1)}>{state.error}</ErrorState>}
       {state.status === 'ready' && state.items.length === 0 && <Empty icon={History} title={t('Aucune modification enregistrée')} />}
@@ -332,32 +386,67 @@ export function ApiHistorySection({ s }: { s: S }) {
   )
 }
 
-/** Rows of the audit log (quote history and the admin journal). */
+/** Rows of the audit log (quote history and the admin journal): a timeline grouped by day. */
 export function AuditList({ items, showRecord }: { items: ApiAuditEntry[]; showRecord?: boolean }) {
+  const days: { day: string; entries: ApiAuditEntry[] }[] = []
+  for (const e of items) {
+    const day = dayLabel(e.occurred_at)
+    const last = days.at(-1)
+    if (last && last.day === day) last.entries.push(e)
+    else days.push({ day, entries: [e] })
+  }
   return (
-    <ol className="divide-y divide-hairline">
-      {items.map((e) => (
-        <li key={e.id} className="py-2.5">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-            <span className="font-semibold text-ink">{t(ACTION_LABEL[e.action] ?? e.action)}</span>
-            <span className="text-ink-mute">· {t(TABLE_LABEL[e.table_name] ?? e.table_name)}</span>
-            {showRecord && e.company_name && <span className="text-ink-mute">· {e.company_name}</span>}
-            <span className="ml-auto text-xs text-ink-mute">
-              {when(e.occurred_at)} · {e.actor_name ?? t(e.actor_type === 'user' ? 'Utilisateur' : e.actor_type === 'system' ? 'Système' : 'Automatisation')}
-            </span>
-          </div>
-          {e.summary && <p className="text-xs text-ink-secondary mt-0.5">{e.summary}</p>}
-          {e.changes && e.changes.length > 0 && (
-            <ul className="mt-1 space-y-0.5">
-              {e.changes.map((c) => (
-                <li key={c.field} className="text-xs text-ink-secondary">
-                  <span className="font-semibold">{t(FIELD_LABEL[c.field] ?? c.field)}</span> : <span className="line-through text-ink-mute">{showValue(c.field, c.old)}</span> → {showValue(c.field, c.new)}
+    <div className="space-y-6">
+      {days.map(({ day, entries }) => (
+        <section key={day}>
+          <p className="label-caps mb-3 first-letter:uppercase">{day}</p>
+          <ol className="relative">
+            {entries.map((e, i) => {
+              const a = actionOf(e.action)
+              const actor = e.actor_name ?? t(e.actor_type === 'user' ? 'Utilisateur' : e.actor_type === 'system' ? 'Système' : 'Automatisation')
+              const changes = [...(e.changes ?? [])].sort((x, y) => rank(x.field) - rank(y.field))
+              return (
+                <li key={e.id} className="relative flex gap-3 pb-5 last:pb-0">
+                  {/* Timeline rail */}
+                  {i < entries.length - 1 && <span className="absolute left-4 top-9 bottom-0 w-px bg-hairline" aria-hidden="true" />}
+                  <span className={cn('relative z-[1] w-8 h-8 rounded-full flex items-center justify-center shrink-0', a.tone)}>
+                    <a.icon className="w-4 h-4" />
+                  </span>
+                  <div className="min-w-0 flex-1 pt-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-sm font-semibold text-ink">{t(a.label)}</span>
+                      <span className="badge bg-sand text-ink-mute !text-2xs">{t(TABLE_LABEL[e.table_name] ?? e.table_name)}</span>
+                      {showRecord && e.company_name && <span className="text-xs text-ink-mute">{e.company_name}</span>}
+                      <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-ink-mute whitespace-nowrap">
+                        <Avatar name={actor} size="xs" />
+                        <span className="truncate max-w-[10rem]">{actor}</span>
+                        <span aria-hidden="true">·</span>
+                        <time dateTime={e.occurred_at}>{timeOf(e.occurred_at)}</time>
+                      </span>
+                    </div>
+                    {/* The server's summary repeats the changes; shown only when there are none (creation, deletion…). */}
+                    {e.summary && changes.length === 0 && <p className="text-sm text-ink-secondary mt-1">{t(e.summary)}</p>}
+                    {changes.length > 0 && (
+                      <dl className="mt-2 rounded-lg border border-hairline divide-y divide-hairline text-xs overflow-hidden">
+                        {changes.map((c) => (
+                          <div key={c.field} className="grid grid-cols-1 sm:grid-cols-[11rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 px-3 py-2">
+                            <dt className="font-semibold text-ink-secondary">{fieldLabel(c.field)}</dt>
+                            <dd className="flex flex-wrap items-center gap-1.5 min-w-0">
+                              <span className="text-ink-mute tnum break-words">{showValue(c.field, c.old)}</span>
+                              <ArrowRight className="w-3 h-3 text-ink-faint shrink-0" aria-label={t('devient')} />
+                              <span className="font-semibold text-ink tnum break-words">{showValue(c.field, c.new)}</span>
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </div>
                 </li>
-              ))}
-            </ul>
-          )}
-        </li>
+              )
+            })}
+          </ol>
+        </section>
       ))}
-    </ol>
+    </div>
   )
 }

@@ -25,6 +25,7 @@ import { roleIn } from '../data/api-sync'
 import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { cn, money, moneyShort, num, pct } from '../lib/utils'
+import { Dropdown } from '../components/dropdown'
 
 type Q = QuoteStatusRecord
 type View = 'all' | 'mine' | 'callback' | 'opened' | 'signed'
@@ -581,13 +582,13 @@ export default function Quotes() {
               <span className="tnum">{t('{from}–{to} sur {total}', { from: num(from + 1), to: num(from + page.length), total: num(results.length) })}</span>
               <label className="flex items-center gap-1.5">
                 <span>{t('Par page')}</span>
-                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-8 rounded-md border border-hairline-input bg-white px-1.5 text-xs text-ink tnum">
+                <Dropdown value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="h-8 rounded-md border border-hairline-input bg-white px-1.5 text-xs text-ink tnum">
                   {PAGE_SIZES.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
                   ))}
-                </select>
+                </Dropdown>
               </label>
             </div>
             <nav className="flex items-center gap-1" aria-label={t('Pagination')}>

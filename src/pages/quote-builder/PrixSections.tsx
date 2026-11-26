@@ -9,6 +9,7 @@ import { CAA_LABEL, tierVideo, type QuoteAddon } from '../../data/quote-builder'
 import { tierCatalogueVideo } from '../../pages/catalogue/data'
 import { PhotoGrid } from './PhotosSection'
 import type { Builder } from './useQuoteBuilder'
+import { Dropdown } from '../../components/dropdown'
 
 const DOLLAR = <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-mute">$</span>
 
@@ -31,15 +32,7 @@ export function PrixSection({ b }: { b: Builder }) {
               {DOLLAR}
             </div>
           </Field>
-          {sg && (
-            <div className="rounded-lg border border-hairline p-3 space-y-2">
-              <label className="flex items-center gap-2 text-sm text-ink">
-                <input type="checkbox" checked={b.caa} onChange={() => b.setCaa(!b.caa)} className="w-4 h-4 accent-[var(--color-primary)]" />
-                {t(CAA_LABEL)}
-              </label>
-              {b.caa && <input className="form-input h-8 text-sm" value={b.caaNo} onChange={(e) => b.setCaaNo(e.target.value)} placeholder={t('No de membre CAA')} aria-label={t('No de membre CAA')} />}
-            </div>
-          )}
+          {sg && <CaaOption b={b} />}
           <div className="rounded-lg bg-sand p-3 space-y-1 text-sm">
             {b.pricing.lines.length > 1 &&
               b.pricing.lines.map((l, i) => (
@@ -94,6 +87,28 @@ export function PrixSection({ b }: { b: Builder }) {
           <AddonsTable b={b} />
         </div>
       </div>
+      <PaymentSchedule b={b} />
+    </BuilderSection>
+  )
+}
+
+/** Signature Gouttières: CAA-Québec member discount. */
+export function CaaOption({ b }: { b: Builder }) {
+  return (
+    <div className="rounded-lg border border-hairline p-3 space-y-2">
+      <label className="flex items-center gap-2 text-sm text-ink">
+        <input type="checkbox" checked={b.caa} onChange={() => b.setCaa(!b.caa)} className="w-4 h-4 accent-[var(--color-primary)]" />
+        {t(CAA_LABEL)}
+      </label>
+      {b.caa && <input className="form-input h-8 text-sm" value={b.caaNo} onChange={(e) => b.setCaaNo(e.target.value)} placeholder={t('No de membre CAA')} aria-label={t('No de membre CAA')} />}
+    </div>
+  )
+}
+
+/** « Calendrier des paiements »: the steps and their amounts (`total`: the tax-included total to split; default the draft's). */
+export function PaymentSchedule({ b, total = b.total }: { b: Builder; total?: number }) {
+  return (
+    <>
       <p className="label-caps mt-6 mb-2">{t('Calendrier des paiements')}</p>
       <div className="flex flex-wrap gap-1.5 mb-3" role="radiogroup" aria-label={t('Calendrier des paiements')}>
         {b.scheduleOptions.map((s) => (
@@ -108,16 +123,16 @@ export function PrixSection({ b }: { b: Builder }) {
           <div key={i} className="rounded-lg border border-hairline p-3">
             <p className="text-xs text-ink-mute">{t(step.label)}</p>
             <p className="text-lg font-semibold tnum">{pct(step.pct)}</p>
-            <p className="text-xs tnum text-ink-secondary">{money((b.total * step.pct) / 100, false)}</p>
+            <p className="text-xs tnum text-ink-secondary">{money((total * step.pct) / 100, false)}</p>
           </div>
         ))}
       </div>
-    </BuilderSection>
+    </>
   )
 }
 
 /** Gouttières protection tiers (plan: crochet standard, crochet continu, 5000, 1800), offered as options. */
-function TierOptions({ b }: { b: Builder }) {
+export function TierOptions({ b }: { b: Builder }) {
   return (
     <div>
       <p className="label-caps mb-1.5">{t('Options de protection')}</p>
@@ -205,11 +220,11 @@ function AddonsTable({ b }: { b: Builder }) {
                       <input type="number" value={a.price} onChange={(e) => patch(i, (x) => ({ ...x, price: Number(e.target.value) }))} className="w-24 h-8 px-2 rounded-md border border-hairline-input text-right tnum text-sm focus:outline-none focus:border-primary" aria-label={t('Prix {desc}', { desc: t(a.desc) })} />
                     </td>
                     <td className="px-4 py-2">
-                      <select value={mode} onChange={(e) => patch(i, (x) => withMode(x, e.target.value as AddonMode))} className="form-input h-8 text-sm py-0" aria-label={t('Type : {desc}', { desc: t(a.desc) })}>
+                      <Dropdown value={mode} onChange={(e) => patch(i, (x) => withMode(x, e.target.value as AddonMode))} className="form-input h-8 text-sm py-0" aria-label={t('Type : {desc}', { desc: t(a.desc) })}>
                         <option value="inclus">{t('Inclus sans frais')}</option>
                         <option value="ajout">{t('Ajout payant')}</option>
                         <option value="option">{t('Option du client')}</option>
-                      </select>
+                      </Dropdown>
                     </td>
                     <td className="px-4 py-2 text-center">
                       {mode === 'option' ? (
@@ -271,6 +286,19 @@ export function AutresSection({ b }: { b: Builder }) {
   return (
     <BuilderSection id="autres" title={t('Autres')}>
       <div className="grid lg:grid-cols-2 gap-5 [&>*]:min-w-0">
+        <Attachments b={b} />
+        <div className="space-y-3">
+          <p className="label-caps">{t('Photos')}</p>
+          <PhotoGrid b={b} />
+        </div>
+      </div>
+    </BuilderSection>
+  )
+}
+
+/** Files attached to the quote (and whether each goes with the e-mail). */
+export function Attachments({ b }: { b: Builder }) {
+  return (
         <div className="space-y-3">
           <p className="label-caps">{t('Fichiers')}</p>
           <div className="rounded-lg border border-hairline divide-y divide-hairline">
@@ -296,11 +324,5 @@ export function AutresSection({ b }: { b: Builder }) {
             {t('Ajouter un fichier')}
           </button>
         </div>
-        <div className="space-y-3">
-          <p className="label-caps">{t('Photos')}</p>
-          <PhotoGrid b={b} />
-        </div>
-      </div>
-    </BuilderSection>
   )
 }

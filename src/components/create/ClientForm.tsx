@@ -21,6 +21,7 @@ import { cn } from '../../lib/utils'
 import { Field } from '../ui'
 import { splitName, type ClientPrefill } from './prefill'
 import { ClientCard, DrawerFooter, MissingNotice } from './shared'
+import { Dropdown } from '../dropdown'
 
 const TYPES = ['Résidentiel', 'Commercial', 'Entrepreneur']
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -124,7 +125,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
     setServerError(null)
     try {
       const { client, consentError } = await createClient(
-        input,
+        { ...input, language: f.language, source: f.source },
         company,
         // A duplicate already shown (locally or by the server) and confirmed with « Créer quand même ».
         { force: dups.length > 0, smsConsent: f.consentSms },
@@ -177,13 +178,13 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
       <div className="p-5 space-y-5 flex-1">
         {!fixedCompany && companies.length > 1 && (
           <Field label={t('Compagnie')}>
-            <select className="form-input" value={company} onChange={(e) => setCompany(e.target.value as CompanyId)}>
+            <Dropdown className="form-input" value={company} onChange={(e) => setCompany(e.target.value as CompanyId)}>
               {COMPANIES.filter((c) => companies.includes(c.id)).map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -195,13 +196,13 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
           </Field>
           {err(errors.name) && <div className="sm:col-span-2 -mt-1">{err(errors.name)}</div>}
           <Field label={t('Type de client')}>
-            <select className="form-input" value={f.type} onChange={(e) => set('type', e.target.value)}>
+            <Dropdown className="form-input" value={f.type} onChange={(e) => set('type', e.target.value)}>
               {TYPES.map((ty) => (
                 <option key={ty} value={ty}>
                   {t(ty)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
           {f.type !== 'Résidentiel' ? (
             <Field label={t("Nom de l'entreprise")}>
@@ -236,8 +237,7 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
             <input className="form-input uppercase" value={f.postal} onChange={(e) => set('postal', e.target.value)} placeholder="G1H 3K7" aria-invalid={tried && !!errors.postal} />
             {err(errors.postal)}
           </Field>
-          {/* The backend stores neither the language nor the source of a client (the source is chosen on each quote). */}
-          {!API_MODE && (
+          {/* No API stores a client's language or source yet: with the backend they stay on this device for the session. */}
           <fieldset className="sm:col-span-2 flex flex-col gap-1 min-w-0">
             <legend className="label-caps mb-1">{t('Langue de communication')}</legend>
             <div className="flex flex-wrap gap-2">
@@ -250,19 +250,16 @@ export default function ClientForm({ prefill = {}, company: fixedCompany, existi
             </div>
             <span className="text-2xs text-ink-mute">{t('Portail, soumissions, courriels et textos seront envoyés dans cette langue.')}</span>
           </fieldset>
-          )}
-          {!API_MODE && (
           <Field label={t('Source')} className="sm:col-span-2">
-            <select className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
+            <Dropdown className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
               {!sources.includes(f.source) && <option value={f.source}>{t(f.source)}</option>}
               {sources.map((s) => (
                 <option key={s} value={s}>
                   {t(s)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
-          )}
         </div>
 
         <label className={cn('flex items-start gap-3 rounded-lg border px-3.5 py-3 cursor-pointer', f.consentSms ? 'border-primary bg-primary-wash' : 'border-hairline')}>

@@ -10,6 +10,7 @@ import { REF, companyUuid } from '../../../data/api-sync'
 import { COMPANIES, type CompanyId } from '../../../data/mock'
 import { t } from '../../../i18n'
 import { AuditList } from '../../quote-builder/api/media'
+import { Dropdown } from '../../../components/dropdown'
 
 const TABLES: [AuditTable | 'all', string][] = [
   ['all', 'Toutes les données'],
@@ -80,29 +81,29 @@ export function ApiAuditLog() {
     <Card title={t('Journal des modifications')} icon={FileClock} pad={false}>
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-hairline">
         {adminCompanies.length > 1 && (
-          <select className="form-input h-8 text-xs w-auto" value={company} onChange={(e) => setCompany(e.target.value as CompanyId | 'all')} aria-label={t('Compagnie')}>
+          <Dropdown className="form-input h-8 text-xs w-auto" value={company} onChange={(e) => setCompany(e.target.value as CompanyId | 'all')} aria-label={t('Compagnie')}>
             <option value="all">{t('Toutes les compagnies')}</option>
             {adminCompanies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Dropdown>
         )}
-        <select className="form-input h-8 text-xs w-auto" value={table} onChange={(e) => setTable(e.target.value as AuditTable | 'all')} aria-label={t('Données')}>
+        <Dropdown className="form-input h-8 text-xs w-auto" value={table} onChange={(e) => setTable(e.target.value as AuditTable | 'all')} aria-label={t('Données')}>
           {TABLES.map(([v, l]) => (
             <option key={v} value={v}>
               {t(l)}
             </option>
           ))}
-        </select>
-        <select className="form-input h-8 text-xs w-auto" value={action} onChange={(e) => setAction(e.target.value as AuditAction | 'all')} aria-label={t('Action')}>
+        </Dropdown>
+        <Dropdown className="form-input h-8 text-xs w-auto" value={action} onChange={(e) => setAction(e.target.value as AuditAction | 'all')} aria-label={t('Action')}>
           {ACTIONS.map(([v, l]) => (
             <option key={v} value={v}>
               {t(l)}
             </option>
           ))}
-        </select>
+        </Dropdown>
         <label className="inline-flex items-center gap-1 text-xs text-ink-mute">
           {t('Du')}
           <input type="date" className="form-input h-8 text-xs w-auto" value={from} onChange={(e) => setFrom(e.target.value)} />

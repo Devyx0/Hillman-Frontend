@@ -79,6 +79,8 @@ export function ensureRep(id: Uuid | null | undefined, first?: string | null, la
 const fullNameOf = (first: string | null, last: string | null) => `${first ?? ''} ${last ?? ''}`.trim()
 
 export function mapClient(c: ApiClient): Client {
+  // Fields with no API yet (language, source, tags) stay as set on this device.
+  const prev = CLIENTS.find((x) => x.id === c.id)
   return {
     id: c.id,
     first: c.first_name ?? '',
@@ -92,14 +94,14 @@ export function mapClient(c: ApiClient): Client {
     city: c.city ?? '',
     postal: c.postal_code ?? '',
     since: (c.created_at ?? '').slice(0, 4),
-    tags: [],
-    source: '',
+    tags: prev?.tags ?? [],
+    source: prev?.source ?? '',
     lifetime: toNum(c.lifetime_value),
     quotes: c.quotes_count,
     lastActivity: localDate(c.last_activity_at) || TODAY,
     consentSms: c.sms_consent,
     type: CLIENT_TYPE_FR[c.client_type] ?? 'Résidentiel',
-    language: 'fr',
+    language: prev?.language ?? 'fr',
     companyId: companySlug(c.company_id),
   }
 }
@@ -194,6 +196,8 @@ export function agoLabel(iso: string): string {
 
 export function mapLead(l: ApiLead): Lead & { clientId?: string } {
   const company = companySlug(l.company_id) ?? 'toit'
+  // The booked slot label has no API yet (agenda): kept as set on this device.
+  const booked = LEADS.find((x) => x.id === l.id)?.booked
   ensureRep(l.assigned_user_id, l.rep_first_name, l.rep_last_name, company)
   const lead = {
     id: l.id,
@@ -215,6 +219,7 @@ export function mapLead(l: ApiLead): Lead & { clientId?: string } {
     createdBy: l.created_by_user_id ?? undefined,
     clientId: l.client_id ?? undefined,
     address: l.address ?? undefined,
+    booked,
   }
   // Relative time follows the clock and the UI language: computed on read.
   Object.defineProperty(lead, 'ago', { get: () => agoLabel(l.created_at), enumerable: true, configurable: true })

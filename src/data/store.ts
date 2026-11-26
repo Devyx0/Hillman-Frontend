@@ -23,6 +23,7 @@ import {
   type Quote,
 } from './mock'
 import { NUMBERING } from './settings'
+import { API_MODE } from '../api/config'
 
 // ── Subscription ────────────────────────────────────────────────────────────
 let version = 0
@@ -231,7 +232,8 @@ export function recordPayment(id: string, p: { date: string; amount: number; met
   if (!q) return
   q.payments = [...(q.payments ?? []), { id: 'p' + Date.now(), ...p }]
   const paid = q.payments.reduce((n, x) => n + x.amount, 0)
-  if (paid >= q.amount * 1.14975 - 1) setQuoteStatus(id, 'Payé')
+  // With the backend the status is the server's ("Payé" comes with invoicing): a payment noted here does not change it.
+  if (!API_MODE && paid >= q.amount * 1.14975 - 1) setQuoteStatus(id, 'Payé')
   else commit()
 }
 

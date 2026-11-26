@@ -4,6 +4,7 @@ import { inLang, langName, t, type Lang } from '../i18n'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { Drawer, Field, type Icon } from './ui'
+import { Dropdown } from './dropdown'
 
 export type MessageKind = 'sms' | 'email' | 'sequence' | 'reminder'
 
@@ -158,7 +159,7 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
             <>
               <div className="flex items-end gap-2 flex-wrap">
                 <Field label={t('Modèle')} className="flex-1 min-w-[12rem]">
-                  <select
+                  <Dropdown
                     value={templateId}
                     onChange={(e) => {
                       setTemplateId(e.target.value)
@@ -175,7 +176,7 @@ export function ComposeDrawer({ kind, ctx, onClose }: { kind: MessageKind | null
                         {t(tpl.name)}
                       </option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </Field>
                 <button onClick={improve} disabled={improving} className="btn btn-sm btn-quiet">
                   <Sparkles className="w-3.5 h-3.5" />

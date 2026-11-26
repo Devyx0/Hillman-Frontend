@@ -18,6 +18,7 @@ import { COMPANIES, type CompanyId } from '../../../data/mock'
 import { locale, t } from '../../../i18n'
 import { toast } from '../../../lib/toast'
 import { normalize } from '../../../lib/utils'
+import { Dropdown } from '../../../components/dropdown'
 
 const ROLES: [MembershipRole, string][] = [
   ['representative', 'Représentant'],
@@ -102,13 +103,13 @@ export function ApiUsersTab() {
       >
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-hairline">
           {adminCompanies.length > 1 && (
-            <select className="form-input h-8 text-xs w-auto" value={company} onChange={(e) => setCompany(e.target.value as CompanyId)} aria-label={t('Compagnie')}>
+            <Dropdown className="form-input h-8 text-xs w-auto" value={company} onChange={(e) => setCompany(e.target.value as CompanyId)} aria-label={t('Compagnie')}>
               {adminCompanies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           )}
           <label className="relative flex-1 min-w-[10rem]">
             <Search className="w-4 h-4 text-ink-faint absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -146,7 +147,7 @@ export function ApiUsersTab() {
                         </p>
                       </td>
                       <td className="td">
-                        <select
+                        <Dropdown
                           className="form-input h-8 text-xs w-auto"
                           value={u.role}
                           disabled={busy || self}
@@ -162,7 +163,7 @@ export function ApiUsersTab() {
                               {t(label)}
                             </option>
                           ))}
-                        </select>
+                        </Dropdown>
                       </td>
                       <td className="td text-xs text-ink-mute">
                         {!u.has_login ? (
@@ -244,13 +245,13 @@ function InviteDrawer({ company, onClose, onInvited }: { company: CompanyId; onC
           </Field>
         </div>
         <Field label={t('Rôle')}>
-          <select className="form-input" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as MembershipRole })}>
+          <Dropdown className="form-input" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as MembershipRole })}>
             {ROLES.map(([r, label]) => (
               <option key={r} value={r}>
                 {t(label)}
               </option>
             ))}
-          </select>
+          </Dropdown>
         </Field>
         {error && (
           <p role="alert" className="text-xs font-semibold text-tone-critical-ink">

@@ -7,6 +7,7 @@ import { clientLang, fullName, repById } from '../../data/mock'
 import { CONSUMER_RESOLUTION_TEXT, CONTRACT_CLAUSES, SENT_LOG, fillClause, gutterClauses, isSeededQuote, logSent, tierVideo } from '../../data/quote-builder'
 import { isOptedOut } from '../../data/settings'
 import { changeQuoteStatus } from '../../data/store'
+import { API_MODE } from '../../api/config'
 import { inLang, langName, locale, t, tIn } from '../../i18n'
 import { ClientLangProvider, useClientLang } from '../../i18n/ClientLang'
 import { toast } from '../../lib/toast'
@@ -235,7 +236,8 @@ export function EnvoiSection({ b }: { b: Builder }) {
       if (!ok) return
     }
     logSent({ quoteId: quote.id, quoteNo: quote.no, company: quote.company, by: user?.name ?? rep.name, channels, to: [channels.includes('email') ? to : '', channels.includes('sms') ? phone : ''].filter(Boolean).join(' · '), subject, kind: 'Soumission' })
-    if (quote.status === 'En cours') changeQuoteStatus(quote.id, 'En soumission', { by: user?.name, via: 'soumission' })
+    // Sending has no API yet (nothing leaves the app): with the backend the status is left as the server has it.
+    if (!API_MODE && quote.status === 'En cours') changeQuoteStatus(quote.id, 'En soumission', { by: user?.name, via: 'soumission' })
     toast(t('Soumission {no} envoyée par {via}', { no: quote.no, via: channels.map((c) => (c === 'email' ? t('courriel') : t('texto'))).join(` ${t('et')} `) }))
   }
 
