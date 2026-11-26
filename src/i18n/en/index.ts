@@ -1,5 +1,9 @@
 import { workOrderEn } from './workOrder'
 import { apiEn } from './api'
+import { apiCompaniesEn } from './apiCompanies'
+import { apiSourcesEn } from './apiSources'
+import { apiFollowUpsEn } from './apiFollowUps'
+import { apiCatalogueEn } from './apiCatalogue'
 import { authEn } from './auth'
 import { createEn } from './create'
 import { quoteFlowEn } from './quoteFlow'
@@ -58,4 +62,4 @@ const foundation: Record<string, string> = {
 }
 
 /** All English translations, keyed by the French source string. */
-export const en: Record<string, string> = { ...apiEn, ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...authEn, ...createEn, ...quoteFlowEn, ...portalFlowEn, ...calendarEn, ...settingsEn, ...foundation, ...workOrderEn, ...shared }
+export const en: Record<string, string> = { ...apiCatalogueEn, ...apiFollowUpsEn, ...apiSourcesEn, ...apiCompaniesEn, ...apiEn, ...shell, ...sales, ...quoteBuilder, ...clients, ...agenda, ...authEn, ...createEn, ...quoteFlowEn, ...portalFlowEn, ...calendarEn, ...settingsEn, ...foundation, ...workOrderEn, ...shared }

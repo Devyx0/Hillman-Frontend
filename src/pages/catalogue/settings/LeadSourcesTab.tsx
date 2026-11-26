@@ -1,5 +1,6 @@
 /** Paramètres → Sources de leads: editable list + intake connections (PDF item 3). */
 import { useState } from 'react'
+import { API_MODE } from '../../../api/config'
 import { Check, Code2, Globe, LoaderCircle, Pencil, PhoneForwarded, Plus, Search, Send, Tags, Trash2, X } from 'lucide-react'
 import { Badge, Card, Empty, Field } from '../../../components/ui'
 import { Select } from '../../../components/filters'
@@ -13,10 +14,17 @@ import { cn } from '../../../lib/utils'
 import { t } from '../../../i18n'
 import { GOOGLE_BUSINESS, INTAKE_MAPPING, PHONE_FORWARDING, logChange, saveGoogleBusiness, saveIntakeMapping, savePhoneForwarding } from './data'
 import { ConnectionBadge, CopyField, Intro, Toggle, useScopeCompany } from './shared'
+import { ApiLeadSourcesTab } from './ApiLeadSourcesTab'
 
 const KIND_LABEL: Record<LeadSource['kind'], string> = { manuel: 'Saisie manuelle', formulaire: 'Formulaire web', google: 'Google', telephone: 'Téléphone', ia: 'Agent IA' }
 
 export function LeadSourcesTab() {
+  // With the backend: the shared source list and the intake keys from the server; the other reception cards are unchanged.
+  if (API_MODE) return <ApiLeadSourcesTab />
+  return <MockLeadSourcesTab />
+}
+
+function MockLeadSourcesTab() {
   const [company, setCompany] = useScopeCompany()
   return (
     <div className="space-y-4">
@@ -168,7 +176,7 @@ function SourceSelect({ value, onChange }: { value: string; onChange: (v: string
 }
 
 // ── Website form ────────────────────────────────────────────────────────────
-function WebsiteFormCard({ company }: { company: CompanyId }) {
+export function WebsiteFormCard({ company }: { company: CompanyId }) {
   useStore()
   const { user } = useAuth()
   const conn = CONNECTIONS[company]
@@ -227,7 +235,7 @@ function WebsiteFormCard({ company }: { company: CompanyId }) {
 }
 
 // ── Google Ads lead forms + Business Profile ────────────────────────────────
-function GoogleCard({ company }: { company: CompanyId }) {
+export function GoogleCard({ company }: { company: CompanyId }) {
   useStore()
   const { user } = useAuth()
   const conn = CONNECTIONS[company]
@@ -294,7 +302,7 @@ function GoogleCard({ company }: { company: CompanyId }) {
 }
 
 // ── Phone number forwarding ─────────────────────────────────────────────────
-function PhoneCard({ company }: { company: CompanyId }) {
+export function PhoneCard({ company }: { company: CompanyId }) {
   useStore()
   const { user } = useAuth()
   const fwd = PHONE_FORWARDING[company]

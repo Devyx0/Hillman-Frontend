@@ -6,7 +6,8 @@ import { http, request } from './http'
 import type {
   ApiCatalogue, ApiClient, ApiClientDetail, ApiCompany, ApiConsents, ApiDocument, ApiGroupSummary, ApiLead, ApiLeadDetail,
   ApiLeadSource, ApiQuote, ApiQuoteListItem, ApiRepresentative, ApiSavedConsent, ApiWorkType, ApiAuditEntry, AuditAction, AuditTable,
-  ApiCompanyUser, ApiMyProfile, ApiNote, ConvertLeadBody, ConvertLeadResult, DuplicateMatch, InviteUserBody, NoteSubject, UpdateMeBody,
+  ApiCompanyUser, ApiMyProfile, ApiCompanySettings, UpdateCompanySettingsBody, QuoteNumbering, CatalogueEntityKey, ApplyMarginResult,
+  ApiQuoteTemplate, QuoteTemplateBody, ApiMessageTemplate, MessageTemplateBody, MessageChannel, MessagePurpose, ApiFollowUpStep, FollowUpStepBody, ApiIntakeKey, ApiNote, ConvertLeadBody, ConvertLeadResult, DuplicateMatch, InviteUserBody, NoteSubject, UpdateMeBody,
   ClientFields, ClientType, CreateConsentBody, CreateLeadBody, DownloadLink, ExpertiseStatus, IntakeLeadBody, LeadStage,
   ManualQuoteStatus, MeResponse, Page, QuoteStatus, RefusalReason, UpdateLeadBody, UpdateQuoteBody, Uuid,
 } from './types'
@@ -18,10 +19,15 @@ export const getMe = () => http.get<MeResponse>('/me')
 export const listCompanies = () => http.get<ApiCompany[]>('/companies')
 /** My profile: name, phone, agenda colour (the password goes through Supabase Auth). */
 export const updateMe = (body: UpdateMeBody) => http.patch<ApiMyProfile>('/me', body)
-export const listWorkTypes = (companyId: Uuid) => http.get<ApiWorkType[]>(`/companies/${enc(companyId)}/work-types`)
+/** includeInactive: Paramètres also lists the deactivated ones. */
+export const listWorkTypes = (companyId: Uuid, includeInactive = false) =>
+  http.get<ApiWorkType[]>(`/companies/${enc(companyId)}/work-types`, includeInactive ? { include_inactive: true } : undefined)
 export const listRepresentatives = (companyId: Uuid) => http.get<ApiRepresentative[]>(`/companies/${enc(companyId)}/representatives`)
-export const listLeadSources = () => http.get<ApiLeadSource[]>('/lead-sources')
-export const getCatalogue = (companyId: Uuid) => http.get<ApiCatalogue>(`/companies/${enc(companyId)}/catalogue`)
+/** Active sources in display order; includeInactive (Paramètres) also returns the deactivated ones. */
+export const listLeadSources = (includeInactive = false) => http.get<ApiLeadSource[]>('/lead-sources', includeInactive ? { include_inactive: true } : undefined)
+/** includeInactive (Paramètres › Catalogue): also the deactivated rows. Every row has is_active. */
+export const getCatalogue = (companyId: Uuid, includeInactive = false) =>
+  http.get<ApiCatalogue>(`/companies/${enc(companyId)}/catalogue`, includeInactive ? { include_inactive: true } : undefined)
 
 // ── Clients ──────────────────────────────────────────────────────────────────
 export const createClient = (body: ClientFields & { company_id?: Uuid; force?: boolean }) => http.post<ApiClient>('/clients', body)
@@ -149,6 +155,94 @@ export const inviteUser = (companyId: Uuid, body: InviteUserBody) =>
 /** Role or active state. The company keeps an active admin; an admin cannot demote or deactivate themselves (422). */
 export const updateMembership = (companyId: Uuid, userId: Uuid, body: { role?: ApiCompanyUser['role']; is_active?: boolean }) =>
   http.patch<ApiCompanyUser>(`/companies/${enc(companyId)}/users/${enc(userId)}`, body)
+
+// ── Paramètres › Compagnie ───────────────────────────────────────────────────
+/** Every column of the company and its logo (signed URL). target_margin_pct: admin and coordination only. */
+export const getCompanySettings = (companyId: Uuid) => http.get<ApiCompanySettings>(`/companies/${enc(companyId)}/settings`)
+/** Admin of the company. Numbers are stored in their printed form; rates are percent strings. */
+export const updateCompanySettings = (companyId: Uuid, body: UpdateCompanySettingsBody) =>
+  http.patch<ApiCompanySettings>(`/companies/${enc(companyId)}/settings`, body)
+/** PNG, JPG or WebP, 2 MB max (no SVG). Admin of the company. */
+export function uploadCompanyLogo(companyId: Uuid, file: Blob, filename?: string) {
+  const form = new FormData()
+  form.append('file', file, filename ?? (file instanceof File ? file.name : 'logo.png'))
+  return request<ApiCompanySettings>('PUT', `/companies/${enc(companyId)}/logo`, { body: form })
+}
+export const removeCompanyLogo = (companyId: Uuid) => http.del<ApiCompanySettings>(`/companies/${enc(companyId)}/logo`)
+/** One sequence for the group; each company prints its prefix before the number. */
+export const getQuoteNumbering = () => http.get<QuoteNumbering>('/settings/quote-numbering')
+/** Admin of every company; 422 when not above every number already used. */
+export const setQuoteNumbering = (nextNumber: number) => http.put<QuoteNumbering>('/settings/quote-numbering', { next_number: nextNumber })
+
+// ── Paramètres › Sources de leads (admin of every company) ───────────────────
+export const createLeadSource = (body: { name: string; sort_order?: number; is_active?: boolean }) => http.post<ApiLeadSource>('/lead-sources', body)
+export const updateLeadSource = (id: Uuid, body: { name?: string; sort_order?: number; is_active?: boolean }) =>
+  http.patch<ApiLeadSource>(`/lead-sources/${enc(id)}`, body)
+/** 409 IN_USE when leads, quotes or intake keys use it: deactivate it instead. */
+export const deleteLeadSource = (id: Uuid) => http.del(`/lead-sources/${enc(id)}`)
+
+// ── Paramètres › Catalogue (edit: admin, coordination; delete: admin) ────────
+/** Parent of each child entity: POST /<parent>/:id/<path>. */
+const CATALOGUE_PARENT: Partial<Record<CatalogueEntityKey, { parent: CatalogueEntityKey; path: string }>> = {
+  'scope-items': { parent: 'scope-sections', path: 'items' },
+  'warranty-options': { parent: 'warranty-groups', path: 'options' },
+  'cost-categories': { parent: 'cost-general-categories', path: 'categories' },
+  'cost-items': { parent: 'cost-categories', path: 'items' },
+}
+/**
+ * Add a catalogue row. `ownerId` is the company (work types, scope sections, expertise items, warranty groups,
+ * general categories, add-ons) or the parent row (scope items → section, options → group, categories → general
+ * category, cost items → category). Returns the created row.
+ */
+export function createCatalogueRow<T = Record<string, unknown>>(key: CatalogueEntityKey, ownerId: Uuid, body: Record<string, unknown>) {
+  const p = CATALOGUE_PARENT[key]
+  return http.post<T>(p ? `/${p.parent}/${enc(ownerId)}/${p.path}` : `/companies/${enc(ownerId)}/${key}`, body)
+}
+/** Only the fields sent change; is_active: false hides the row from new quotes. */
+export const updateCatalogueRow = <T = Record<string, unknown>>(key: CatalogueEntityKey, id: Uuid, body: Record<string, unknown>) =>
+  http.patch<T>(`/${key}/${enc(id)}`, body)
+/** Admin. 409 IN_USE for rows quotes still use (work types, warranties, options): deactivate them instead. */
+export const deleteCatalogueRow = (key: CatalogueEntityKey, id: Uuid) => http.del(`/${key}/${enc(id)}`)
+/** sell = cost / (1 − margin %). Without categoryId: whole catalogue, and it becomes the company target margin. */
+export const applyCatalogueMargin = (companyId: Uuid, marginPct: number, categoryId?: Uuid) =>
+  http.post<ApplyMarginResult>(`/companies/${enc(companyId)}/catalogue/margin`, categoryId ? { margin_pct: marginPct, category_id: categoryId } : { margin_pct: marginPct })
+
+// ── Paramètres › Modèles de soumission (read with the catalogue) ─────────────
+export const createQuoteTemplate = (companyId: Uuid, body: QuoteTemplateBody & { name: string }) =>
+  http.post<ApiQuoteTemplate>(`/companies/${enc(companyId)}/quote-templates`, body)
+/** items, when sent, replaces every line. */
+export const updateQuoteTemplate = (id: Uuid, body: QuoteTemplateBody) => http.patch<ApiQuoteTemplate>(`/quote-templates/${enc(id)}`, body)
+/** Default name « <nom> (copie) ». */
+export const duplicateQuoteTemplate = (id: Uuid, name?: string) => http.post<ApiQuoteTemplate>(`/quote-templates/${enc(id)}/duplicate`, name ? { name } : {})
+/** Admin; quotes made from it are not affected. */
+export const deleteQuoteTemplate = (id: Uuid) => http.del(`/quote-templates/${enc(id)}`)
+
+// ── Paramètres › Modèles de messages ─────────────────────────────────────────
+/** The company's templates plus the shared ones (company_id null); active only unless includeInactive. */
+export const listMessageTemplates = (companyId: Uuid, q: { channel?: MessageChannel; purpose?: MessagePurpose; include_inactive?: boolean } = {}) =>
+  http.get<ApiMessageTemplate[]>(`/companies/${enc(companyId)}/message-templates`, q)
+/** Admin of the company. E-mail: subject required; SMS: no subject. Merge fields {prénom} {représentant} {compagnie} {no} {date}. */
+export const createMessageTemplate = (companyId: Uuid, body: MessageTemplateBody & { name: string; channel: MessageChannel; purpose: MessagePurpose; body: string }) =>
+  http.post<ApiMessageTemplate>(`/companies/${enc(companyId)}/message-templates`, body)
+/** The channel cannot change. */
+export const updateMessageTemplate = (id: Uuid, body: Omit<MessageTemplateBody, 'channel'>) => http.patch<ApiMessageTemplate>(`/message-templates/${enc(id)}`, body)
+/** 409 IN_USE when an automatic follow-up step uses it. */
+export const deleteMessageTemplate = (id: Uuid) => http.del(`/message-templates/${enc(id)}`)
+
+// ── Paramètres › Suivis automatiques ─────────────────────────────────────────
+export const listFollowUpSteps = (companyId: Uuid) => http.get<ApiFollowUpStep[]>(`/companies/${enc(companyId)}/follow-up-steps`)
+/** The whole sequence: steps left out are removed. Admin of the company. Messages are not sent yet. */
+export const saveFollowUpSteps = (companyId: Uuid, steps: FollowUpStepBody[]) =>
+  http.put<ApiFollowUpStep[]>(`/companies/${enc(companyId)}/follow-up-steps`, { steps })
+
+// ── Paramètres › Réception des leads (intake keys, admins) ───────────────────
+/** Keys the caller manages; the key itself is never returned here. */
+export const listIntakeKeys = (companyId?: Uuid) => http.get<ApiIntakeKey[]>('/intake-keys', companyId ? { company_id: companyId } : undefined)
+/** company_id null = group form (admin of every company). `key` is shown this once. */
+export const createIntakeKey = (body: { name: string; source_id: Uuid; company_id: Uuid | null }) =>
+  http.post<ApiIntakeKey & { key: string }>('/intake-keys', body)
+/** Keys are deactivated, never deleted. */
+export const updateIntakeKey = (id: Uuid, body: { name?: string; is_active?: boolean }) => http.patch<ApiIntakeKey>(`/intake-keys/${enc(id)}`, body)
 
 /** Every page of a cursor-paginated list (200 rows per request). */
 export async function fetchAll<T>(load: (cursor?: string) => Promise<Page<T>>, max = 5000): Promise<T[]> {

@@ -1,5 +1,7 @@
 /** Paramètres → Modèles de messages: editor for MESSAGE_TEMPLATES with merge fields and live preview. */
 import { useRef, useState } from 'react'
+import { API_MODE } from '../../../api/config'
+import { ApiMessageTemplatesTab } from './ApiMessageTemplatesTab'
 import { Copy, FileText, Mail, MessageSquare, Plus, Trash2 } from 'lucide-react'
 import { Badge, Card, CompanyBadge, Empty, Field } from '../../../components/ui'
 import { Select } from '../../../components/filters'
@@ -18,6 +20,12 @@ import { MERGE_FIELDS, MERGE_LABELS, renderSample, smsSegments } from './merge'
 const toDraft = (m: MessageTemplate): MessageTemplate => ({ ...m, name: t(m.name), subject: m.subject !== undefined ? t(m.subject) : undefined, body: t(m.body) })
 
 export function MessageTemplatesTab() {
+  // With the backend: the company's and the shared templates from the server.
+  if (API_MODE) return <ApiMessageTemplatesTab />
+  return <MockMessageTemplatesTab />
+}
+
+function MockMessageTemplatesTab() {
   useStore()
   const { user, can } = useAuth()
   const me = user?.name ?? '—'

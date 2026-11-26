@@ -10,6 +10,8 @@ import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { t } from '../i18n'
 import { CatalogueEditContext, CostItemsTab, ExpertisesTab, TemplatesTab, WarrantiesTab, WorkLinesTab } from './catalogue/CatalogueTabs'
+import { ApiCatalogueTabs } from './catalogue/api/ApiCatalogueTabs'
+import { API_MODE } from '../api/config'
 import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionId } from './catalogue/SettingsTabs'
 
 type CatalogueTab = 'travaux' | 'expertises' | 'items' | 'modeles' | 'garanties'
@@ -87,13 +89,18 @@ function CatalogueView() {
         </Notice>
       )}
       <CatalogueEditContext.Provider value={canEdit}>
-        <Loader key={tab} fail={params.get('erreur') === '1'}>
-          {tab === 'travaux' && <WorkLinesTab />}
-          {tab === 'expertises' && <ExpertisesTab />}
-          {tab === 'items' && <CostItemsTab />}
-          {tab === 'modeles' && <TemplatesTab />}
-          {tab === 'garanties' && <WarrantiesTab />}
-        </Loader>
+        {API_MODE ? (
+          // The API tabs load the company's catalogue themselves (loading and error states included).
+          <ApiCatalogueTabs tab={tab} />
+        ) : (
+          <Loader key={tab} fail={params.get('erreur') === '1'}>
+            {tab === 'travaux' && <WorkLinesTab />}
+            {tab === 'expertises' && <ExpertisesTab />}
+            {tab === 'items' && <CostItemsTab />}
+            {tab === 'modeles' && <TemplatesTab />}
+            {tab === 'garanties' && <WarrantiesTab />}
+          </Loader>
+        )}
       </CatalogueEditContext.Provider>
     </Page>
   )
@@ -162,6 +169,5 @@ function SettingsView() {
 /** `/catalogue` — also renders Paramètres when `?tab=parametres` (mockup: `i5`). `&section=<id>` opens a settings section. */
 export default function Catalogue() {
   const [params] = useSearchParams()
-  // The catalogue has no API yet: it stays on its own data until one exists.
   return params.get('tab') === 'parametres' ? <SettingsView key="s" /> : <CatalogueView key="c" />
 }

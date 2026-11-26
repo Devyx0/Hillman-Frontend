@@ -1,5 +1,7 @@
 /** Paramètres → Suivis automatiques (PDF item 4): per-company follow-up sequence editor. */
 import { useState } from 'react'
+import { API_MODE } from '../../../api/config'
+import { ApiFollowUpsTab } from './ApiFollowUpsTab'
 import { ArrowDown, ArrowUp, Ban, Check, Clock, Mail, MessageSquare, Plus, RotateCcw, Send, ShieldOff, Trash2, Workflow } from 'lucide-react'
 import { Card, Empty, Field } from '../../../components/ui'
 import { Select } from '../../../components/filters'
@@ -26,6 +28,12 @@ const HOURS = Array.from({ length: 15 }, (_, i) => i + 7) // 7 h → 21 h
 const formatPhone = (d: string) => (d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)}-${d.slice(6)}` : d)
 
 export function FollowUpsTab() {
+  // With the backend: the company's follow-up steps from the server (the STOP list stays local).
+  if (API_MODE) return <ApiFollowUpsTab />
+  return <MockFollowUpsTab />
+}
+
+function MockFollowUpsTab() {
   useStore()
   const { user } = useAuth()
   const [company, setCompany] = useScopeCompany('sg')
@@ -257,7 +265,7 @@ export function FollowUpsTab() {
 }
 
 // ── STOP / opt-out ──────────────────────────────────────────────────────────
-function OptOutsCard() {
+export function OptOutsCard() {
   useStore()
   const { user } = useAuth()
   const [phone, setPhone] = useState('')

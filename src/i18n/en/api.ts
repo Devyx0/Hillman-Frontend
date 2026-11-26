@@ -315,4 +315,6 @@ export const apiEn: Record<string, string> = {
   'Ajout modifié(e)': 'Add-on updated',
   'Client créé': 'Client created',
   'Client modifié': 'Client updated',
+  'Données invalides.': 'Invalid data.',
+  'Requête invalide.': 'Invalid request.',
 }

@@ -228,7 +228,7 @@ export function WorkLinesTab() {
 }
 
 /** Small inline "add an option" form used by Expertises and Garanties. */
-function AddOption({ onAdd }: { onAdd: (v: string) => void }) {
+export function AddOption({ onAdd }: { onAdd: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const [v, setV] = useState('')
   if (!open)

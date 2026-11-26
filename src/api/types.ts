@@ -67,6 +67,7 @@ export interface ApiWorkType {
   name: string
   obligation_form: ObligationForm
   sort_order: number
+  is_active: boolean
 }
 
 export interface ApiRepresentative {
@@ -81,13 +82,14 @@ export interface ApiLeadSource {
   id: Uuid
   name: string
   sort_order: number
+  is_active: boolean
 }
 
-export interface CatalogueScopeItem { id: Uuid; section_id: Uuid; text: string; is_checked_by_default: boolean; sort_order: number }
-export interface CatalogueScopeSection { id: Uuid; name: string; sort_order: number; items: CatalogueScopeItem[] }
-export interface CatalogueExpertiseItem { id: Uuid; section_name: string; text: string; default_status: ExpertiseStatus; sort_order: number }
-export interface CatalogueWarrantyOption { id: Uuid; group_id: Uuid; label: string; sort_order: number }
-export interface CatalogueWarrantyGroup { id: Uuid; name: string; allows_custom_text: boolean; sort_order: number; options: CatalogueWarrantyOption[] }
+export interface CatalogueScopeItem { id: Uuid; section_id: Uuid; text: string; is_checked_by_default: boolean; sort_order: number; is_active: boolean }
+export interface CatalogueScopeSection { id: Uuid; name: string; sort_order: number; is_active: boolean; items: CatalogueScopeItem[] }
+export interface CatalogueExpertiseItem { id: Uuid; section_name: string; text: string; default_status: ExpertiseStatus | null; sort_order: number; is_active: boolean }
+export interface CatalogueWarrantyOption { id: Uuid; group_id: Uuid; label: string; sort_order: number; is_active: boolean }
+export interface CatalogueWarrantyGroup { id: Uuid; name: string; allows_custom_text: boolean; sort_order: number; is_active: boolean; options: CatalogueWarrantyOption[] }
 export interface CatalogueCostItem {
   id: Uuid
   category_id: Uuid
@@ -95,11 +97,21 @@ export interface CatalogueCostItem {
   unit: string | null
   sell_price: Decimal
   sort_order: number
+  is_active: boolean
   /** Admin and coordination only (key absent for representatives). */
   cost_price?: Decimal | null
 }
-export interface CatalogueCostCategory { id: Uuid; general_category_id: Uuid; name: string; sort_order: number; items: CatalogueCostItem[] }
-export interface CatalogueGeneralCategory { id: Uuid; name: string; print_lines_on_quote: boolean; sort_order: number; categories: CatalogueCostCategory[] }
+export interface CatalogueCostCategory {
+  id: Uuid
+  general_category_id: Uuid
+  name: string
+  sort_order: number
+  is_active: boolean
+  /** Admin and coordination only (key absent for representatives). */
+  target_margin_pct?: Decimal | null
+  items: CatalogueCostItem[]
+}
+export interface CatalogueGeneralCategory { id: Uuid; name: string; print_lines_on_quote: boolean; sort_order: number; is_active: boolean; categories: CatalogueCostCategory[] }
 export interface CatalogueAddonPreset {
   id: Uuid
   description: string
@@ -110,6 +122,7 @@ export interface CatalogueAddonPreset {
   is_added_to_new_quotes: boolean
   is_client_selectable: boolean
   sort_order: number
+  is_active: boolean
 }
 export interface CatalogueTemplateItem {
   id: Uuid
@@ -120,7 +133,7 @@ export interface CatalogueTemplateItem {
   quantity: Decimal | null
   is_included: boolean
 }
-export interface CatalogueTemplate { id: Uuid; name: string; work_type_id: Uuid | null; sort_order: number; items: CatalogueTemplateItem[] }
+export interface CatalogueTemplate { id: Uuid; name: string; work_type_id: Uuid | null; sort_order: number; is_active: boolean; items: CatalogueTemplateItem[] }
 
 export interface ApiCatalogue {
   scope_sections: CatalogueScopeSection[]
@@ -632,4 +645,125 @@ export interface InviteUserBody {
   first_name: string
   last_name: string
   role: MembershipRole
+}
+
+// ── Paramètres (settings) ────────────────────────────────────────────────────
+/** GET /companies/:id/settings: every column of the company, plus the logo. */
+export interface ApiCompanySettings extends ApiCompany {
+  is_active: boolean
+  country_code: string
+  /** Shown here, set with the sending setup. */
+  twilio_phone: string | null
+  email_from: string | null
+  reply_to_email: string | null
+  terms_and_conditions: string | null
+  /** Admin and coordination only (key absent for representatives). */
+  target_margin_pct?: Decimal | null
+  logo: { file_id: Uuid; mime_type: string | null; url: string | null } | null
+  created_at: string
+  updated_at: string
+}
+/** PATCH /companies/:id/settings: only the fields sent change. Rates are percent strings ("5", "9.975"). */
+export type UpdateCompanySettingsBody = Partial<{
+  name: string
+  legal_name: string
+  quote_prefix: string | null
+  phone: string | null
+  website: string | null
+  civic_number: string | null
+  street: string | null
+  city: string | null
+  postal_code: string | null
+  province_code: string
+  rbq_number: string | null
+  neq: string | null
+  gst_number: string | null
+  qst_number: string | null
+  gst_rate: string
+  qst_rate: string
+  brand_color: string | null
+  terms_and_conditions: string | null
+  payment_terms: string | null
+  target_margin_pct: string | null
+}>
+export interface QuoteNumbering { next_number: number; highest_used: number | null }
+
+export type CatalogueEntityKey =
+  | 'work-types' | 'scope-sections' | 'scope-items' | 'expertise-items' | 'warranty-groups' | 'warranty-options'
+  | 'cost-general-categories' | 'cost-categories' | 'cost-items' | 'addon-presets'
+export interface ApplyMarginResult { margin_pct: number; category_id: Uuid | null; items_updated: number }
+
+/** A quote template line: exactly one target. */
+export type TemplateItemBody =
+  | { scope_item_id: Uuid }
+  | { cost_item_id: Uuid; quantity?: string | null }
+  | { addon_preset_id: Uuid; is_included?: boolean }
+export interface ApiQuoteTemplate {
+  id: Uuid
+  company_id: Uuid
+  name: string
+  work_type_id: Uuid | null
+  sort_order: number
+  is_active: boolean
+  items: Omit<CatalogueTemplateItem, 'template_id'>[]
+}
+export interface QuoteTemplateBody {
+  name?: string
+  work_type_id?: Uuid | null
+  sort_order?: number
+  is_active?: boolean
+  items?: TemplateItemBody[]
+}
+
+export type MessageChannel = 'email' | 'sms'
+export type MessagePurpose = 'quote_delivery' | 'follow_up' | 'appointment_reminder' | 'general'
+export interface ApiMessageTemplate {
+  id: Uuid
+  /** null = shared by every company. */
+  company_id: Uuid | null
+  name: string
+  channel: MessageChannel
+  purpose: MessagePurpose
+  subject: string | null
+  body: string
+  is_active: boolean
+  updated_at: string
+}
+export interface MessageTemplateBody {
+  name?: string
+  channel?: MessageChannel
+  purpose?: MessagePurpose
+  subject?: string | null
+  body?: string
+  is_active?: boolean
+}
+
+export type FollowUpTrigger = 'quote_sent' | 'appointment'
+export interface FollowUpStepBody {
+  trigger: FollowUpTrigger
+  /** quote_sent: 1…90 days after the first send; appointment: −30…0 days from the appointment. */
+  offset_days: number
+  /** HH:MM */
+  send_time?: string
+  channel: MessageChannel
+  template_id: Uuid
+  set_quote_status?: 'reminder_email_sent' | 'to_call_back' | null
+  is_active?: boolean
+}
+export interface ApiFollowUpStep extends Required<Omit<FollowUpStepBody, 'set_quote_status'>> {
+  id: Uuid
+  template_name: string
+  set_quote_status: 'reminder_email_sent' | 'to_call_back' | null
+}
+
+export interface ApiIntakeKey {
+  id: Uuid
+  name: string
+  /** null = group form (each request names the company). */
+  company_id: Uuid | null
+  company_name: string | null
+  source_id: Uuid
+  source_name: string
+  is_active: boolean
+  created_at: string
 }
