@@ -17,6 +17,7 @@ import { cn } from '../lib/utils'
 import { SideCard } from './record'
 import { ErrorState, SkeletonRows } from './states'
 import { Badge, Drawer, Empty, Field } from './ui'
+import { Dropdown } from './dropdown'
 
 const when = (iso: string) => new Date(iso).toLocaleString(locale(), { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -161,10 +162,10 @@ function ConsentDrawer({ client, onClose, onSaved }: { client: Client; onClose: 
       <form onSubmit={submit} className="p-5 space-y-4">
         <p className="text-xs text-ink-mute">{t('Chaque changement est conservé (registre Loi 25) : un retrait s’ajoute à l’historique, il n’efface rien.')}</p>
         <Field label={t('Canal')}>
-          <select className="form-input" value={channel} onChange={(e) => setChannel(e.target.value as ConsentChannel)}>
+          <Dropdown className="form-input" value={channel} onChange={(e) => setChannel(e.target.value as ConsentChannel)}>
             <option value="sms">{t('Textos')}</option>
             <option value="email">{t('Courriels')}</option>
-          </select>
+          </Dropdown>
         </Field>
         <fieldset className="flex gap-2">
           {[true, false].map((g) => (
@@ -175,13 +176,13 @@ function ConsentDrawer({ client, onClose, onSaved }: { client: Client; onClose: 
           ))}
         </fieldset>
         <Field label={t('Source')}>
-          <select className="form-input" value={source} onChange={(e) => setSource(e.target.value as ManualConsentSource)}>
+          <Dropdown className="form-input" value={source} onChange={(e) => setSource(e.target.value as ManualConsentSource)}>
             {MANUAL_SOURCES.map((s) => (
               <option key={s} value={s}>
                 {t(SOURCE_LABEL[s])}
               </option>
             ))}
-          </select>
+          </Dropdown>
         </Field>
         <Field label={t('Preuve (facultatif)')}>
           <textarea className="form-input py-2 min-h-20" rows={3} value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder={t('ex. accepté au téléphone le 12 nov., formulaire signé…')} />
@@ -266,13 +267,13 @@ export function EditClientDrawer({ client, onClose }: { client: Client; onClose:
             <input className="form-input" value={f.last} onChange={(e) => set('last', e.target.value)} />
           </Field>
           <Field label={t('Type de client')}>
-            <select className="form-input" value={f.type} onChange={(e) => set('type', e.target.value)}>
+            <Dropdown className="form-input" value={f.type} onChange={(e) => set('type', e.target.value)}>
               {TYPES.map((ty) => (
                 <option key={ty} value={ty}>
                   {t(ty)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
           <Field label={t("Nom de l'entreprise")}>
             <input className="form-input" value={f.company} onChange={(e) => set('company', e.target.value)} />

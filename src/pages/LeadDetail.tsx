@@ -10,7 +10,7 @@ import { InfoGroups, Notes, RecordHeader, RecordLayout, SideCard, StageBar, Thre
 import { ComingSoon, confirmAction } from '../components/states'
 import { CompanyBadge, Drawer, Empty, Field, Page, RepAvatar, StatusBadge, Tabs } from '../components/ui'
 import { DEFAULT_LEAD_REP, LEAD_LOST, LEAD_PROFILES, LEAD_STAGES, LEAD_STATUS, channelStyle, leadById, leadStage, threadForLead } from '../data/leads'
-import { REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
+import { ME, REPS, clientById, clientLang, companyById, fullName, repById } from '../data/mock'
 import { addAppointment, quoteById, updateLead, useStore } from '../data/store'
 import { t, tIn } from '../i18n'
 import { openCreate } from '../lib/create'
@@ -26,6 +26,7 @@ import { deleteLead, updateLead as apiUpdateLead, type LeadPatch } from '../data
 import { cacheLead, roleIn } from '../data/api-sync'
 import { companyReps } from '../data/reps'
 import { activeSources } from '../data/settings'
+import { Dropdown } from '../components/dropdown'
 
 /** Bookable estimate slots (mockup: `T3`). */
 const SLOTS = [
@@ -190,16 +191,21 @@ export default function LeadDetail() {
 
   /** "Ajouter" a visit: with a quote, the agenda opens prefilled from it (same as the quote screen). */
   const addVisit = () => {
-    // API mode: the agenda is not on the server yet, so booking records the stage only.
-    if (API_MODE) setStatus('RDV réservé', t('Étape : {stage}', { stage: t('RDV réservé') }))
-    else if (quote) navigate(`/agenda?nouveau=${quote.id}`)
+    if (quote) navigate(`/agenda?nouveau=${quote.id}`)
     else setBooking(true)
   }
 
   const book = (key: string) => {
     const [day, time] = key.split(' · ')
     const start = slotHour(time)
-    addAppointment({ repId: rep.id, day: SLOT_DAY[day] ?? 3, start, end: start + 1, title: profile?.work ?? 'Estimation', city: lead.city, type: 'Estimation', clientId: lead.clientId, quoteNo: quote?.no })
+    // The agenda has no API yet: the appointment stays on this device. An unassigned lead books in the user's calendar.
+    addAppointment({ repId: rep.id || ME.id, day: SLOT_DAY[day] ?? 3, start, end: start + 1, title: profile?.work ?? 'Estimation', city: lead.city, type: 'Estimation', clientId: lead.clientId, quoteNo: quote?.no })
+    if (API_MODE) {
+      // The stage has an API; the slot label is kept locally.
+      updateLead(lead.id, { booked: key })
+      void saveApi({ status: 'RDV réservé' }, `${t('Estimation réservée')} · ${t(key)}`)
+      return
+    }
     updateLead(lead.id, { status: 'RDV réservé', booked: key })
     toast(`${t('Estimation réservée')} · ${t(key)}`)
   }
@@ -247,7 +253,7 @@ export default function LeadDetail() {
               createQuote()
               return
             }
-            if (i === 3 && !lead.booked && !API_MODE) {
+            if (i === 3 && !lead.booked) {
               addVisit()
               return
             }
@@ -286,15 +292,10 @@ export default function LeadDetail() {
                 title: t('Demande'),
                 rows: [
                   { icon: Wrench, label: t('Travaux'), value: profile ? t(profile.work) : lead.message || '—' },
-                  // API mode: the server keeps the request text only (qualification details come with the AI agent).
-                  ...(API_MODE
-                    ? []
-                    : [
-                        { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
-                        { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
-                        { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
-                        { icon: House, label: t('Propriété'), value: profile ? t(profile.property) : '—' },
-                      ]),
+                  { icon: Flame, label: t('Urgence'), value: profile ? t(profile.urgency) : '—' },
+                  { icon: Wallet, label: t('Budget'), value: profile ? t(profile.budget) : '—' },
+                  { icon: CalendarClock, label: t('Échéance'), value: profile ? t(profile.timeline) : '—' },
+                  { icon: House, label: t('Propriété'), value: profile ? t(profile.property) : '—' },
                 ],
               },
               {
@@ -587,14 +588,14 @@ function EditLeadDrawer({ lead, onClose }: { lead: NonNullable<ReturnType<typeof
           </Field>
         </div>
         <Field label={t('Source')}>
-          <select className="form-input" value={f.channel} onChange={(e) => set('channel', e.target.value)}>
+          <Dropdown className="form-input" value={f.channel} onChange={(e) => set('channel', e.target.value)}>
             {!sources.includes(f.channel) && <option value={f.channel}>{t(f.channel)}</option>}
             {sources.map((s) => (
               <option key={s} value={s}>
                 {t(s)}
               </option>
             ))}
-          </select>
+          </Dropdown>
         </Field>
         <Field label={t('Demande du client')}>
           <textarea className="form-input min-h-24 py-2" rows={4} value={f.message} onChange={(e) => set('message', e.target.value)} />

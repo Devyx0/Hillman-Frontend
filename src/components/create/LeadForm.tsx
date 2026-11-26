@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react'
 import { Inbox, LoaderCircle, TriangleAlert } from 'lucide-react'
 import { useAuth } from '../../auth/AuthContext'
+import { useApp } from '../../context/AppContext'
 import { DEFAULT_LEAD_REP } from '../../data/leads'
 import { COMPANIES, REPS, fullName, type CompanyId, type Lead } from '../../data/mock'
 import { activeSources } from '../../data/settings'
@@ -16,6 +17,7 @@ import type { CreatePrefill } from '../../lib/create'
 import { toast } from '../../lib/toast'
 import { Field } from '../ui'
 import { DrawerFooter, MissingNotice } from './shared'
+import { Dropdown } from '../dropdown'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -23,11 +25,18 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
   useStore()
   const { user, companies, can } = useAuth()
   const sources = activeSources()
-  const [company, setCompany] = useState<CompanyId>(prefill.company && companies.includes(prefill.company) ? prefill.company : (companies[0] ?? 'toit'))
+  // The company chosen in the left panel is the lead's company: no field, no change. Only the all-companies view
+  // (Groupe) asks for it.
+  const { scope } = useApp()
+  const scoped = scope !== 'all' && companies.includes(scope) ? scope : undefined
+  const [picked, setPicked] = useState<CompanyId>(prefill.company && companies.includes(prefill.company) ? prefill.company : (companies[0] ?? 'toit'))
+  const company: CompanyId = scoped ?? picked
   const repsFor = (c: CompanyId) => (API_MODE ? companyReps(c) : REPS.filter((r) => r.company === c))
   // API mode: the signed-in user when they are one of the company's reps, else unassigned ('' — « Leads à qualifier »).
   const defaultRep = (c: CompanyId) => (user && repsFor(c).some((r) => r.id === user.repId) ? user.repId : API_MODE ? '' : DEFAULT_LEAD_REP[c])
-  const [repId, setRepId] = useState(() => defaultRep(company) ?? repsFor(company)[0]?.id ?? '')
+  const [repChoice, setRepId] = useState(() => defaultRep(company) ?? repsFor(company)[0]?.id ?? '')
+  // If the company changes while the form is open (left panel), a rep of the other company is not kept.
+  const repId = repChoice === '' || repsFor(company).some((r) => r.id === repChoice) ? repChoice : (defaultRep(company) ?? repsFor(company)[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
   const [f, setF] = useState({ name: prefill.name ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', city: prefill.city ?? '', source: prefill.source ?? sources[0] ?? 'Autre', message: '' })
@@ -101,23 +110,23 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
             <input className="form-input" value={f.city} onChange={(e) => set('city', e.target.value)} />
           </Field>
           <Field label={t('Source')}>
-            <select className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
+            <Dropdown className="form-input" value={f.source} onChange={(e) => set('source', e.target.value)}>
               {!sources.includes(f.source) && <option value={f.source}>{t(f.source)}</option>}
               {sources.map((s) => (
                 <option key={s} value={s}>
                   {t(s)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
-          {companies.length > 1 && (
+          {!scoped && companies.length > 1 && (
             <Field label={t('Compagnie')}>
-              <select
+              <Dropdown
                 className="form-input"
                 value={company}
                 onChange={(e) => {
                   const c = e.target.value as CompanyId
-                  setCompany(c)
+                  setPicked(c)
                   setRepId(defaultRep(c) ?? repsFor(c)[0]?.id ?? '')
                 }}
               >
@@ -126,18 +135,18 @@ export default function LeadForm({ prefill = {}, onCreated, onCancel }: { prefil
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Dropdown>
             </Field>
           )}
           <Field label={t('Responsable')}>
-            <select className="form-input" value={repId} onChange={(e) => setRepId(e.target.value)} disabled={!can('leads.assign')} title={can('leads.assign') ? undefined : t('Seuls les administrateurs et la coordination assignent les leads')}>
+            <Dropdown className="form-input" value={repId} onChange={(e) => setRepId(e.target.value)} disabled={!can('leads.assign')} title={can('leads.assign') ? undefined : t('Seuls les administrateurs et la coordination assignent les leads')}>
               {API_MODE && (can('leads.assign') || !repId) && <option value="">{t('Non assigné')}</option>}
               {repsFor(company).map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
         </div>
         <Field label={t('Demande du client')}>

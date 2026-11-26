@@ -10,6 +10,7 @@ import { t } from '../../i18n'
 import { toast } from '../../lib/toast'
 import { cn, money, num } from '../../lib/utils'
 import type { Builder } from './useQuoteBuilder'
+import { Dropdown } from '../../components/dropdown'
 
 const COLORS = ['Blanc', 'Noir', 'Brun commercial', 'Gris ardoise', 'Kaki', 'Ivoire', 'Bleu nuit']
 const ROOFS = ['Bardeaux', 'Tôle', 'Membrane']
@@ -62,23 +63,23 @@ export function FormulaireSection({ b }: { b: Builder }) {
             </div>
           </Field>
           <Field label={t('Couleur des gouttières')}>
-            <select className="form-input" value={g.color} onChange={(e) => set({ color: e.target.value })}>
+            <Dropdown className="form-input" value={g.color} onChange={(e) => set({ color: e.target.value })}>
               {COLORS.map((c) => (
                 <option key={c} value={c}>
                   {t(c)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
           <Field label={t('Couleur des descentes')}>
-            <select className="form-input" value={g.downspoutColor ?? ''} onChange={(e) => set({ downspoutColor: e.target.value || undefined })}>
+            <Dropdown className="form-input" value={g.downspoutColor ?? ''} onChange={(e) => set({ downspoutColor: e.target.value || undefined })}>
               <option value="">{t('Même couleur que les gouttières')}</option>
               {COLORS.map((c) => (
                 <option key={c} value={c}>
                   {t(c)}
                 </option>
               ))}
-            </select>
+            </Dropdown>
           </Field>
           <Field label={t('Toit')}>
             <div className="flex flex-wrap gap-1.5">

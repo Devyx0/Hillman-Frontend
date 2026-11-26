@@ -4,7 +4,7 @@
  * Expertises, Garanties, Coûtants (cost lines), Prix (base price, discount, "=", add-ons) and Notes.
  */
 import { useMemo, useState, type ReactNode } from 'react'
-import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Equal, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, Equal, LoaderCircle, Pencil, Plus, Search, Sparkles, Trash2, X } from 'lucide-react'
 import * as api from '../../../api/endpoints'
 import { toNum } from '../../../api/mappers'
 import type { ApiQuote, CatalogueScopeItem, ExpertiseStatus, ObligationForm } from '../../../api/types'
@@ -12,9 +12,11 @@ import { BuilderSection } from '../../../components/quote-shared'
 import { Field } from '../../../components/ui'
 import { REF, repsOf } from '../../../data/api-sync'
 import { t } from '../../../i18n'
+import { SAMPLE_AI_DESCRIPTION } from '../../../data/quote-builder'
 import { toast } from '../../../lib/toast'
 import { cn, money, pct } from '../../../lib/utils'
 import { editable, htmlToText, parseMoney, parseQty, textToHtml, type ApiQuoteState } from './useApiQuote'
+import { Dropdown } from '../../../components/dropdown'
 
 type S = ApiQuoteState & { quote: ApiQuote }
 
@@ -88,23 +90,23 @@ export function ApiInfosSection({ s }: { s: S }) {
     <BuilderSection id="infos" title={t('Informations')}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label={t('Représentant')}>
-          <select className="form-input" value={f.assigned_user_id} onChange={(e) => set('assigned_user_id', e.target.value)} disabled={isRep} title={isRep ? t('Un représentant ne peut pas réassigner une soumission.') : undefined}>
+          <Dropdown className="form-input" value={f.assigned_user_id} onChange={(e) => set('assigned_user_id', e.target.value)} disabled={isRep} title={isRep ? t('Un représentant ne peut pas réassigner une soumission.') : undefined}>
             {!f.assigned_user_id && <option value="">{t('Non assigné')}</option>}
             {repOptions.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
             ))}
-          </select>
+          </Dropdown>
         </Field>
         <Field label={t('Source')}>
-          <select className="form-input" value={f.source_id} onChange={(e) => set('source_id', e.target.value)}>
+          <Dropdown className="form-input" value={f.source_id} onChange={(e) => set('source_id', e.target.value)}>
             {REF.sources.map((x) => (
               <option key={x.id} value={x.id}>
                 {t(x.name)}
               </option>
             ))}
-          </select>
+          </Dropdown>
         </Field>
         <Field label={t('Date de la soumission')}>
           <input type="date" className="form-input" value={f.quote_date} onChange={(e) => set('quote_date', e.target.value)} />
@@ -233,13 +235,13 @@ export function ApiObligationsSection({ s }: { s: S }) {
                 {t('Oui')}
               </label>
             ) : f.kind === 'select' ? (
-              <select className="form-input" value={String(v[f.key] ?? '')} onChange={(e) => state.setValue({ ...v, [f.key]: e.target.value })}>
+              <Dropdown className="form-input" value={String(v[f.key] ?? '')} onChange={(e) => state.setValue({ ...v, [f.key]: e.target.value })}>
                 {f.options!.map(([val, label]) => (
                   <option key={val} value={val}>
                     {t(label)}
                   </option>
                 ))}
-              </select>
+              </Dropdown>
             ) : f.kind === 'area' ? (
               <textarea className="form-input py-2 min-h-20" rows={3} value={String(v[f.key] ?? '')} onChange={(e) => state.setValue({ ...v, [f.key]: e.target.value })} />
             ) : (
@@ -288,14 +290,14 @@ export function ApiTravauxSection({ s }: { s: S }) {
       actions={
         templates.length > 0 && (
           <div className="flex items-center gap-2">
-            <select className="form-input h-8 text-xs w-auto max-w-[14rem]" value={template} onChange={(e) => setTemplate(e.target.value)} aria-label={t('Modèle')}>
+            <Dropdown className="form-input h-8 text-xs w-auto max-w-[14rem]" value={template} onChange={(e) => setTemplate(e.target.value)} aria-label={t('Modèle')}>
               <option value="">{t('Appliquer un modèle…')}</option>
               {templates.map((tp) => (
                 <option key={tp.id} value={tp.id}>
                   {tp.name}
                 </option>
               ))}
-            </select>
+            </Dropdown>
             <button
               className="btn btn-xs btn-secondary"
               disabled={!template}
@@ -563,7 +565,7 @@ export function ApiGarantiesSection({ s }: { s: S }) {
           const typed = customText[g.id] ?? cur?.custom_text ?? ''
           return (
             <Field key={g.id} label={g.name}>
-              <select
+              <Dropdown
                 className="form-input"
                 value={customText[g.id] !== undefined ? '__custom' : value}
                 disabled={s.pending > 0}
@@ -587,7 +589,7 @@ export function ApiGarantiesSection({ s }: { s: S }) {
                   </option>
                 ))}
                 {g.allows_custom_text && <option value="__custom">{t('Texte libre…')}</option>}
-              </select>
+              </Dropdown>
               {(customText[g.id] !== undefined || (cur?.custom_text && value === '__custom')) && (
                 <div className="flex gap-2 mt-1.5">
                   <input className="form-input h-8 text-sm" maxLength={300} value={typed} onChange={(e) => setCustomText((c) => ({ ...c, [g.id]: e.target.value }))} placeholder={t('Garantie offerte')} />
@@ -628,7 +630,7 @@ export function ApiGarantiesSection({ s }: { s: S }) {
 // ── Coûtants (cost lines) ────────────────────────────────────────────────────
 const lineTotal = (qty: string, price: string | null | undefined) => Math.round(toNum(qty) * toNum(price) * 100) / 100
 
-export function ApiCoutantsSection({ s }: { s: S }) {
+export function ApiCoutantsSection({ s, extra }: { s: S; extra?: ReactNode }) {
   const { quote, catalogue, costView, run } = s
   const [qtyDraft, setQtyDraft] = useState<Record<string, string>>({})
   const [itemId, setItemId] = useState('')
@@ -732,7 +734,7 @@ export function ApiCoutantsSection({ s }: { s: S }) {
         </div>
       )}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
-        <select className="form-input flex-1 min-w-0" value={itemId} onChange={(e) => setItemId(e.target.value)} aria-label={t('Item du catalogue')}>
+        <Dropdown className="form-input flex-1 min-w-0" value={itemId} onChange={(e) => setItemId(e.target.value)} aria-label={t('Item du catalogue')}>
           <option value="">{catalogue ? t('Ajouter un item du catalogue…') : t('Chargement…')}</option>
           {(catalogue?.cost_general_categories ?? []).flatMap((g) =>
             g.categories.map((c) => (
@@ -746,7 +748,7 @@ export function ApiCoutantsSection({ s }: { s: S }) {
               </optgroup>
             )),
           )}
-        </select>
+        </Dropdown>
         <input className="form-input sm:w-24 tnum text-right" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} aria-label={t('Quantité')} />
         <button className="btn btn-sm btn-secondary" onClick={add} disabled={!itemId || s.pending > 0}>
           <Plus className="w-4 h-4" />
@@ -759,12 +761,13 @@ export function ApiCoutantsSection({ s }: { s: S }) {
           {t('Utiliser {amount} comme prix de base', { amount: money(sell) })}
         </button>
       )}
+      {extra}
     </BuilderSection>
   )
 }
 
 // ── Prix (base price, discount, "=", add-ons, totals) ────────────────────────
-export function ApiPrixSection({ s }: { s: S }) {
+export function ApiPrixSection({ s, extra }: { s: S; extra?: ReactNode }) {
   const { quote, catalogue, costView, run } = s
   const toForm = (q: ApiQuote) => ({ base: editable(q.base_price), discount: toNum(q.discount_amount) ? editable(q.discount_amount) : '', comments: q.price_comments ?? '' })
   const price = useSynced(toForm(quote))
@@ -818,7 +821,7 @@ export function ApiPrixSection({ s }: { s: S }) {
 
   return (
     <BuilderSection id="prix" title={t('Prix')}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2 gap-6">
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('Prix de base (avant taxes)')}>
@@ -903,14 +906,14 @@ export function ApiPrixSection({ s }: { s: S }) {
         </ul>
         <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="flex gap-2">
-            <select className="form-input flex-1 min-w-0" value={preset} onChange={(e) => setPreset(e.target.value)} aria-label={t('Ajout du catalogue')}>
+            <Dropdown className="form-input flex-1 min-w-0" value={preset} onChange={(e) => setPreset(e.target.value)} aria-label={t('Ajout du catalogue')}>
               <option value="">{catalogue ? t('Ajout du catalogue…') : t('Chargement…')}</option>
               {(catalogue?.addon_presets ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.description} — {money(toNum(p.default_amount))}
                 </option>
               ))}
-            </select>
+            </Dropdown>
             <button
               className="btn btn-sm btn-secondary"
               disabled={!preset || s.pending > 0}
@@ -930,6 +933,7 @@ export function ApiPrixSection({ s }: { s: S }) {
           </div>
         </div>
       </div>
+      {extra}
     </BuilderSection>
   )
 }
@@ -944,15 +948,34 @@ function Line({ label, value, strong }: { label: string; value: string; strong?:
 }
 
 // ── Notes and terms ──────────────────────────────────────────────────────────
-export function ApiNotesSection({ s }: { s: S }) {
+export function ApiNotesSection({ s, extra }: { s: S; extra?: ReactNode }) {
   const { quote, run } = s
   const toForm = (q: ApiQuote) => ({ terms: q.payment_terms ?? '', notes: htmlToText(q.notes_html) })
   const form = useSynced(toForm(quote))
+  const [rewriting, setRewriting] = useState(false)
+  // « Rédiger avec l'IA » has no API yet: as before, it proposes a text here; nothing is saved until Enregistrer.
+  const rewrite = () => {
+    setRewriting(true)
+    window.setTimeout(() => {
+      form.setValue({ ...form.value, notes: t(SAMPLE_AI_DESCRIPTION) })
+      setRewriting(false)
+      toast(t("Note reformulée — relisez avant d'envoyer"))
+    }, 1300)
+  }
   return (
-    <BuilderSection id="notes" title={t('Notes et conditions')}>
+    <BuilderSection
+      id="notes"
+      title={t('Notes et conditions')}
+      actions={
+        <button onClick={rewrite} className="btn btn-xs btn-secondary" disabled={rewriting || !form.value.notes.trim()}>
+          {rewriting ? <LoaderCircle className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {t("Rédiger avec l'IA")}
+        </button>
+      }
+    >
       <div className="space-y-3">
         <Field label={t('Modalités de paiement')}>
-          <textarea className="form-input py-2 min-h-16" rows={2} maxLength={2000} value={form.value.terms} onChange={(e) => form.setValue({ ...form.value, terms: e.target.value })} />
+          <textarea className="form-input py-2 min-h-28" rows={5} maxLength={2000} value={form.value.terms} onChange={(e) => form.setValue({ ...form.value, terms: e.target.value })} />
         </Field>
         <Field label={t('Notes imprimées sur la soumission')}>
           <textarea className="form-input py-2 min-h-28" rows={5} value={form.value.notes} onChange={(e) => form.setValue({ ...form.value, notes: e.target.value })} />
@@ -969,6 +992,7 @@ export function ApiNotesSection({ s }: { s: S }) {
           void run(() => api.updateQuote(quote.id, body), t('Notes enregistrées')).then((q) => q && form.setValue(toForm(q)))
         }}
       />
+      {extra}
     </BuilderSection>
   )
 }

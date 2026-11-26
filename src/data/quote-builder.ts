@@ -1014,6 +1014,8 @@ export const quotePricing = (q: QuoteRecord) => draftPricing(q, getDraft(q))
 
 /** Write the builder's selling price and cost back to the quote (only when they changed). */
 export function syncQuoteAmounts(id: string) {
+  // With the backend, amounts are the server's: the demo pricing never writes into the quote.
+  if (API_MODE) return
   const q = quoteById(id)
   const d = DRAFTS.get(id)
   if (!q || !d) return

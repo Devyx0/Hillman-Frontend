@@ -31,6 +31,7 @@ import { CompanyBadge, Empty, RepAvatar } from '../ui'
 import ClientForm from './ClientForm'
 import { leadClientPrefill, splitName } from './prefill'
 import { ClientCard, DrawerFooter, MissingNotice, Steps } from './shared'
+import { Dropdown } from '../dropdown'
 
 const NO_TEMPLATE = ''
 
@@ -527,13 +528,13 @@ export default function QuoteFlow({ prefill, onClose }: { prefill: CreatePrefill
             </div>
             {API_MODE && !converting && (
               <Field label={t('Source')}>
-                <select className="form-input" value={source} onChange={(e) => setSourceChoice(e.target.value)}>
+                <Dropdown className="form-input" value={source} onChange={(e) => setSourceChoice(e.target.value)}>
                   {sources.map((s) => (
                     <option key={s} value={s}>
                       {t(s)}
                     </option>
                   ))}
-                </select>
+                </Dropdown>
               </Field>
             )}
             <dl className="rounded-xl bg-sand p-4 grid grid-cols-[7rem_minmax(0,1fr)] gap-y-2 text-sm">

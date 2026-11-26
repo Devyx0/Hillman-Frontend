@@ -32,6 +32,9 @@ export interface ClientInput {
   postal?: string
   /** French type: Résidentiel, Commercial, Entrepreneur. */
   type?: string
+  /** No API yet: kept on the cached record only. */
+  language?: 'fr' | 'en'
+  source?: string
 }
 
 function clientFields(c: Partial<ClientInput>): ClientFields {
@@ -76,6 +79,11 @@ export async function createClient(
     throw e
   }
   let client = cacheClient(created)
+  // Language and source have no API yet: kept on this device for the session.
+  if (input.language || input.source) {
+    Object.assign(client, { ...(input.language ? { language: input.language } : {}), ...(input.source ? { source: input.source } : {}) })
+    commit()
+  }
   if (!opts.smsConsent) return { client }
   // The client exists at this point: a failed consent is reported, not thrown.
   try {

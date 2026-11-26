@@ -9,8 +9,6 @@ import { request } from '../data/store'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import { t } from '../i18n'
-import { API_MODE } from '../api/config'
-import { ApiCatalogueView } from './catalogue/ApiCatalogueView'
 import { CatalogueEditContext, CostItemsTab, ExpertisesTab, TemplatesTab, WarrantiesTab, WorkLinesTab } from './catalogue/CatalogueTabs'
 import { SETTINGS_GROUPS, SETTINGS_SECTIONS, type SettingsSection, type SettingsSectionId } from './catalogue/SettingsTabs'
 
@@ -146,9 +144,6 @@ function SettingsView() {
             <current.icon className="w-5 h-5 text-ink-mute" />
             {t(current.label)}
           </h2>
-          {API_MODE && current.id !== 'securite' && current.id !== 'utilisateurs' && (
-            <Notice tone="info">{t('Ces paramètres ne sont pas encore enregistrés sur le serveur : les changements restent sur cet appareil jusqu’à la prochaine connexion.')}</Notice>
-          )}
           {allowed(current) ? (
             <Loader key={current.id} fail={params.get('erreur') === '1'}>
               <Section />
@@ -167,7 +162,6 @@ function SettingsView() {
 /** `/catalogue` — also renders Paramètres when `?tab=parametres` (mockup: `i5`). `&section=<id>` opens a settings section. */
 export default function Catalogue() {
   const [params] = useSearchParams()
-  if (params.get('tab') === 'parametres') return <SettingsView key="s" />
-  // With the backend the catalogue is the company's, read from the server (read-only in this phase).
-  return API_MODE ? <ApiCatalogueView key="a" /> : <CatalogueView key="c" />
+  // The catalogue has no API yet: it stays on its own data until one exists.
+  return params.get('tab') === 'parametres' ? <SettingsView key="s" /> : <CatalogueView key="c" />
 }

@@ -284,12 +284,17 @@ function useViewAs() {
   const { user, impersonate } = useAuth()
   const navigate = useNavigate()
   const origin = viewAsOrigin()
-  const active = !!origin && origin !== user?.id && ACCOUNTS.some((a) => a.id === origin)
+  const active = !API_MODE && !!origin && origin !== user?.id && ACCOUNTS.some((a) => a.id === origin)
   return {
     active,
     origin: active ? ACCOUNTS.find((a) => a.id === origin)! : null,
     start: (id: string) => {
       if (!user) return
+      // No API for previewing another user yet: switching would keep the admin's own access to the real data.
+      if (API_MODE) {
+        toast(t('« Voir comme… » n’est pas encore disponible avec les données réelles.'))
+        return
+      }
       if (!viewAsOrigin()) setViewAsOrigin(user.id)
       impersonate(id)
       navigate('/')
@@ -313,8 +318,7 @@ function UserMenu({ onNavigate }: { onNavigate: () => void }) {
   const [asOpen, setAsOpen] = useState(false)
   if (!user) return null
   const rep = repById(user.repId)
-  // "Voir comme…" switches demo accounts; with the backend each person signs in with their own account.
-  const canViewAs = !API_MODE && user.role === 'admin' && !viewAs.active
+  const canViewAs = user.role === 'admin' && !viewAs.active
   const targets = ACCOUNTS.filter((a) => a.id !== user.id && a.status === 'actif' && a.role !== 'admin')
   const close = () => {
     setOpen(false)
@@ -522,17 +526,18 @@ export default function AppLayout() {
           <button onClick={() => setMenuOpen(true)} className="md:hidden shrink-0 h-9 flex items-center" aria-label={t('Changer de compagnie')}>
             {scope === 'all' ? <Wordmark sub={false} /> : <CompanyLogo id={scope} className="h-6 max-w-[96px]" />}
           </button>
-          <button onClick={() => setPaletteOpen(true)} className="flex-1 min-w-0 max-w-xl h-9 px-3 rounded-md bg-sand hover:bg-stone transition-colors flex items-center gap-2 text-sm text-ink-faint text-left">
+          {/* Phones: an icon button (the bar is too narrow for a field); wider screens: the full search field. */}
+          <button onClick={() => setPaletteOpen(true)} aria-label={t('Rechercher…')} className="flex-none w-9 justify-center sm:flex-1 sm:w-auto sm:justify-start min-w-0 max-w-xl h-9 sm:px-3 rounded-md bg-sand hover:bg-stone transition-colors flex items-center gap-2 text-sm text-ink-faint text-left">
             <Search className="w-4 h-4 text-ink-mute" />
             <span className="flex-1 truncate hidden sm:block">{t('Rechercher un client, une adresse, un no…')}</span>
-            <span className="flex-1 truncate sm:hidden">{t('Rechercher…')}</span>
             <kbd className="hidden sm:inline text-2xs text-ink-mute bg-white px-1.5 py-0.5 rounded border border-hairline">⌘ K</kbd>
           </button>
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <LanguageSwitch />
-            <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
+            {/* Notifications have no API yet: with real data the bell has no demo message and no unread dot. */}
+            <button className="relative p-2 rounded-md text-ink-mute hover:bg-sand" aria-label={t('Notifications')} onClick={() => toast(API_MODE ? t('Aucune notification pour le moment') : t("Isabelle Gagnon vient d'ouvrir H64320 (3e fois)"))}>
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />
+              {!API_MODE && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-white" />}
             </button>
             <NewMenu />
           </div>
@@ -542,9 +547,12 @@ export default function AppLayout() {
             <Outlet />
           </Suspense>
         </main>
-        <footer className="px-6 py-4 text-2xs text-ink-faint flex items-center justify-between border-t border-hairline bg-white/40">
-          <span>{t('Maquette interactive · données fictives')}</span>
-        </footer>
+        {/* The "demo data" footer belongs to the demo build only. */}
+        {!API_MODE && (
+          <footer className="px-6 py-4 text-2xs text-ink-faint flex items-center justify-between border-t border-hairline bg-white/40">
+            <span>{t('Maquette interactive · données fictives')}</span>
+          </footer>
+        )}
       </div>
       <CommandPalette />
       <CreateHost />

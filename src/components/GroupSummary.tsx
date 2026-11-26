@@ -13,6 +13,7 @@ import { t } from '../i18n'
 import { cn, moneyShort, num, pct } from '../lib/utils'
 import { ErrorState, SkeletonRows } from './states'
 import { Card, CompanyBadge } from './ui'
+import { Dropdown } from './dropdown'
 
 type Period = '30' | '90' | 'year' | 'all'
 
@@ -72,13 +73,13 @@ export function GroupSummaryCard() {
       icon={Building2}
       pad={false}
       actions={
-        <select className="form-input h-8 text-xs w-auto" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label={t('Période')}>
+        <Dropdown className="form-input h-8 text-xs w-auto" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label={t('Période')}>
           {periods.map((p) => (
             <option key={p.value} value={p.value}>
               {p.label}
             </option>
           ))}
-        </select>
+        </Dropdown>
       }
     >
       {state.status === 'loading' && <SkeletonRows rows={4} />}

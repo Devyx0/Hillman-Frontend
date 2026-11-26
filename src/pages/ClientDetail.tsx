@@ -25,6 +25,7 @@ import { openCreate } from '../lib/create'
 import { toast } from '../lib/toast'
 import { GST, QST, money } from '../lib/utils'
 import { langName, locale, t, tIn, type Lang } from '../i18n'
+import { Dropdown } from '../components/dropdown'
 
 /** Statuses that count as an open quote (mockup: `x4`). */
 const OPEN_STATUSES = ['En soumission', 'À rappeler', 'Rappel courriel envoyé', 'Client va nous rappeler']
@@ -447,11 +448,11 @@ function ClientRecord({ client, detail }: { client: Client; detail: ApiClientDet
               {
                 title: t('Détails'),
                 rows: [
-                  ...(API_MODE ? [] : [{
+                  {
                     icon: Languages,
                     label: t('Langue de communication'),
                     value: (
-                      <select
+                      <Dropdown
                         value={lang}
                         onChange={(e) => {
                           const next = e.target.value as Lang
@@ -463,10 +464,10 @@ function ClientRecord({ client, detail }: { client: Client; detail: ApiClientDet
                       >
                         <option value="fr">{langName('fr')}</option>
                         <option value="en">{langName('en')}</option>
-                      </select>
+                      </Dropdown>
                     ),
                   },
-                  { icon: Inbox, label: t('Source'), value: t(client.source) }]),
+                  { icon: Inbox, label: t('Source'), value: client.source ? t(client.source) : '—' },
                   { icon: House, label: t('Propriété'), value: isDemo ? t('Maison 1998 · 2 étages') : t(client.type) },
                   {
                     icon: ShieldCheck,
@@ -500,7 +501,7 @@ function ClientRecord({ client, detail }: { client: Client; detail: ApiClientDet
                 { value: 'conversation', label: t('Conversation'), icon: MessageSquare },
                 { value: 'activite', label: t('Activité') },
                 { value: 'soumissions', label: t('Soumissions'), count: quotes.length },
-                ...(API_MODE ? [] : [{ value: 'logicia' as TabId, label: t('Historique Logicia'), icon: History }]),
+                { value: 'logicia', label: t('Historique Logicia'), icon: History },
                 { value: 'notes', label: t('Notes') },
                 { value: 'fichiers', label: t('Fichiers') },
               ]}
