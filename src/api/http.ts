@@ -101,16 +101,11 @@ export const http = {
 /** UI message for any error thrown by the API layer. */
 export function errorMessage(e: unknown, fallback = 'Une erreur est survenue. Réessayez dans un moment.'): string {
   // Messages are French (the API's and this client's); `t` translates the ones the dictionaries know.
-  return t(rawMessage(e, fallback))
-}
-
-function rawMessage(e: unknown, fallback: string): string {
   if (e instanceof ApiError) {
-    // Zod validation: show the first field message when the API gives one.
-    if (e.code === 'VALIDATION' && Array.isArray(e.details) && (e.details[0] as { message?: string })?.message) return `${e.message} ${(e.details[0] as { message: string }).message}`
-    if (e.code === 'BAD_REQUEST' && Array.isArray(e.details) && (e.details[0] as { message?: string })?.message) return `${e.message} ${(e.details[0] as { message: string }).message}`
-    return e.message
+    // Zod validation: show the first field message when the API gives one (each part translated on its own).
+    const detail = (e.code === 'VALIDATION' || e.code === 'BAD_REQUEST') && Array.isArray(e.details) ? (e.details[0] as { message?: string } | undefined)?.message : undefined
+    return detail ? `${t(e.message)} ${t(detail)}` : t(e.message)
   }
-  if (e instanceof Error && e.message) return e.message
-  return fallback
+  if (e instanceof Error && e.message) return t(e.message)
+  return t(fallback)
 }

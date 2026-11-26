@@ -503,7 +503,7 @@ export function ApiExpertisesSection({ s }: { s: S }) {
                           <X className="w-3.5 h-3.5" />
                         </IconBtn>
                       ) : (
-                        <button className="text-xs font-semibold text-primary-press" onClick={() => set(c.id, c.default_status)}>
+                        <button className="text-xs font-semibold text-primary-press" onClick={() => set(c.id, c.default_status ?? 'to_verify')}>
                           {t('Ajouter')}
                         </button>
                       )}

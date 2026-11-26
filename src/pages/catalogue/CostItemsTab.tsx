@@ -252,7 +252,7 @@ export function CostItemsTab() {
 }
 
 /** Video link of an item or a section: preview + edit. */
-function VideoModal({ name, current, canEdit, onClose, onSave, hint }: { name: string; current?: string; canEdit: boolean; onClose: () => void; onSave: (url?: string) => void; hint?: string }) {
+export function VideoModal({ name, current, canEdit, onClose, onSave, hint }: { name: string; current?: string; canEdit: boolean; onClose: () => void; onSave: (url?: string) => void; hint?: string }) {
   const [url, setUrl] = useState(current ?? '')
   const embed = videoEmbed(url)
   const valid = !url.trim() || /^https?:\/\//.test(url.trim())

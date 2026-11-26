@@ -7,7 +7,7 @@
  */
 import * as api from '../api/endpoints'
 import { STATUS_FR, REFUSAL_FR, REFUSAL_CHOICES, STAGE_FR, CLIENT_TYPE_FR, formatPhone, localDate, localDateTime, subtotalFromTotal, toNum } from '../api/mappers'
-import type { ApiCatalogue, ApiClient, ApiCompany, ApiLead, ApiLeadSource, ApiQuote, ApiQuoteListItem, ApiRepresentative, ApiWorkType, MeResponse, Uuid } from '../api/types'
+import type { ApiCatalogue, ApiClient, ApiCompany, ApiCompanySettings, ApiLead, ApiLeadSource, ApiQuote, ApiQuoteListItem, ApiRepresentative, ApiWorkType, MeResponse, Uuid } from '../api/types'
 import { APPOINTMENTS, CLIENTS, COMPANIES, JOBS, LEADS, ME, QUOTES, REPS, THREADS, TODAY, WORK_TYPES, type Client, type CompanyId, type Lead, type Rep } from './mock'
 import { LEAD_SOURCES, NUMBERING, REFUSAL_REASONS } from './settings'
 import { commit, type QuoteRecord } from './store'
@@ -311,6 +311,48 @@ export function loadCatalogue(slug: CompanyId): Promise<ApiCatalogue> {
     catalogues.set(slug, p)
   }
   return p
+}
+
+/** Forget a company's cached catalogue (after an edit in Paramètres › Catalogue); quote screens re-read it. */
+export function invalidateCatalogue(slug: CompanyId) {
+  catalogues.delete(slug)
+}
+
+// ── Paramètres: keep the app-wide reference data in step after an edit ──────
+/** After PATCH /companies/:id/settings (or a logo change): names, phone, licence, prefix and tax rates everywhere. */
+export function applyCompanySettings(c: ApiCompany | ApiCompanySettings) {
+  const i = REF.companies.findIndex((x) => x.id === c.id)
+  if (i >= 0) REF.companies[i] = { ...REF.companies[i], ...pickCompany(c) }
+  const ui = COMPANIES.find((x) => x.id === c.slug)
+  if (ui) Object.assign(ui, { name: c.name, phone: formatPhone(c.phone) || c.phone || '', rbq: c.rbq_number ?? '', code: c.quote_prefix ?? '' })
+  if (c.slug in NUMBERING) NUMBERING[c.slug as CompanyId].prefix = c.quote_prefix ?? ''
+  commit()
+}
+function pickCompany(c: ApiCompany): ApiCompany {
+  const { id, slug, name, legal_name, quote_prefix, payment_terms, phone, website, civic_number, street, city, postal_code, province_code,
+    rbq_number, neq, gst_number, qst_number, gst_rate, qst_rate, brand_color, logo_file_id } = c
+  return { id, slug, name, legal_name, quote_prefix, payment_terms, phone, website, civic_number, street, city, postal_code, province_code,
+    rbq_number, neq, gst_number, qst_number, gst_rate, qst_rate, brand_color, logo_file_id }
+}
+
+/** Re-read the active lead sources (the pickers of leads and quotes) after an edit in Paramètres › Sources. */
+export async function refreshLeadSources() {
+  const sources = await api.listLeadSources()
+  REF.sources = sources
+  LEAD_SOURCES.splice(0, LEAD_SOURCES.length, ...sources.map((s) => ({ id: s.id, name: s.name, active: true, kind: 'manuel' as const })))
+  commit()
+  return sources
+}
+
+/** Re-read a company's active work types (the « Type de travaux » pickers) after an edit in Paramètres › Catalogue. */
+export async function refreshWorkTypes(slug: CompanyId) {
+  const uuid = companyUuid(slug)
+  if (!uuid) return []
+  const types = await api.listWorkTypes(uuid)
+  REF.workTypes.set(slug, types)
+  WORK_TYPES[slug] = types.map((w) => w.name)
+  commit()
+  return types
 }
 
 // ── Hydration ────────────────────────────────────────────────────────────────

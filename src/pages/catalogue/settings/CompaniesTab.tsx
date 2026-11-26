@@ -1,5 +1,7 @@
 /** Paramètres → Compagnies: identity printed on the PDF + texting / email connections. */
 import { useRef, useState } from 'react'
+import { API_MODE } from '../../../api/config'
+import { ApiCompaniesTab } from './ApiCompaniesTab'
 import { Building2, Check, Globe, LoaderCircle, Mail, MessageSquare, Percent, PlugZap, RotateCcw, Send, ShieldCheck, Trash2, Upload } from 'lucide-react'
 import { Card, CompanyLogo, Field } from '../../../components/ui'
 import { Notice, confirmAction } from '../../../components/states'
@@ -17,6 +19,12 @@ import { ConnectionBadge, CopyField, useScopeCompany } from './shared'
 const MAX_IMAGE = 2 * 1024 * 1024
 
 export function CompaniesTab() {
+  // With the backend: the company record from the server; the connections card (no API yet) stays as is.
+  if (API_MODE) return <ApiCompaniesTab connections={(c) => <ConnectionsCard key={c} company={c} />} />
+  return <MockCompaniesTab />
+}
+
+function MockCompaniesTab() {
   useStore()
   const { user } = useAuth()
   const [id, setId] = useScopeCompany()

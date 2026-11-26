@@ -1,5 +1,7 @@
 /** Paramètres → Numérotation (quote number prefix / next number) and Calendriers de paiement. */
 import { useState } from 'react'
+import { API_MODE } from '../../../api/config'
+import { ApiNumberingTab } from './ApiNumberingTab'
 import { ArrowDown, ArrowUp, CalendarClock, Hash, Plus, Star, Trash2 } from 'lucide-react'
 import { Card, CompanyBadge, Field } from '../../../components/ui'
 import { Notice, confirmAction } from '../../../components/states'
@@ -14,6 +16,12 @@ import { logChange } from './data'
 import { CompanySelect, Intro, useScopeCompany } from './shared'
 
 export function NumberingTab() {
+  // With the backend: one sequence for the group, a prefix per company.
+  if (API_MODE) return <ApiNumberingTab />
+  return <MockNumberingTab />
+}
+
+function MockNumberingTab() {
   useStore()
   return (
     <div className="space-y-4">
